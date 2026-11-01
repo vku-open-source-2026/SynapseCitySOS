@@ -145,10 +145,7 @@ app.get('/v1/emergency/sos/timeline', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 app.get('/v1/emergency', async (req, res, next) => { try { res.json(filterRows(await list(client(req), DATASETS.events, req), req)); } catch (error) { next(error); } });
-app.get('/v1/emergency/:id', async (req, res, next) => { try { res.json(await get(client(req), DATASETS.events, req.params.id)); } catch (error) { next(error); } });
 app.post('/v1/emergency', async (req, res, next) => { try { res.status(201).json(await write(client(req), DATASETS.events, { ...body(req), source: body(req).source || 'manual', status: body(req).status || 'monitoring', affected_asset_ids: body(req).affected_asset_ids || [], estimated_impact: body(req).estimated_impact || {}, instructions: body(req).instructions || [], tags: body(req).tags || [], metadata: body(req).metadata || {} })); } catch (error) { next(error); } });
-app.put('/v1/emergency/:id', async (req, res, next) => { try { res.json(await update(client(req), DATASETS.events, req.params.id, body(req))); } catch (error) { next(error); } });
-app.post('/v1/emergency/:id/resolve', async (req, res, next) => { try { res.json(await update(client(req), DATASETS.events, req.params.id, { status: 'resolved', ended_at: now(), resolution_note: body(req).resolution_note })); } catch (error) { next(error); } });
 
 function crud(spec: Spec, prefix: string, options: { statusAction?: string } = {}) {
   app.get(prefix, async (req, res, next) => { try { res.json(filterRows(await list(client(req), spec, req), req)); } catch (error) { next(error); } });
@@ -178,6 +175,13 @@ app.post('/v1/emergency/sitrep/:id/publish', async (req, res, next) => { try { r
 app.post('/v1/emergency/after-action/generate', async (req, res, next) => { try { res.status(201).json(await write(client(req), DATASETS.afterAction, { ...body(req), report_code: `AAR-${Date.now()}`, title: body(req).title || 'After-action report', summary: body(req).summary_override || '', status: 'draft', timeline: [], kpi: { response_speed_score: 0, dispatch_completion_rate: 0, sitrep_coverage_rate: 0, resource_efficiency_score: 0, overall_score: 0 }, lessons_learned: body(req).lessons_learned || [], recommendations: body(req).recommendations || [], metadata: {} })); } catch (error) { next(error); } });
 app.post('/v1/emergency/after-action/:id/publish', async (req, res, next) => { try { res.json(await update(client(req), DATASETS.afterAction, req.params.id, { status: 'published', published_at: now() })); } catch (error) { next(error); } });
 crud(DATASETS.afterAction, '/v1/emergency/after-action');
+
+// Keep the event id route after all named emergency collections. Express treats
+// /v1/emergency/dispatch, /resources, /sitrep, and /after-action as ids when
+// this route is registered first.
+app.get('/v1/emergency/:id', async (req, res, next) => { try { res.json(await get(client(req), DATASETS.events, req.params.id)); } catch (error) { next(error); } });
+app.put('/v1/emergency/:id', async (req, res, next) => { try { res.json(await update(client(req), DATASETS.events, req.params.id, body(req))); } catch (error) { next(error); } });
+app.post('/v1/emergency/:id/resolve', async (req, res, next) => { try { res.json(await update(client(req), DATASETS.events, req.params.id, { status: 'resolved', ended_at: now(), resolution_note: body(req).resolution_note })); } catch (error) { next(error); } });
 
 // Hazards are the live flood/storm/landslide feed. They are published through
 // Tier 2 so the public map and the command centre share one projection.
