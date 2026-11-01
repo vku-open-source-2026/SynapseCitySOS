@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 VKU.VIC
 import { Link } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -16,22 +18,23 @@ interface NavigationItem {
 
 const navigationItems: NavigationItem[] = [
     {
-        label: "Về chúng tôi",
-        to: "/about",
+        label: "Trung tâm chỉ huy",
+        to: "/admin/emergency-center",
+        isEmergency: true,
     },
     {
-        label: "Tài liệu API",
-        to: "/docs",
-    },
-    {
-        label: "Bản đồ thiên tai",
+        label: "Bản đồ nguy cơ",
         to: "/disaster",
         isCitizen: true,
     },
     {
-        label: "Điều hành khẩn cấp",
-        to: "/admin/emergency-center",
+        label: "SITREP & điều phối",
+        to: "/admin/emergency-center/during",
         isEmergency: true,
+    },
+    {
+        label: "Tài liệu API",
+        to: "/docs",
     },
     {
         label: "Đăng nhập",
@@ -62,9 +65,10 @@ const Header: React.FC = () => {
                 {/* Logo */}
                 <div className="flex items-center">
                     <Link to="/" onClick={closeMobileMenu}>
-                        <h1 className="ml-2 text-xl font-bold font-montserrat bg-gradient-to-b from-[#4FACFE] from-21% to-[#00F2FE] bg-clip-text text-transparent">
-                            SynapseCity SOS
-                        </h1>
+                        <div className="ml-2">
+                            <h1 className="text-xl font-bold font-montserrat text-[#b9382b]">SynapseCity SOS</h1>
+                            <span className="text-[10px] font-semibold tracking-[0.18em] text-rose-700">EMERGENCY COMMAND</span>
+                        </div>
                     </Link>
                 </div>
 
@@ -109,7 +113,7 @@ const Header: React.FC = () => {
                                     className="ml-8 
                                     text-base 
                                     h-10 bg-linear-to-r
-                                    from-[#00F2FE] from-21% to-[#4FACFE] 
+                                    from-[#f97316] from-21% to-[#dc5b43]
                                     px-6 flex items-center rounded-full 
                                     max-lg:mx-2 max-lg:w-4/5 max-lg:text-xl 
                                     max-lg:flex-col max-lg:justify-center 
@@ -143,7 +147,7 @@ const Header: React.FC = () => {
                                     key={item.to}
                                     to={item.to}
                                     onClick={closeMobileMenu}
-                                    className="ml-8 text-base text-red-500 max-lg:text-lg max-lg:ml-2 max-lg:my-2 hover:text-red-600 transition-colors flex items-center gap-1.5 font-medium"
+                                    className="ml-8 text-base text-[#b9382b] max-lg:text-lg max-lg:ml-2 max-lg:my-2 hover:text-red-600 transition-colors flex items-center gap-1.5 font-bold"
                                 >
                                     <Siren className="w-4 h-4" />
                                     {item.label}
