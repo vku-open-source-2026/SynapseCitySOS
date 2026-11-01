@@ -1,0 +1,13 @@
+{
+  "name": "synapsecity-sos",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "SynapseCity emergency operations product",
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build:service": "npm run build --workspace=@synapsecity/sos-service"
+  }
+}

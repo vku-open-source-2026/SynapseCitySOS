@@ -1,0 +1,44 @@
+services:
+  sos-service:
+    build:
+      context: ..
+      dockerfile: SynapseCitySOS/apps/sos-service/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "8084"
+      SYNAPSEDX_BASE_URL: https://synapsedx.sbs
+      ALLOW_LOCAL_DEPENDENCIES: "false"
+    expose: ["8084"]
+    networks: [synapsecity-sos]
+  gateway:
+    build:
+      context: ..
+      dockerfile: SynapseCitySOS/apps/gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      SOS_SERVICE_URL: http://sos-service:8084
+      CORS_ORIGIN: https://sos.synapsecity.sbs
+    ports:
+      - "8084:8080"
+    networks:
+      synapsecity-sos:
+        aliases: [synapsecity-sos-gateway]
+  console:
+    build:
+      context: ./apps/console
+      dockerfile: Dockerfile
+      args:
+        VITE_BASE_API_URL: /v1
+    restart: unless-stopped
+    expose: ["80"]
+    networks:
+      synapsecity-sos:
+        aliases: [synapsecity-sos-console]
+
+networks:
+  synapsecity-sos:
+    name: synapsecity-sos-public-stack
