@@ -19,3 +19,9 @@ Persistence, publication and events stay in SynapseDX and SynapseOne.
 The public product boundary is `https://sos.synapsecity.sbs` and is split into
 `apps/gateway`, `apps/sos-service`, `apps/console`, and `infra` in the same way
 as the other Synapse products.
+
+## Project identity
+
+- Team: VKU.VIC.
+- Members: Ho Sy Bao Nhan; Tran Thi Thuy Duong; Vo Thanh Nam.
+- Repository license: Apache-2.0. Preserve `LICENSE` and `NOTICE` in all distributions.
