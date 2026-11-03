@@ -37,6 +37,16 @@ const NOT_FOUND_BODY = { error: 'not_found', product: BOUNDARY_PRODUCT } as cons
 
 export type V1Boundary = 'owned' | 'foreign' | 'unknown';
 
+/**
+ * Read an upstream response as raw bytes. `response.text()` must never be used
+ * for proxying: it decodes binary payloads (PNG/PDF/octet-stream) as UTF-8 and
+ * corrupts them.
+ */
+export async function proxyResponseBody(response: Awaited<ReturnType<typeof fetch>>): Promise<Buffer> {
+  if (response.status === 204 || response.status === 304) return Buffer.alloc(0);
+  return Buffer.from(await response.arrayBuffer());
+}
+
 export interface GatewayOptions {
   upstream?: string;
   consoleUpstream?: string;
@@ -165,10 +175,19 @@ export function createApp(options: GatewayOptions = {}): express.Express {
       }
       return;
     }
-    const text = await response.text();
+    const cacheControl = response.headers.get('cache-control');
     res.status(response.status);
     if (contentType) res.setHeader('content-type', contentType);
-    res.send(text);
+    if (cacheControl) res.setHeader('cache-control', cacheControl);
+    if (response.status === 204 || response.status === 304) {
+      res.end();
+      return;
+    }
+    // Preserve the upstream bytes. response.text() corrupts binary payloads
+    // such as VietMap PNG tiles (0x89 becomes the UTF-8 replacement sequence).
+    const body = await proxyResponseBody(response);
+    res.setHeader('content-length', String(body.length));
+    res.end(body);
   }
 
   async function health(path: '/health' | '/ready', res: Response): Promise<void> {

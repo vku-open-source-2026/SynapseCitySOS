@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { app, canonicalApiUrl, classifyV1Path, createApp, normalizeV1Path } from './index';
+import { app, canonicalApiUrl, classifyV1Path, createApp, normalizeV1Path, proxyResponseBody } from './index';
 
 const NOT_FOUND = { error: 'not_found', product: 'synapsecity-sos' };
 
@@ -175,6 +175,14 @@ test('encoded owned /v1 paths are proxied as JSON and never fall through to the 
     await new Promise<void>((resolve) => fakeUpstream.close(() => resolve()));
     await new Promise<void>((resolve) => fakeConsole.close(() => resolve()));
   }
+});
+
+test('binary upstream payloads are proxied byte-for-byte', async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+  const response = new Response(png, { headers: { 'content-type': 'image/png' } });
+  const body = await proxyResponseBody(response);
+  assert.equal(body[0], 0x89, 'PNG signature must not become a UTF-8 replacement character');
+  assert.deepEqual([...body], [...png]);
 });
 
 test('CORS advertises PUT and DELETE for the SOS API', async () => {
