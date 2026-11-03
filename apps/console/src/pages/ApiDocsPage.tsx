@@ -2,22 +2,10 @@
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import AIChatWidget from "../components/AIChatWidget";
-import {
-    Code,
-    Database,
-    Key,
-    ExternalLink,
-    Copy,
-    Check,
-    Play,
-    Loader2,
-    ChevronDown,
-    ChevronUp,
-} from "lucide-react";
+import { Code, Database, Key, ExternalLink, Copy, Check, Play, Loader2 } from "lucide-react";
 import { useState } from "react";
 
-const API_BASE_URL = "https://api.sos.synapsecity.sbs";
+const API_BASE_URL = "https://sos.synapsecity.sbs";
 
 interface EndpointParam {
     name: string;
@@ -33,291 +21,489 @@ interface Endpoint {
     description: string;
     params?: EndpointParam[];
     testPath?: string;
+    requiresAuth?: boolean;
 }
 
-// Open Data Endpoints
-const openDataEndpoints: Endpoint[] = [
-    {
-        method: "GET",
-        path: "/api/opendata/",
-        title: "Thông tin API",
-        description: "Thông tin về API và giấy phép sử dụng dữ liệu",
-        testPath: "/api/opendata/",
-    },
-    {
-        method: "GET",
-        path: "/api/opendata/assets",
-        title: "Danh sách tài sản hạ tầng",
-        description:
-            "Lấy tất cả tài sản hạ tầng dưới dạng GeoJSON FeatureCollection",
-        params: [
-            {
-                name: "skip",
-                type: "integer",
-                desc: "Số bản ghi bỏ qua (mặc định: 0)",
-                default: "0",
-            },
-            {
-                name: "limit",
-                type: "integer",
-                desc: "Số bản ghi tối đa (mặc định: 100, tối đa: 1000)",
-                default: "5",
-            },
-            {
-                name: "feature_type",
-                type: "string",
-                desc: "Lọc theo loại tài sản",
-            },
-            {
-                name: "feature_code",
-                type: "string",
-                desc: "Lọc theo mã tài sản",
-            },
-        ],
-        testPath: "/api/opendata/assets?limit=5",
-    },
-    {
-        method: "GET",
-        path: "/api/opendata/assets/{asset_id}",
-        title: "Chi tiết tài sản",
-        description: "Lấy thông tin chi tiết của tài sản theo ID",
-        params: [
-            {
-                name: "asset_id",
-                type: "string",
-                desc: "ID tài sản (MongoDB ObjectId)",
-            },
-        ],
-    },
-    {
-        method: "GET",
-        path: "/api/opendata/feature-types",
-        title: "Danh sách loại hạ tầng",
-        description: "Lấy danh sách các loại hạ tầng có sẵn và số lượng của mỗi loại",
-        testPath: "/api/opendata/feature-types",
-    },
-    {
-        method: "GET",
-        path: "/api/opendata/license",
-        title: "Thông tin giấy phép",
-        description: "Thông tin về Open Government Licence v3.0 (OGL)",
-        testPath: "/api/opendata/license",
-    },
-];
+interface EndpointSection {
+    id: string;
+    label: string;
+    icon: string;
+    title: string;
+    description: string;
+    endpoints: Endpoint[];
+}
 
-// IoT NGSI-LD Endpoints
-const iotLinkedDataEndpoints: Endpoint[] = [
+/**
+ * SOS-owned namespaces only:
+ * /v1/sos, /v1/auth, /v1/emergency*, /v1/hazards*, /v1/geo, /v1/map, /v1/ai.
+ * City-infrastructure APIs are documented by the SynapseCity product.
+ */
+const sections: EndpointSection[] = [
     {
-        method: "GET",
-        path: "/v1/ld/context",
-        title: "Context NGSI-LD",
+        id: "auth",
+        label: "Phiên đăng nhập",
+        icon: "🔐",
+        title: "Auth shell",
         description:
-            "Lấy tài liệu context NGSI-LD (chuẩn ETSI cho quản lý thông tin ngữ cảnh)",
-        testPath: "/v1/ld/context",
-    },
-    {
-        method: "GET",
-        path: "/v1/ld/sensors",
-        title: "Cảm biến IoT (NGSI-LD)",
-        description:
-            "Liệt kê toàn bộ cảm biến IoT ở định dạng NGSI-LD, kèm thuộc tính và quan hệ",
-        params: [
+            "Phiên đăng nhập dùng token HMAC-SHA256. Đây là shell phiên làm việc, không lưu mật khẩu và không tạo người dùng City; production phải uỷ quyền danh tính cho Tier-1 IAM.",
+        endpoints: [
             {
-                name: "skip",
-                type: "integer",
-                desc: "Số bản ghi bỏ qua",
-                default: "0",
+                method: "POST",
+                path: "/v1/auth/login",
+                title: "Đăng nhập",
+                description:
+                    "Nhận username + password (không rỗng) và trả access/refresh token cùng hồ sơ phiên.",
             },
             {
-                name: "limit",
-                type: "integer",
-                desc: "Số bản ghi tối đa (tối đa: 500)",
-                default: "100",
-            },
-            { name: "asset_id", type: "string", desc: "Lọc theo ID tài sản" },
-            {
-                name: "sensor_type",
-                type: "string",
-                desc: "Lọc theo loại: temperature, humidity, pressure, vibration",
+                method: "POST",
+                path: "/v1/auth/register",
+                title: "Đăng ký shell",
+                description:
+                    "Tạo phiên đăng ký shell-only; không tạo bản ghi người dùng SOS hoặc City.",
             },
             {
-                name: "status",
-                type: "string",
-                desc: "Lọc theo trạng thái: online, offline, maintenance",
+                method: "POST",
+                path: "/v1/auth/refresh",
+                title: "Làm mới token",
+                description: "Xoay access/refresh token từ refresh token còn hiệu lực.",
+            },
+            {
+                method: "POST",
+                path: "/v1/auth/logout",
+                title: "Đăng xuất",
+                description: "Kết thúc phiên phía client (204).",
+            },
+            {
+                method: "POST",
+                path: "/v1/auth/change-password",
+                title: "Đổi mật khẩu",
+                description:
+                    "Yêu cầu Bearer. Identity provider sở hữu mật khẩu; endpoint này chỉ xác nhận yêu cầu.",
+                requiresAuth: true,
+            },
+            {
+                method: "GET",
+                path: "/v1/auth/me",
+                title: "Hồ sơ phiên",
+                description: "Trả hồ sơ AuthUser từ Bearer token.",
+                requiresAuth: true,
+            },
+            {
+                method: "GET",
+                path: "/v1/auth/verify",
+                title: "Kiểm tra token",
+                description: "Xác thực Bearer token và trả thời hạn phiên.",
+                requiresAuth: true,
             },
         ],
-        testPath: "/v1/ld/sensors?limit=5",
     },
     {
-        method: "GET",
-        path: "/v1/ld/sensors/{sensor_id}",
-        title: "Cảm biến đơn (NGSI-LD)",
+        id: "service",
+        label: "Dịch vụ SOS",
+        icon: "🛰️",
+        title: "Thông tin dịch vụ",
         description:
-            "Lấy một cảm biến đơn ở định dạng NGSI-LD, kèm thuộc tính và quan hệ. Ví dụ ID: 6931b938c2f7cb7eba01df64",
-        params: [
+            "Kiểm tra sức khỏe dịch vụ và danh sách năng lực SynapseCity SOS sở hữu.",
+        endpoints: [
             {
-                name: "sensor_id",
-                type: "string",
-                desc: "ID cảm biến (MongoDB ObjectId). Ví dụ: 6931b938c2f7cb7eba01df64",
+                method: "GET",
+                path: "/health",
+                title: "Health check",
+                description: "Trạng thái sống của dịch vụ SOS và các phụ thuộc công khai.",
+                testPath: "/health",
+            },
+            {
+                method: "GET",
+                path: "/ready",
+                title: "Readiness check",
+                description: "Sẵn sàng nhận lưu lượng sau khi kiểm tra phụ thuộc Tier-2.",
+                testPath: "/ready",
+            },
+            {
+                method: "GET",
+                path: "/v1/sos",
+                title: "Năng lực sản phẩm SOS",
+                description:
+                    "Liệt kê các năng lực SOS sở hữu (thiên tai, sự kiện, EOP, điều phối, nguồn lực, SITREP, AAR) và các năng lực không sở hữu.",
+                testPath: "/v1/sos",
             },
         ],
-        testPath: "/v1/ld/sensors/6931b938c2f7cb7eba01df64",
     },
     {
-        method: "GET",
-        path: "/v1/ld/sensors/{sensor_id}/observations",
-        title: "Quan trắc cảm biến (NGSI-LD)",
+        id: "emergency",
+        label: "Sự kiện khẩn cấp",
+        icon: "🚨",
+        title: "Sự kiện khẩn cấp",
         description:
-            "Lấy dữ liệu quan trắc theo cảm biến ở định dạng NGSI-LD với lọc theo khoảng thời gian. Ví dụ cảm biến: 6931b938c2f7cb7eba01df64",
-        params: [
+            "Tiếp nhận, cập nhật, đóng sự kiện và công bố sự kiện ra bản đồ công khai.",
+        endpoints: [
             {
-                name: "sensor_id",
-                type: "string",
-                desc: "Sensor ID. Sample: 6931b938c2f7cb7eba01df64",
+                method: "GET",
+                path: "/v1/emergency",
+                title: "Danh sách sự kiện",
+                description: "Lọc sự kiện khẩn cấp theo trạng thái, mức độ và loại.",
+                params: [
+                    { name: "status", type: "string", desc: "monitoring | active | contained | resolved | canceled" },
+                    { name: "severity", type: "string", desc: "low | medium | high | critical" },
+                    { name: "event_type", type: "string", desc: "flood | storm | landslide | ..." },
+                    { name: "limit", type: "integer", desc: "Số bản ghi tối đa", default: "50" },
+                ],
+                testPath: "/v1/emergency?limit=5",
             },
             {
-                name: "from_time",
-                type: "string",
-                desc: "Thời gian bắt đầu (ISO 8601, ví dụ: 2024-01-01T00:00:00Z)",
+                method: "POST",
+                path: "/v1/emergency",
+                title: "Tạo sự kiện khẩn cấp",
+                description:
+                    "Tạo sự kiện với tiêu đề, loại, mức độ, vị trí và hướng dẫn công khai.",
             },
-            { name: "to_time", type: "string", desc: "End time (ISO 8601)" },
             {
-                name: "limit",
-                type: "integer",
-                desc: "Số quan trắc tối đa (tối đa: 10000)",
-                default: "1000",
+                method: "GET",
+                path: "/v1/emergency/{event_id}",
+                title: "Chi tiết sự kiện",
+                description: "Lấy đầy đủ thông tin của một sự kiện khẩn cấp.",
+            },
+            {
+                method: "PUT",
+                path: "/v1/emergency/{event_id}",
+                title: "Cập nhật sự kiện",
+                description: "Cập nhật trạng thái, mức độ, mô tả và hướng dẫn.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/{event_id}/resolve",
+                title: "Đóng sự kiện",
+                description: "Đánh dấu sự kiện đã xử lý và kích hoạt tạo AAR nếu cần.",
+            },
+            {
+                method: "GET",
+                path: "/v1/emergency/public",
+                title: "Sự kiện công khai",
+                description:
+                    "Danh sách sự kiện đã công bố cho bản đồ cảnh báo công cộng (không cần đăng nhập).",
+                testPath: "/v1/emergency/public?limit=5",
+            },
+            {
+                method: "GET",
+                path: "/v1/emergency/sos/timeline",
+                title: "SOS timeline",
+                description:
+                    "Dòng thời gian sự kiện SOS kèm số lần vi phạm SLA và nguồn tham chiếu.",
+                testPath: "/v1/emergency/sos/timeline?limit=10",
+            },
+            {
+                method: "GET",
+                path: "/v1/emergency/sosconn/status",
+                title: "Trạng thái SOSConn",
+                description: "Kiểm tra kết nối provider AI/Copilot của trung tâm chỉ huy.",
             },
         ],
-        testPath:
-            "/v1/ld/sensors/6931b938c2f7cb7eba01df64/observations?from_time=2024-01-01T00:00:00Z&to_time=2025-12-31T23:59:59Z&limit=10",
     },
     {
-        method: "GET",
-        path: "/v1/ld/assets/{asset_id}",
-        title: "Tài sản kèm dữ liệu IoT (NGSI-LD)",
+        id: "hazards",
+        label: "Thiên tai",
+        icon: "🌊",
+        title: "Cảnh báo thiên tai & VNDMS",
         description:
-            "Lấy tài sản hạ tầng kèm toàn bộ cảm biến liên quan và quan trắc gần đây ở định dạng NGSI-LD. Ví dụ: 6925b9001b74e89f7dab169a",
-        params: [
+            "Nguồn cảnh báo lũ, bão, sạt lở; dữ liệu recent 24h và triển khai cảnh báo thành sự kiện.",
+        endpoints: [
             {
-                name: "asset_id",
-                type: "string",
-                desc: "Asset ID. Sample: 6925b9001b74e89f7dab169a",
+                method: "GET",
+                path: "/v1/hazards",
+                title: "Danh sách cảnh báo",
+                description: "Lọc cảnh báo đang hoạt động theo loại, mức độ và nguồn.",
+                params: [
+                    { name: "active_only", type: "boolean", desc: "Chỉ lấy cảnh báo đang hoạt động" },
+                    { name: "event_type", type: "string", desc: "flood | storm | landslide | ..." },
+                    { name: "limit", type: "integer", desc: "Số bản ghi tối đa", default: "100" },
+                ],
+                testPath: "/v1/hazards?active_only=true&limit=5",
             },
             {
-                name: "hours",
-                type: "integer",
-                desc: "Số giờ dữ liệu lịch sử (tối đa: 168)",
-                default: "24",
+                method: "GET",
+                path: "/v1/hazards/recent",
+                title: "Cảnh báo gần đây",
+                description: "Cảnh báo trong N giờ gần nhất, kèm liên kết sự kiện đã triển khai.",
+                params: [
+                    { name: "hours", type: "integer", desc: "Khoảng thời gian (giờ)", default: "24" },
+                    { name: "limit", type: "integer", desc: "Số bản ghi tối đa", default: "200" },
+                ],
+                testPath: "/v1/hazards/recent?hours=24&limit=5",
+            },
+            {
+                method: "GET",
+                path: "/v1/hazards/geo/near",
+                title: "Cảnh báo quanh một điểm",
+                description: "Tìm cảnh báo trong bán kính cho trước quanh tọa độ.",
+                params: [
+                    { name: "lat", type: "number", desc: "Vĩ độ" },
+                    { name: "lng", type: "number", desc: "Kinh độ" },
+                    { name: "radius_m", type: "integer", desc: "Bán kính mét", default: "10000" },
+                ],
+            },
+            {
+                method: "POST",
+                path: "/v1/hazards/{hazard_id}/deploy",
+                title: "Triển khai cảnh báo",
+                description:
+                    "Tạo sự kiện khẩn cấp và bản nháp EOP từ một cảnh báo (idempotent).",
+            },
+            {
+                method: "POST",
+                path: "/v1/hazards/expire-stale",
+                title: "Hết hạn cảnh báo cũ",
+                description:
+                    "Đánh dấu cảnh báo đang hoạt động cũ hơn TTL (mặc định 24 giờ) thành is_active=false và status=expired.",
+                requiresAuth: true,
+            },
+            {
+                method: "GET",
+                path: "/v1/emergency/stream/hazards",
+                title: "Live hazard SSE",
+                description:
+                    "Server-Sent Events đẩy snapshot và delta cảnh báo đang hoạt động tới trung tâm chỉ huy.",
             },
         ],
-        testPath: "/v1/ld/assets/6925b9001b74e89f7dab169a?hours=24",
     },
     {
-        method: "GET",
-        path: "/v1/ld/observations",
-        title: "Tất cả quan trắc (NGSI-LD)",
+        id: "eop",
+        label: "EOP",
+        icon: "📋",
+        title: "Kế hoạch ứng phó (EOP)",
         description:
-            "Lấy các quan trắc gần đây từ tất cả cảm biến ở định dạng NGSI-LD cho nền tảng đô thị thông minh",
-        params: [
+            "Sinh bản nháp bằng AI, duyệt, xuất bản và cập nhật nội dung markdown của kế hoạch.",
+        endpoints: [
             {
-                name: "hours",
-                type: "integer",
-                desc: "Số giờ dữ liệu cần lấy (tối đa: 24)",
-                default: "1",
+                method: "GET",
+                path: "/v1/emergency/eop",
+                title: "Danh sách EOP",
+                description: "Lọc theo sự kiện và trạng thái kế hoạch.",
+                params: [
+                    { name: "emergency_event_id", type: "string", desc: "ID sự kiện khẩn cấp" },
+                    { name: "status", type: "string", desc: "draft | review_pending | approved | published | archived" },
+                ],
+                testPath: "/v1/emergency/eop?limit=5",
             },
-            { name: "asset_id", type: "string", desc: "Filter by asset ID" },
             {
-                name: "sensor_type",
-                type: "string",
-                desc: "Filter by sensor type",
+                method: "POST",
+                path: "/v1/emergency/eop/generate-draft",
+                title: "Sinh bản nháp EOP",
+                description:
+                    "Sinh bản nháp EOP bằng AI kèm fallback an toàn từ dữ liệu sự kiện.",
             },
             {
-                name: "limit",
-                type: "integer",
-                desc: "Số quan trắc tối đa (tối đa: 5000)",
-                default: "500",
+                method: "PATCH",
+                path: "/v1/emergency/eop/{plan_id}/markdown",
+                title: "Cập nhật markdown",
+                description: "Chỉnh sửa nội dung markdown của bản nháp/kế hoạch.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/eop/{plan_id}/approve",
+                title: "Duyệt EOP",
+                description: "Chuyển kế hoạch sang trạng thái đã duyệt kèm ghi chú.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/eop/{plan_id}/publish",
+                title: "Xuất bản EOP",
+                description: "Công bố kế hoạch cho các đơn vị ứng cứu.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/eop/{plan_id}/submit",
+                title: "Gửi EOP & sinh nhiệm vụ",
+                description: "Gửi kế hoạch và sinh các lệnh điều phối tương ứng.",
             },
         ],
-        testPath: "/v1/ld/observations?hours=1&limit=10",
     },
     {
-        method: "GET",
-        path: "/v1/ld/vocab",
-        title: "SynapseCity SOS Vocabulary",
+        id: "dispatch",
+        label: "Điều phối",
+        icon: "🚑",
+        title: "Lệnh điều phối & nguồn lực",
         description:
-            "Get the SynapseCity SOS vocabulary definition extending NGSI-LD and Schema.org",
-        testPath: "/v1/ld/vocab",
+            "Phân công đơn vị ứng cứu, tối ưu lộ trình và quản lý trạng thái nguồn lực.",
+        endpoints: [
+            {
+                method: "GET",
+                path: "/v1/emergency/dispatch",
+                title: "Danh sách lệnh điều phối",
+                description: "Lọc theo sự kiện, trạng thái và mức ưu tiên.",
+                testPath: "/v1/emergency/dispatch?limit=5",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/dispatch/{order_id}/approve",
+                title: "Duyệt & phân công",
+                description:
+                    "Duyệt lệnh điều phối và gán một đơn vị ứng cứu (resource unit id).",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/dispatch/{order_id}/reject",
+                title: "Từ chối lệnh",
+                description: "Từ chối lệnh điều phối đang chờ.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/dispatch/optimize",
+                title: "Tối ưu điều phối",
+                description: "Tối ưu thứ tự, ETA và tự động gán nguồn lực khả dụng.",
+            },
+            {
+                method: "GET",
+                path: "/v1/emergency/resources",
+                title: "Danh sách nguồn lực",
+                description:
+                    "Đơn vị ứng cứu, phương tiện, vật tư y tế, thiết bị cứu hộ và nơi trú ẩn.",
+                params: [
+                    { name: "status", type: "string", desc: "available | deployed | standby | offline | maintenance" },
+                    { name: "resource_type", type: "string", desc: "personnel | vehicle | medical_supply | rescue_equipment | shelter" },
+                    { name: "district", type: "string", desc: "Lọc theo quận/huyện" },
+                ],
+                testPath: "/v1/emergency/resources?limit=5",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/resources/{resource_id}/status",
+                title: "Cập nhật trạng thái nguồn lực",
+                description: "Chuyển nguồn lực giữa các trạng thái vận hành.",
+            },
+        ],
+    },
+    {
+        id: "sitrep",
+        label: "SITREP & AAR",
+        icon: "📝",
+        title: "SITREP & báo cáo sau sự kiện",
+        description:
+            "Báo cáo tình hình hiện trường, delta cập nhật và after-action report tổng kết KPI.",
+        endpoints: [
+            {
+                method: "GET",
+                path: "/v1/emergency/sitrep",
+                title: "Danh sách SITREP",
+                description: "Lọc báo cáo tình hình theo sự kiện và trạng thái xuất bản.",
+                testPath: "/v1/emergency/sitrep?limit=5",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/sitrep",
+                title: "Tạo SITREP",
+                description: "Ghi nhận tình hình hiện trường và số liệu thương vong/thiệt hại.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/sitrep/{sitrep_id}/delta",
+                title: "Thêm delta SITREP",
+                description: "Bổ sung cập nhật chênh lệch so với báo cáo trước.",
+            },
+            {
+                method: "GET",
+                path: "/v1/emergency/after-action",
+                title: "Danh sách AAR",
+                description: "Báo cáo sau sự kiện kèm điểm KPI tổng thể.",
+                testPath: "/v1/emergency/after-action?limit=5",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/after-action/generate",
+                title: "Tạo AAR",
+                description: "Sinh after-action report từ dữ liệu sự kiện, điều phối và SITREP.",
+            },
+            {
+                method: "POST",
+                path: "/v1/emergency/after-action/{report_id}/publish",
+                title: "Xuất bản AAR",
+                description: "Công bố báo cáo sau sự kiện.",
+            },
+        ],
+    },
+    {
+        id: "geo",
+        label: "Bản đồ & AI",
+        icon: "🗺️",
+        title: "Bản đồ, geocode & AI",
+        description:
+            "Cấu hình tile, geocoding và trợ lý AI phục vụ bản đồ cảnh báo công khai.",
+        endpoints: [
+            {
+                method: "GET",
+                path: "/v1/map/config",
+                title: "Cấu hình tile bản đồ",
+                description:
+                    "Trả về tile URL, attribution và giới hạn zoom cho bản đồ SOS.",
+                testPath: "/v1/map/config",
+            },
+            {
+                method: "POST",
+                path: "/v1/geo/geocode",
+                title: "Geocode địa chỉ",
+                description: "Chuyển địa chỉ thành tọa độ để định vị trên bản đồ.",
+            },
+            {
+                method: "POST",
+                path: "/v1/geo/reverse-geocode",
+                title: "Reverse geocode",
+                description: "Chuyển tọa độ thành địa chỉ hiển thị.",
+            },
+            {
+                method: "GET",
+                path: "/v1/geo/search-address",
+                title: "Gợi ý địa chỉ",
+                description: "Tìm kiếm địa chỉ và trả về danh sách gợi ý.",
+            },
+            {
+                method: "POST",
+                path: "/v1/ai/chat",
+                title: "Trợ lý AI SOS",
+                description:
+                    "Hỏi đáp về tình hình thiên tai, EOP và điều phối trong phạm vi dữ liệu SOS.",
+            },
+        ],
     },
 ];
 
 const codeExamples = {
-    curl: `curl -X GET "${API_BASE_URL}/api/opendata/assets?limit=10" \\
+    curl: `# Lấy cảnh báo đang hoạt động
+curl -X GET "${API_BASE_URL}/v1/hazards?active_only=true&limit=10" \\
+  -H "Accept: application/json"
+
+# Lấy sự kiện công khai cho bản đồ
+curl -X GET "${API_BASE_URL}/v1/emergency/public?limit=10" \\
   -H "Accept: application/json"`,
-    javascript: `// Using fetch API
-const response = await fetch('${API_BASE_URL}/api/opendata/assets?limit=10');
-const data = await response.json();
+    javascript: `// Theo dõi cảnh báo công khai
+const response = await fetch(
+  '${API_BASE_URL}/v1/emergency/public?limit=10'
+);
+const events = await response.json();
 
-// Response is GeoJSON FeatureCollection
-console.log(data.features);
-console.log('License:', data.license);`,
+for (const event of events) {
+  console.log(event.title, event.severity, event.location?.district);
+}`,
     python: `import requests
 
 response = requests.get(
-    '${API_BASE_URL}/api/opendata/assets',
-    params={'limit': 10, 'feature_type': 'Power Station'}
+    '${API_BASE_URL}/v1/hazards',
+    params={'active_only': True, 'limit': 10},
 )
-data = response.json()
+hazards = response.json()
 
-# GeoJSON data
-for feature in data['features']:
-    print(feature['properties']['feature_type'])
-    print(feature['geometry']['coordinates'])`,
+for hazard in hazards:
+    print(hazard['title'], hazard['severity'], hazard['event_type'])`,
 };
 
-// NGSI-LD IoT code examples
-const jsonLdCodeExamples = {
-    curl: `# Get IoT sensors in NGSI-LD format
-curl -X GET "${API_BASE_URL}/v1/ld/sensors?limit=10" \\
-  -H "Accept: application/ld+json"
+const sseExample = `// Live hazard stream trong trung tâm chỉ huy
+const stream = new EventSource(
+  '${API_BASE_URL}/v1/emergency/stream/hazards?access_token=<token>'
+);
 
-# Get observations for a specific sensor (NGSI-LD)
-curl -X GET "${API_BASE_URL}/v1/ld/sensors/{sensor_id}/observations?from_time=2024-01-01T00:00:00Z&to_time=2024-12-31T23:59:59Z" \\
-  -H "Accept: application/ld+json"`,
-    javascript: `// Fetch IoT sensors in NGSI-LD format (ETSI standard)
-const response = await fetch('${API_BASE_URL}/v1/ld/sensors?limit=10', {
-  headers: { 'Accept': 'application/ld+json' }
-});
-const sensors = await response.json();
-
-// NGSI-LD format: array of entities
-sensors.forEach(sensorEntity => {
-  console.log('ID:', sensorEntity.id);  // urn:ngsi-ld:Sensor:xxx
-  console.log('Type:', sensorEntity.type);  // Sensor
-  console.log('Code:', sensorEntity.sensorCode.value);  // Property
-  console.log('Status:', sensorEntity.status.value);
-  console.log('Asset:', sensorEntity.refAsset.object);  // Relationship
-});`,
-    python: `import requests
-
-# Fetch NGSI-LD data
-response = requests.get(
-    '${API_BASE_URL}/v1/ld/sensors',
-    params={'limit': 10},
-    headers={'Accept': 'application/ld+json'}
-)
-sensors = response.json()
-
-# NGSI-LD entities with Properties and Relationships
-for sensor in sensors:
-    sensor_id = sensor['id']  # urn:ngsi-ld:Sensor:xxx
-    sensor_code = sensor['sensorCode']['value']  # Property
-    sensor_type = sensor['sensorType']['value']
-    status = sensor['status']['value']
-    asset_ref = sensor['refAsset']['object']  # Relationship
-    
-    print(f"Sensor {sensor_code}: {sensor_type} - {status}")
-    print(f"  Monitors asset: {asset_ref}")`,
-};
+stream.addEventListener('hazards', (event) => {
+  const payload = JSON.parse(event.data);
+  // payload.snapshot hoặc payload.delta
+  console.log(payload);
+});`;
 
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
@@ -343,35 +529,40 @@ function CopyButton({ text }: { text: string }) {
     );
 }
 
+function endpointRequiresAuth(endpoint: Endpoint): boolean {
+    if (endpoint.requiresAuth) return true;
+    const path = endpoint.path;
+    if (path.startsWith("/v1/emergency/public") || path === "/v1/emergency/stream/hazards") return false;
+    if (path === "/v1/hazards/recent" || path.startsWith("/v1/hazards/recent/")) return false;
+    if (path.startsWith("/v1/hazards/geo/") || path === "/v1/hazards/vndms-live") return false;
+    if (path === "/v1/sos" || path.startsWith("/v1/geo") || path.startsWith("/v1/map") || path.startsWith("/v1/ai")) return false;
+    if (path.startsWith("/v1/auth")) return Boolean(endpoint.requiresAuth);
+    if (path.startsWith("/v1/hazards")) {
+        if (endpoint.method === "GET" || endpoint.method === "HEAD") return false;
+        return true;
+    }
+    return path.startsWith("/v1/emergency");
+}
+
 function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
     const [isLoading, setIsLoading] = useState(false);
     const [response, setResponse] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [showResponse, setShowResponse] = useState(false);
-    const [assetId, setAssetId] = useState("");
+    const requiresAuth = endpointRequiresAuth(endpoint);
 
     const handleTest = async () => {
+        if (!endpoint.testPath) {
+            return;
+        }
         setIsLoading(true);
         setError(null);
         setResponse(null);
-        setShowResponse(true);
 
         try {
-            let testUrl = API_BASE_URL;
-            if (endpoint.testPath) {
-                testUrl += endpoint.testPath;
-            } else if (endpoint.path.includes("{asset_id}") && assetId) {
-                testUrl += endpoint.path.replace("{asset_id}", assetId);
-                } else {
-                setError("Vui lòng nhập asset_id để thử");
-                setIsLoading(false);
-                return;
-            }
-
-            const res = await fetch(testUrl);
+            const res = await fetch(`${API_BASE_URL}${endpoint.testPath}`);
             const data = await res.json();
             setResponse(JSON.stringify(data, null, 2));
-                } catch (err) {
+        } catch (err) {
             setError(err instanceof Error ? err.message : "Đã xảy ra lỗi");
         } finally {
             setIsLoading(false);
@@ -383,25 +574,30 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
             <div className="p-6">
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                     <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-green-100 text-green-700 text-sm font-mono font-semibold rounded">
+                        <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-sm font-mono font-semibold rounded">
                             {endpoint.method}
                         </span>
                         <code className="text-slate-800 font-mono text-sm">
                             {endpoint.path}
                         </code>
                     </div>
-                    {endpoint.testPath && (
+                    {requiresAuth && (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
+                            Bearer
+                        </span>
+                    )}
+                    {endpoint.testPath && !requiresAuth && (
                         <button
                             onClick={handleTest}
                             disabled={isLoading}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#00F2FE] to-[#4FACFE] text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                         >
                             {isLoading ? (
                                 <Loader2 size={16} className="animate-spin" />
                             ) : (
                                 <Play size={16} />
                             )}
-                            Test
+                            Thử
                         </button>
                     )}
                 </div>
@@ -409,6 +605,11 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
                     {endpoint.title}
                 </h3>
                 <p className="text-slate-600">{endpoint.description}</p>
+                {requiresAuth && (
+                    <p className="mt-2 text-xs text-amber-700">
+                        Yêu cầu header <code className="font-mono">Authorization: Bearer &lt;access_token&gt;</code>.
+                    </p>
+                )}
 
                 {endpoint.params && (
                     <div className="mt-4">
@@ -427,7 +628,7 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
                                 <tbody className="text-slate-700">
                                     {endpoint.params.map((param) => (
                                         <tr key={param.name}>
-                                            <td className="py-1 pr-4 font-mono text-blue-600">
+                                            <td className="py-1 pr-4 font-mono text-red-600">
                                                 {param.name}
                                             </td>
                                             <td className="py-1 pr-4 text-slate-500">
@@ -435,6 +636,12 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
                                             </td>
                                             <td className="py-1">
                                                 {param.desc}
+                                                {param.default ? (
+                                                    <span className="text-slate-400">
+                                                        {" "}
+                                                        (mặc định: {param.default})
+                                                    </span>
+                                                ) : null}
                                             </td>
                                         </tr>
                                     ))}
@@ -444,65 +651,8 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
                     </div>
                 )}
 
-                {/* Input for asset_id if needed */}
-                {endpoint.path.includes("{asset_id}") && (
+                {(response || error || isLoading) && (
                     <div className="mt-4">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Nhập asset_id để thử:
-                        </label>
-                        <p className="text-xs text-slate-500 mb-2">
-                            Ví dụ:{" "}
-                            <code
-                                className="bg-slate-100 px-2 py-1 rounded cursor-pointer hover:bg-slate-200 transition-colors"
-                                onClick={() =>
-                                    setAssetId("6927235efbcca60d69c3bf97")
-                                }
-                                title="Nhấn để dùng ID mẫu"
-                            >
-                                6927235efbcca60d69c3bf97
-                            </code>
-                        </p>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={assetId}
-                                onChange={(e) => setAssetId(e.target.value)}
-                                placeholder="6927235efbcca60d69c3bf97"
-                                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button
-                                onClick={handleTest}
-                                disabled={isLoading || !assetId}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#00F2FE] to-[#4FACFE] text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
-                            >
-                                {isLoading ? (
-                                    <Loader2
-                                        size={16}
-                                        className="animate-spin"
-                                    />
-                                ) : (
-                                    <Play size={16} />
-                                )}
-                                Thử
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Response Section */}
-                {showResponse && (
-                    <div className="mt-4">
-                        <button
-                            onClick={() => setShowResponse(!showResponse)}
-                            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 mb-2"
-                        >
-                            {showResponse ? (
-                                <ChevronUp size={16} />
-                            ) : (
-                                <ChevronDown size={16} />
-                            )}
-                            Response
-                        </button>
                         <div className="bg-slate-900 rounded-lg overflow-hidden">
                             <div className="flex items-center justify-between px-4 py-2 border-b border-slate-700">
                                 <span className="text-xs text-slate-400">
@@ -515,14 +665,12 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
                                     <div className="flex items-center justify-center py-8">
                                         <Loader2
                                             size={24}
-                                            className="animate-spin text-blue-400"
+                                            className="animate-spin text-red-400"
                                         />
                                     </div>
                                 )}
                                 {error && (
-                                    <p className="text-red-400 text-sm">
-                                        {error}
-                                    </p>
+                                    <p className="text-red-400 text-sm">{error}</p>
                                 )}
                                 {response && (
                                     <pre className="text-sm text-slate-300 overflow-x-auto">
@@ -539,16 +687,9 @@ function EndpointCard({ endpoint }: { endpoint: Endpoint }) {
 }
 
 export default function ApiDocsPage() {
-    const [activeTab, setActiveTab] = useState<
-        "curl" | "javascript" | "python"
-    >("javascript");
-
-    const sidebarItems = [
-        { id: "opendata", label: "API Dữ liệu Mở", icon: "📦" },
-        { id: "iot", label: "Dữ liệu IoT (NGSI-LD)", icon: "📡" },
-        { id: "examples", label: "Ví dụ mã", icon: "💻" },
-        { id: "mcp", label: "Máy chủ MCP", icon: "🤖" },
-    ];
+    const [activeTab, setActiveTab] = useState<"curl" | "javascript" | "python">(
+        "javascript"
+    );
 
     const scrollToSection = (id: string) => {
         const el = document.getElementById(id);
@@ -567,218 +708,155 @@ export default function ApiDocsPage() {
                     <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-3">
                         Điều hướng
                     </h3>
-                    {sidebarItems.map((item) => (
+                    {sections.map((section) => (
                         <button
-                            key={item.id}
-                            onClick={() => scrollToSection(item.id)}
-                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-blue-600 rounded-lg transition-colors text-left"
+                            key={section.id}
+                            onClick={() => scrollToSection(section.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-red-600 rounded-lg transition-colors text-left"
                         >
-                            <span>{item.icon}</span>
-                            <span>{item.label}</span>
+                            <span>{section.icon}</span>
+                            <span>{section.label}</span>
                         </button>
                     ))}
-                </nav>
-
-                {/* <div className="mt-6 pt-6 border-t border-slate-200">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-3">Quick Links</h3>
-                    <a
-                        href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                    <button
+                        onClick={() => scrollToSection("examples")}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-red-600 rounded-lg transition-colors text-left"
                     >
-                        <Key size={14} />
-                        OGL License
-                    </a>
-                </div> */}
+                        <span>💻</span>
+                        <span>Ví dụ mã</span>
+                    </button>
+                </nav>
             </aside>
 
-            {/* Main content with left margin for sidebar */}
             <main className="pt-24 pb-16 lg:ml-56">
-                {/* Hero Section */}
-                <section className="max-w-6xl mx-auto px-4 mb-16">
-                    <div className="text-center mb-12">
-                        <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+                {/* Hero */}
+                <section className="max-w-6xl mx-auto px-4 mb-14">
+                    <div className="text-center mb-10">
+                        <div className="inline-flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
                             <Database size={16} />
-                                API Dữ liệu Mở
+                            API điều hành khẩn cấp
                         </div>
                         <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-                            Tài liệu API
+                            Tài liệu API SynapseCity SOS
                         </h1>
                         <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-                            Truy cập dữ liệu hạ tầng GIS mở và cảm biến IoT theo định dạng NGSI-LD.
-                            Miễn phí sử dụng theo Open Government Licence v3.0 (OGL).
+                            Cảnh báo thiên tai, sự kiện khẩn cấp, EOP, điều phối
+                            nguồn lực, SITREP và báo cáo sau sự kiện.
                         </p>
                     </div>
 
-                    {/* Quick Links */}
-                    <div className="flex justify-center mb-12">
-                        <a
-                            href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-4 p-6 bg-white rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-lg transition-all group"
-                        >
-                            <div className="p-3 bg-amber-100 rounded-lg group-hover:bg-amber-200 transition-colors">
-                                <Key className="text-amber-600" size={24} />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-slate-900">
-                                    Open Government Licence v3.0 (OGL)
-                                </h3>
-                                <p className="text-sm text-slate-500">
-                                    Điều khoản sử dụng
-                                </p>
-                            </div>
-                            <ExternalLink
-                                size={16}
-                                className="ml-auto text-slate-400"
-                            />
-                        </a>
-                    </div>
-                </section>
-
-                {/* License Notice */}
-                <section className="max-w-6xl mx-auto px-4 mb-16">
-                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-8">
-                        <div className="flex items-start gap-4">
-                            <Key
-                                className="text-amber-600 shrink-0 mt-1"
-                                size={24}
-                            />
-                            <div>
-                                <h2 className="text-xl font-bold text-slate-900 mb-2">
-                                    Open Government Licence v3.0 (OGL)
-                                </h2>
-                                <p className="text-slate-700">
-                                    Data is provided free under the{" "}
-                                    <a
-                                        href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-blue-600 hover:underline font-medium"
-                                    >
-                                        Open Government Licence v3.0 (OGL)
-                                    </a>
-                                    . You are free to use, copy, distribute,
-                                    transmit, and adapt the data for any
-                                    purpose, including commercial use, provided
-                                    you acknowledge the source.
-                                </p>
-                            </div>
+                    <div className="grid md:grid-cols-3 gap-4">
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">
+                                Base URL
+                            </p>
+                            <code className="mt-1 block text-sm font-mono text-slate-800 break-all">
+                                {API_BASE_URL}
+                            </code>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">
+                                Namespaces
+                            </p>
+                            <code className="mt-1 block text-sm font-mono text-slate-800">
+                                /v1/sos · /v1/auth · /v1/emergency · /v1/hazards
+                            </code>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs uppercase tracking-wide text-slate-500">
+                                Định dạng
+                            </p>
+                            <p className="mt-1 text-sm text-slate-800">
+                                JSON, GeoJSON, SSE
+                            </p>
                         </div>
                     </div>
                 </section>
 
-                {/* Endpoints */}
-                <section
-                    id="opendata"
-                    className="max-w-6xl mx-auto px-4 mb-16 scroll-mt-24"
-                >
-                    <h2 className="text-2xl font-bold text-slate-900 mb-2 flex items-center gap-3">
-                        <Code size={28} className="text-blue-600" />
-                        API dữ liệu mở
-                    </h2>
-                    <p className="text-slate-500 mb-8">
-                        Nhấn nút {" "}
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-[#00F2FE] to-[#4FACFE] text-white text-xs font-medium rounded">
-                            <Play size={12} /> Thử
-                        </span>{" "}
-                        để thử ngay
-                    </p>
-
-                    <div className="space-y-4">
-                        {openDataEndpoints.map((endpoint) => (
-                            <EndpointCard
-                                key={endpoint.path}
-                                endpoint={endpoint}
-                            />
-                        ))}
+                {/* Boundary notice */}
+                <section className="max-w-6xl mx-auto px-4 mb-14">
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
+                        <Key className="text-amber-600 shrink-0 mt-0.5" size={22} />
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900 mb-1">
+                                Phạm vi sản phẩm
+                            </h2>
+                            <p className="text-slate-700 text-sm">
+                                SynapseCity SOS chỉ sở hữu các namespace{" "}
+                                <code className="font-mono">/v1/sos</code>,{" "}
+                                <code className="font-mono">/v1/auth</code>,{" "}
+                                <code className="font-mono">/v1/emergency*</code>,{" "}
+                                <code className="font-mono">/v1/hazards*</code>,{" "}
+                                <code className="font-mono">/v1/geo</code>,{" "}
+                                <code className="font-mono">/v1/map</code> và{" "}
+                                <code className="font-mono">/v1/ai</code>. Các API
+                                hạ tầng đô thị (tài sản, sự cố hạ tầng, IoT, bảo
+                                trì, ngân sách, báo cáo vận hành, cảnh báo hạ
+                                tầng, người dùng, ingest) thuộc sản phẩm
+                                SynapseCity và sẽ trả về 404 tại boundary này.
+                                Các endpoint có nhãn <strong>Bearer</strong> yêu
+                                cầu phiên đăng nhập qua <code className="font-mono">/v1/auth/login</code>.
+                            </p>
+                            <a
+                                href="https://synapsecity.sbs"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
+                            >
+                                Tài liệu SynapseCity
+                                <ExternalLink size={13} />
+                            </a>
+                        </div>
                     </div>
                 </section>
 
-                {/* IoT NGSI-LD Section */}
-                <section
-                    id="iot"
-                    className="max-w-6xl mx-auto px-4 mb-16 scroll-mt-24"
-                >
-                    <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-8 mb-8">
+                {/* Endpoint sections */}
+                {sections.map((section) => (
+                    <section
+                        key={section.id}
+                        id={section.id}
+                        className="max-w-6xl mx-auto px-4 mb-14 scroll-mt-24"
+                    >
                         <h2 className="text-2xl font-bold text-slate-900 mb-2 flex items-center gap-3">
-                            <Database size={28} className="text-purple-600" />
-                            Dữ liệu cảm biến IoT - NGSI-LD
+                            <Code size={26} className="text-red-600" />
+                            {section.title}
                         </h2>
-                        <p className="text-slate-700 mb-4">
-                            Truy cập dữ liệu cảm biến IoT theo định dạng <strong>NGSI-LD</strong>{" "}
-                            (chuẩn ETSI cho quản lý thông tin ngữ cảnh):
-                        </p>
-                        <div className="grid md:grid-cols-3 gap-4 mb-4">
-                            <div className="bg-white/80 rounded-lg p-4">
-                                <h4 className="font-semibold text-purple-700 mb-1">
-                                    Cốt lõi NGSI-LD
-                                </h4>
-                                <p className="text-sm text-slate-600">
-                                    Chuẩn ETSI cho các nền tảng đô thị thông minh
-                                </p>
-                            </div>
-                            <div className="bg-white/80 rounded-lg p-4">
-                                <h4 className="font-semibold text-purple-700 mb-1">
-                                    Thuộc tính & Mối quan hệ
-                                </h4>
-                                <p className="text-sm text-slate-600">
-                                    Thuộc tính có cấu trúc của thực thể
-                                </p>
-                            </div>
-                            <div className="bg-white/80 rounded-lg p-4">
-                                <h4 className="font-semibold text-purple-700 mb-1">
-                                    Schema.org
-                                </h4>
-                                <p className="text-sm text-slate-600">
-                                    Hỗ trợ từ vựng mở rộng
-                                </p>
-                            </div>
+                        <p className="text-slate-500 mb-6">{section.description}</p>
+                        <div className="space-y-4">
+                            {section.endpoints.map((endpoint) => (
+                                <EndpointCard
+                                    key={`${endpoint.method}-${endpoint.path}`}
+                                    endpoint={endpoint}
+                                />
+                            ))}
                         </div>
-                        <p className="text-sm text-slate-600">
-                            Phù hợp cho nền tảng đô thị thông minh, context broker, và khả năng tương tác IoT.
-                        </p>
-                    </div>
+                    </section>
+                ))}
 
-                    <div className="space-y-4">
-                        {iotLinkedDataEndpoints.map((endpoint) => (
-                            <EndpointCard
-                                key={endpoint.path}
-                                endpoint={endpoint}
-                            />
-                        ))}
-                    </div>
-                </section>
-
-                {/* Code Examples */}
+                {/* Code examples */}
                 <section
                     id="examples"
-                    className="max-w-6xl mx-auto px-4 mb-16 scroll-mt-24"
+                    className="max-w-6xl mx-auto px-4 mb-14 scroll-mt-24"
                 >
-                    <h2 className="text-2xl font-bold text-slate-900 mb-8">
-                            Ví dụ mã
-                        </h2>
+                    <h2 className="text-2xl font-bold text-slate-900 mb-6">
+                        Ví dụ mã
+                    </h2>
 
                     <div className="bg-slate-900 rounded-2xl overflow-hidden">
                         <div className="flex border-b border-slate-700">
-                            {(["javascript", "python", "curl"] as const).map(
-                                (tab) => (
-                                    <button
-                                        key={tab}
-                                        onClick={() => setActiveTab(tab)}
-                                        className={`px-6 py-3 text-sm font-medium transition-colors ${
-                                            activeTab === tab
-                                                ? "bg-slate-800 text-white"
-                                                : "text-slate-400 hover:text-white"
-                                        }`}
-                                    >
-                                        {tab.charAt(0).toUpperCase() +
-                                            tab.slice(1)}
-                                    </button>
-                                )
-                            )}
+                            {(["javascript", "python", "curl"] as const).map((tab) => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`px-6 py-3 text-sm font-medium transition-colors ${
+                                        activeTab === tab
+                                            ? "bg-slate-800 text-white"
+                                            : "text-slate-400 hover:text-white"
+                                    }`}
+                                >
+                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                </button>
+                            ))}
                         </div>
                         <div className="relative p-6">
                             <div className="absolute top-2 right-2">
@@ -789,360 +867,26 @@ export default function ApiDocsPage() {
                             </pre>
                         </div>
                     </div>
-                </section>
 
-                {/* NGSI-LD Code Examples */}
-                <section className="max-w-6xl mx-auto px-4 mb-16">
-                    <h2 className="text-2xl font-bold text-slate-900 mb-2">
-                        Ví dụ NGSI-LD / Cảm biến IoT
-                    </h2>
-                    <p className="text-slate-600 mb-8">
-                        Ví dụ minh họa cách làm việc với dữ liệu cảm biến IoT theo định dạng NGSI-LD cho tích hợp đô thị thông minh.
-                    </p>
-
+                    <h3 className="text-lg font-semibold text-slate-900 mt-8 mb-3">
+                        Live hazard stream (SSE)
+                    </h3>
                     <div className="bg-slate-900 rounded-2xl overflow-hidden">
-                        <div className="flex border-b border-slate-700">
-                            {(["javascript", "python", "curl"] as const).map(
-                                (tab) => (
-                                    <button
-                                        key={`ld-${tab}`}
-                                        onClick={() => setActiveTab(tab)}
-                                        className={`px-6 py-3 text-sm font-medium transition-colors ${
-                                            activeTab === tab
-                                                ? "bg-slate-800 text-white"
-                                                : "text-slate-400 hover:text-white"
-                                        }`}
-                                    >
-                                        {tab.charAt(0).toUpperCase() +
-                                            tab.slice(1)}
-                                    </button>
-                                )
-                            )}
-                        </div>
                         <div className="relative p-6">
                             <div className="absolute top-2 right-2">
-                                <CopyButton
-                                    text={jsonLdCodeExamples[activeTab]}
-                                />
+                                <CopyButton text={sseExample} />
                             </div>
                             <pre className="text-sm text-slate-300 overflow-x-auto">
-                                <code>{jsonLdCodeExamples[activeTab]}</code>
+                                <code>{sseExample}</code>
                             </pre>
                         </div>
                     </div>
                 </section>
-
-                {/* MCP Server Section */}
-                <section
-                    id="mcp"
-                    className="max-w-6xl mx-auto px-4 mb-16 scroll-mt-24"
-                >
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-8 mb-8">
-                        <h2 className="text-2xl font-bold text-slate-900 mb-2 flex items-center gap-3">
-                            <svg
-                                className="w-7 h-7 text-green-600"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                            >
-                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                            </svg>
-                            Máy chủ MCP (Model Context Protocol)
-                        </h2>
-                        <p className="text-slate-700 mb-4">
-                            Tích hợp dữ liệu SynapseCity SOS trực tiếp vào trợ lý AI
-                            như <strong>Claude Desktop</strong>, <strong>Cursor</strong>, hoặc bất kỳ ứng dụng tương thích MCP.
-                        </p>
-
-                        <div className="grid md:grid-cols-2 gap-6 mb-6">
-                            <div className="bg-white/80 rounded-lg p-4">
-                                <h4 className="font-semibold text-green-700 mb-3">
-                                    🔗 URL kết nối
-                                </h4>
-                                <code className="block bg-slate-100 px-4 py-3 rounded-lg text-sm font-mono text-slate-800 break-all">
-                                    https://mcp.sos.synapsecity.sbs/sse
-                                </code>
-                            </div>
-                            <div className="bg-white/80 rounded-lg p-4">
-                                <h4 className="font-semibold text-green-700 mb-3">
-                                    📦 Phương thức truyền
-                                </h4>
-                                <p className="text-slate-600">
-                                    SSE (Server-Sent Events)
-                                </p>
-                                <p className="text-sm text-slate-500 mt-1">
-                                    Tương thích với tất cả client MCP 2.0+
-                                </p>
-                            </div>
-                        </div>
-
-                        <h4 className="font-semibold text-slate-800 mb-3">
-                            📚 Tài nguyên sẵn có
-                        </h4>
-                        <div className="grid md:grid-cols-2 gap-3 mb-6">
-                            <div className="bg-white/80 rounded-lg p-3">
-                                <code className="text-green-700 font-mono text-sm">
-                                    openapi://spec
-                                </code>
-                                <p className="text-sm text-slate-600 mt-1">
-                                    Toàn bộ đặc tả OpenAPI
-                                </p>
-                            </div>
-                            <div className="bg-white/80 rounded-lg p-3">
-                                <code className="text-green-700 font-mono text-sm">
-                                    docs://endpoints
-                                </code>
-                                <p className="text-sm text-slate-600 mt-1">
-                                    Danh sách tất cả endpoints
-                                </p>
-                            </div>
-                            <div className="bg-white/80 rounded-lg p-3">
-                                <code className="text-green-700 font-mono text-sm">
-                                    docs://opendata
-                                </code>
-                                <p className="text-sm text-slate-600 mt-1">
-                                    Tài liệu API Dữ liệu Mở
-                                </p>
-                            </div>
-                            <div className="bg-white/80 rounded-lg p-3">
-                                <code className="text-green-700 font-mono text-sm">
-                                    docs://iot
-                                </code>
-                                <p className="text-sm text-slate-600 mt-1">
-                                    IoT Sensors API docs
-                                </p>
-                            </div>
-                        </div>
-
-                        <h4 className="font-semibold text-slate-800 mb-3">
-                            🔧 Available Tools
-                        </h4>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm bg-white/80 rounded-lg overflow-hidden">
-                                <thead className="bg-green-100">
-                                    <tr>
-                                        <th className="text-left px-4 py-2 font-semibold text-green-800">
-                                            Tool
-                                        </th>
-                                        <th className="text-left px-4 py-2 font-semibold text-green-800">
-                                            Description
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-green-100">
-                                    <tr>
-                                        <td className="px-4 py-2 font-mono text-green-700">
-                                            call_api
-                                        </td>
-                                        <td className="px-4 py-2 text-slate-600">
-                                            Call any SynapseCity SOS API endpoint
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-2 font-mono text-green-700">
-                                            list_endpoints
-                                        </td>
-                                        <td className="px-4 py-2 text-slate-600">
-                                            List all available API endpoints
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-2 font-mono text-green-700">
-                                            get_feature_types
-                                        </td>
-                                        <td className="px-4 py-2 text-slate-600">
-                                            Get infrastructure types and counts
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-2 font-mono text-green-700">
-                                            get_assets
-                                        </td>
-                                        <td className="px-4 py-2 text-slate-600">
-                                            Query assets with filters
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-2 font-mono text-green-700">
-                                            get_sensors
-                                        </td>
-                                        <td className="px-4 py-2 text-slate-600">
-                                            Query IoT sensors
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {/* MCP Client Configurations */}
-                    <div className="space-y-4">
-                        {/* Claude Desktop */}
-                        <div className="bg-slate-900 rounded-2xl overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-3">
-                                <svg
-                                    className="w-6 h-6"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                >
-                                    <path
-                                        fill="#D97757"
-                                        d="M17.303 4.24c-1.403-.464-2.963-.073-4.093.993l-.166.161-.455.47-.456-.47-.165-.161c-1.131-1.066-2.69-1.457-4.094-.992C5.777 4.919 4.5 6.796 4.5 8.945c0 1.545.637 3.057 1.756 4.319C7.64 14.813 9.52 16.388 12 18.88v.002c2.48-2.493 4.36-4.068 5.744-5.616 1.119-1.262 1.756-2.774 1.756-4.319 0-2.15-1.277-4.026-3.374-4.703c-.418-.139-.857-.207-1.295-.207-.438 0-.877.068-1.294.206l-.166.162.166-.162c.417-.138.856-.206 1.294-.206.438 0 .877.068 1.295.207z"
-                                    />
-                                </svg>
-                                <h4 className="text-white font-semibold">
-                                    Claude Desktop
-                                </h4>
-                            </div>
-                            <div className="relative p-6">
-                                <p className="text-slate-400 text-sm mb-3">
-                                    Add to{" "}
-                                    <code className="text-blue-400">
-                                        claude_desktop_config.json
-                                    </code>
-                                </p>
-                                <div className="absolute top-2 right-2">
-                                    <CopyButton
-                                        text={`{
-  "mcpServers": {
-    "openinfra": {
-      "url": "https://mcp.sos.synapsecity.sbs/sse"
-    }
-  }
-}`}
-                                    />
-                                </div>
-                                <pre className="text-sm text-slate-300 overflow-x-auto bg-slate-950 p-4 rounded-lg">
-                                    <code>{`{
-  "mcpServers": {
-    "openinfra": {
-      "url": "https://mcp.sos.synapsecity.sbs/sse"
-    }
-  }
-}`}</code>
-                                </pre>
-                            </div>
-                        </div>
-
-                        {/* GitHub Copilot */}
-                        <div className="bg-slate-900 rounded-2xl overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-3">
-                                <svg
-                                    className="w-6 h-6 text-white"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                >
-                                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                                </svg>
-                                <h4 className="text-white font-semibold">
-                                    GitHub Copilot (VS Code)
-                                </h4>
-                            </div>
-                            <div className="relative p-6">
-                                <p className="text-slate-400 text-sm mb-3">
-                                    Add to VS Code{" "}
-                                    <code className="text-blue-400">
-                                        settings.json
-                                    </code>
-                                </p>
-                                <div className="absolute top-2 right-2">
-                                    <CopyButton
-                                        text={`{
-  "github.copilot.chat.mcpServers": {
-    "openinfra": {
-      "url": "https://mcp.sos.synapsecity.sbs/sse"
-    }
-  }
-}`}
-                                    />
-                                </div>
-                                <pre className="text-sm text-slate-300 overflow-x-auto bg-slate-950 p-4 rounded-lg">
-                                    <code>{`{
-  "github.copilot.chat.mcpServers": {
-    "openinfra": {
-      "url": "https://mcp.sos.synapsecity.sbs/sse"
-    }
-  }
-}`}</code>
-                                </pre>
-                            </div>
-                        </div>
-
-                        {/* Cursor */}
-                        <div className="bg-slate-900 rounded-2xl overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-3">
-                                <svg
-                                    className="w-6 h-6"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                >
-                                    <rect
-                                        width="24"
-                                        height="24"
-                                        rx="4"
-                                        fill="#1E1E1E"
-                                    />
-                                    <path
-                                        d="M7 7h10v10H7V7z"
-                                        stroke="#00D8FF"
-                                        strokeWidth="2"
-                                    />
-                                    <circle
-                                        cx="12"
-                                        cy="12"
-                                        r="2"
-                                        fill="#00D8FF"
-                                    />
-                                </svg>
-                                <h4 className="text-white font-semibold">
-                                    Cursor
-                                </h4>
-                            </div>
-                            <div className="relative p-6">
-                                <p className="text-slate-400 text-sm mb-3">
-                                    Add to MCP configuration
-                                </p>
-                                <div className="absolute top-2 right-2">
-                                    <CopyButton
-                                        text={`{
-  "mcpServers": {
-    "openinfra": {
-      "url": "https://mcp.sos.synapsecity.sbs/sse"
-    }
-  }
-}`}
-                                    />
-                                </div>
-                                <pre className="text-sm text-slate-300 overflow-x-auto bg-slate-950 p-4 rounded-lg">
-                                    <code>{`{
-  "mcpServers": {
-    "openinfra": {
-      "url": "https://mcp.sos.synapsecity.sbs/sse"
-    }
-  }
-}`}</code>
-                                </pre>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-                <section className="max-w-6xl mx-auto px-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center">
-                        <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                            Base URL
-                        </h3>
-                        <code className="text-xl text-blue-600 font-mono bg-white px-4 py-2 rounded-lg border">
-                            {API_BASE_URL}
-                        </code>
-                        <p className="text-slate-600 mt-4">
-                            No API key required. Open data, free to use.
-                        </p>
-                    </div>
-                </section>
             </main>
-            <Footer />
-            <AIChatWidget />
+
+            <div className="lg:ml-56">
+                <Footer />
+            </div>
         </div>
     );
 }

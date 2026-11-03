@@ -38,7 +38,8 @@ const AboutUs: React.FC = () => {
                         Về <span className="text-sky-500">SynapseCity SOS</span>
                     </h1>
                     <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-                        Nền tảng quản lý hạ tầng mã nguồn mở dành cho đô thị thông minh
+                        Nền tảng điều hành khẩn cấp mã nguồn mở: chuẩn bị, ứng phó
+                        và phục hồi sau thiên tai
                     </p>
                 </div>
             </section>
@@ -51,14 +52,16 @@ const AboutUs: React.FC = () => {
                             Sứ mệnh của chúng tôi
                         </h2>
                         <p className="text-slate-600 leading-relaxed mb-4">
-                            SynapseCity SOS là hệ thống dựa trên GIS được xây dựng nhằm hỗ trợ
-                            chính quyền địa phương quản lý và giám sát tài sản hạ tầng
-                            công cộng trên khắp Việt Nam một cách hiệu quả.
+                            SynapseCity SOS giúp chính quyền địa phương và các đội
+                            ứng cứu theo dõi thiên tai, điều hành sự kiện khẩn cấp
+                            và phối hợp nguồn lực cứu hộ trên một nền tảng duy nhất.
                         </p>
                         <p className="text-slate-600 leading-relaxed">
-                            Chúng tôi cung cấp giám sát IoT thời gian thực, bản đồ tương
-                            tác và theo dõi bảo trì — được phát triển theo các chuẩn mở
-                            để đảm bảo minh bạch và dễ tiếp cận.
+                            Chúng tôi cung cấp cảnh báo lũ, bão, sạt lở và dữ liệu
+                            VNDMS theo thời gian thực, kế hoạch ứng phó (EOP), điều
+                            phối cứu hộ, SITREP và báo cáo sau sự kiện — được phát
+                            triển theo các chuẩn mở để đảm bảo minh bạch và dễ tiếp
+                            cận.
                         </p>
                     </div>
                 </div>
@@ -72,10 +75,10 @@ const AboutUs: React.FC = () => {
                     </h2>
                     <div className="grid md:grid-cols-2 gap-4">
                         {[
-                            "Bản đồ GIS tương tác",
-                            "Tích hợp cảm biến IoT",
-                            "Theo dõi bảo trì",
-                            "API dữ liệu mở",
+                            "Bản đồ cảnh báo thiên tai công khai",
+                            "Sự kiện khẩn cấp & kế hoạch EOP",
+                            "Điều phối nguồn lực cứu hộ",
+                            "SITREP & báo cáo sau sự kiện (AAR)",
                         ].map((feature, idx) => (
                             <div
                                 key={idx}

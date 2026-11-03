@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { httpClient } from '../lib/httpClient';
+import { asList, httpClient } from '../lib/httpClient';
 import type {
   AfterActionGenerateRequest,
   AfterActionReport,
@@ -17,7 +17,7 @@ export interface AfterActionListParams {
 export const afterActionApi = {
   list: async (params?: AfterActionListParams): Promise<AfterActionReport[]> => {
     const response = await httpClient.get<AfterActionReport[]>('/emergency/after-action', { params });
-    return response.data;
+    return asList<AfterActionReport>(response.data);
   },
 
   getById: async (id: string): Promise<AfterActionReport> => {

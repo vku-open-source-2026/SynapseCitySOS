@@ -1,5 +1,16 @@
 # OpenInfra Project Plan
 
+> **Scope notice (2026-11-03).** This is a legacy OpenInfra infrastructure
+> document retained for historical reference. It describes the separate
+> **SynapseCity** product (`https://synapsecity.sbs`), not SynapseCitySOS.
+> Do not call these endpoints from this product.
+> SynapseCitySOS does not own or implement city assets, city incidents, IoT,
+> maintenance, infrastructure alerts, budgets, operational reports, city users,
+> geofences, data ingest, the technician portal, the public asset map or public
+> incident reporting. For SOS scope and routes, see
+> [`../../../PRODUCT_BOUNDARY.md`](../../../PRODUCT_BOUNDARY.md).
+
+
 ## Executive Summary
 
 This document outlines a comprehensive, phased development plan for the OpenInfra Urban Infrastructure Asset Management System. The project is structured into 8 phases spanning approximately 16-20 weeks, taking the system from basic infrastructure setup to a production-ready, feature-complete platform.

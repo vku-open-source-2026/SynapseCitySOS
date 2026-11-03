@@ -12,6 +12,7 @@ services:
       PORT: "8084"
       SYNAPSEDX_BASE_URL: https://synapsedx.sbs
       ALLOW_LOCAL_DEPENDENCIES: "false"
+      AUTH_SECRET: ${AUTH_SECRET:-}
     expose: ["8084"]
     networks: [synapsecity-sos]
   gateway:
@@ -21,12 +22,17 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # Gateway always listens on 8080 inside the stack; the TLS edge and the
+      # console proxy target this container port.
       PORT: "8080"
       SOS_SERVICE_URL: http://sos-service:8084
       CONSOLE_URL: http://console:80
       CORS_ORIGIN: https://sos.synapsecity.sbs
+    depends_on: [sos-service, console]
     ports:
-      - "8084:8080"
+      # Host 8086 is the local/public-stack gateway entry; 8084 stays the
+      # private sos-service port so the two can never be confused.
+      - "${GATEWAY_HOST_PORT:-8086}:8080"
     networks:
       synapsecity-sos:
         aliases: [synapsecity-sos-gateway]

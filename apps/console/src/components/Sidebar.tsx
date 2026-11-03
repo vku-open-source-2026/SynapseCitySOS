@@ -6,16 +6,13 @@ import {
     LayoutDashboard,
     Map,
     Settings,
+    Siren,
+    ShieldCheck,
     Activity,
-    AlertTriangle,
-    FileText,
-    DollarSign,
-    Radio,
-    Users,
-    ChevronRight,
+    CloudLightning,
     Menu,
     X,
-    Building2,
+    ExternalLink,
 } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
 
@@ -29,152 +26,65 @@ interface MenuItem {
     label: string;
     icon: React.ComponentType<{ size?: number; className?: string }>;
     path: string;
-    badge?: number;
-    children?: MenuItem[];
 }
+
+/**
+ * Emergency-operations navigation only. City asset/incident/IoT/maintenance/
+ * budget/report/alert/user/ingest/technician entries deliberately do not exist
+ * in this product.
+ */
+const menuItems: MenuItem[] = [
+    {
+        id: "dashboard",
+        label: "Bảng điều khiển SOS",
+        icon: LayoutDashboard,
+        path: "/admin",
+    },
+    {
+        id: "emergency",
+        label: "Chỉ huy khẩn cấp",
+        icon: Siren,
+        path: "/admin/emergency-center",
+    },
+    {
+        id: "before",
+        label: "Bảng chuẩn bị",
+        icon: ShieldCheck,
+        path: "/admin/emergency-center/before",
+    },
+    {
+        id: "during",
+        label: "Bảng ứng phó (SITREP)",
+        icon: Activity,
+        path: "/admin/emergency-center/during",
+    },
+    {
+        id: "after",
+        label: "Bảng phục hồi (AAR)",
+        icon: CloudLightning,
+        path: "/admin/emergency-center/after",
+    },
+    {
+        id: "public-map",
+        label: "Bản đồ nguy cơ công khai",
+        icon: Map,
+        path: "/map",
+    },
+];
 
 const Sidebar: React.FC<SidebarProps> = () => {
     const location = useLocation();
     const { user } = useAuthStore();
-    const [expandedItems, setExpandedItems] = React.useState<Set<string>>(
-        new Set()
-    );
     const [isMobileOpen, setIsMobileOpen] = React.useState(false);
 
-    // Technician menu items (limited access)
-    const technicianMenuItems: MenuItem[] = [
-        {
-            id: "dashboard",
-            label: "Bảng điều khiển",
-            icon: LayoutDashboard,
-            path: "/technician",
-        },
-        {
-            id: "assets",
-            label: "Tài sản",
-            icon: Building2,
-            path: "/admin/assets",
-        },
-        {
-            id: "tasks",
-            label: "Công việc của tôi",
-            icon: AlertTriangle,
-            path: "/technician",
-        },
-    ];
-
-    // Admin menu items (full access)
-    const adminMenuItems: MenuItem[] = [
-        {
-            id: "dashboard",
-            label: "Bảng điều khiển",
-            icon: LayoutDashboard,
-            path: "/admin",
-        },
-        {
-            id: "map",
-            label: "Xem bản đồ",
-            icon: Map,
-            path: "/admin/map",
-        },
-        {
-            id: "assets",
-            label: "Tài sản",
-            icon: Building2,
-            path: "/admin/assets",
-        },
-        {
-            id: "incidents",
-            label: "Sự cố",
-            icon: AlertTriangle,
-            path: "/admin/incidents",
-            badge: 0, // Could be dynamic from state
-        },
-        {
-            id: "emergency",
-            label: "Điều hành khẩn cấp",
-            icon: AlertTriangle,
-            path: "/admin/emergency-center",
-        },
-        {
-            id: "alerts",
-            label: "Cảnh báo",
-            icon: Activity,
-            path: "/admin/alerts",
-            badge: 0, // Could be dynamic from state
-        },
-        {
-            id: "iot",
-            label: "Cảm biến IoT",
-            icon: Radio,
-            path: "/admin/iot",
-        },
-        {
-            id: "budgets",
-            label: "Ngân sách",
-            icon: DollarSign,
-            path: "/admin/budgets",
-        },
-        {
-            id: "reports",
-            label: "Báo cáo",
-            icon: FileText,
-            path: "/admin/reports",
-        },
-    ];
-
-    // Admin-only items
-    const adminOnlyItems: MenuItem[] = [
-        {
-            id: "users",
-            label: "Quản lý người dùng",
-            icon: Users,
-            path: "/admin/users",
-        },
-    ];
-
-    // Determine menu items based on user role
-    const getMenuItems = (): MenuItem[] => {
-        if (user?.role === "technician") {
-            return technicianMenuItems;
-        } else if (user?.role === "admin" || user?.role === "manager") {
-            return [...adminMenuItems, ...adminOnlyItems];
-        }
-        return adminMenuItems; // Default to admin menu
-    };
-
-    const allItems = getMenuItems();
-
-    const toggleExpanded = (id: string) => {
-        setExpandedItems((prev) => {
-            const newSet = new Set(prev);
-            if (newSet.has(id)) {
-                newSet.delete(id);
-            } else {
-                newSet.add(id);
-            }
-            return newSet;
-        });
-    };
-
     const isActive = (path: string) => {
-        // Handle technician dashboard route
-        if (path === "/technician") {
-            return (
-                location.pathname === "/technician" ||
-                (location.pathname.startsWith("/technician/") &&
-                    !location.pathname.startsWith("/technician/settings"))
-            );
-        }
-        // Handle technician settings route
-        if (path === "/technician/settings") {
-            return location.pathname.startsWith("/technician/settings");
-        }
-        // Exact match for /admin (Dashboard), prefix match for other routes
         if (path === "/admin") {
+            return location.pathname === "/admin" || location.pathname === "/admin/";
+        }
+        if (path === "/admin/emergency-center") {
             return (
-                location.pathname === "/admin" &&
-                !location.pathname.startsWith("/admin/")
+                location.pathname === "/admin/emergency-center" ||
+                location.pathname.startsWith("/admin/emergency-center/operations")
             );
         }
         return (
@@ -183,14 +93,13 @@ const Sidebar: React.FC<SidebarProps> = () => {
         );
     };
 
-    const isExpanded = (id: string) => expandedItems.has(id);
-
     return (
         <>
             {/* Mobile menu button */}
             <button
                 onClick={() => setIsMobileOpen(!isMobileOpen)}
                 className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-900 text-white rounded-lg shadow-lg"
+                aria-label="Mở menu điều hướng"
             >
                 {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -206,24 +115,18 @@ const Sidebar: React.FC<SidebarProps> = () => {
                 {/* Logo Section */}
                 <div className="p-6 border-b border-slate-800">
                     <Link
-                        to={
-                            user?.role === "technician"
-                                ? "/technician"
-                                : "/admin"
-                        }
+                        to="/admin"
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                     >
-                        <div className="bg-blue-500 p-2 rounded-lg">
-                            <Activity size={24} />
+                        <div className="bg-red-600 p-2 rounded-lg">
+                            <Siren size={24} />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold tracking-tight">
-                                InfraManager
+                            <h1 className="text-lg font-bold tracking-tight">
+                                SynapseCity SOS
                             </h1>
                             <p className="text-xs text-slate-400">
-                                {user?.role === "technician"
-                                    ? "Kỹ thuật viên"
-                                    : "v1.0.0"}
+                                Emergency Operations
                             </p>
                         </div>
                     </Link>
@@ -231,70 +134,9 @@ const Sidebar: React.FC<SidebarProps> = () => {
 
                 {/* Navigation */}
                 <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                    {allItems.map((item) => {
+                    {menuItems.map((item) => {
                         const Icon = item.icon;
                         const active = isActive(item.path);
-                        const hasChildren =
-                            item.children && item.children.length > 0;
-                        const expanded = isExpanded(item.id);
-
-                        if (hasChildren) {
-                            return (
-                                <div key={item.id}>
-                                    <button
-                                        onClick={() => toggleExpanded(item.id)}
-                                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                                            active
-                                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
-                                                : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                                        }`}
-                                    >
-                                        <Icon size={20} />
-                                        <span className="font-medium flex-1 text-left">
-                                            {item.label}
-                                        </span>
-                                        {item.badge !== undefined &&
-                                            item.badge > 0 && (
-                                                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                                    {item.badge}
-                                                </span>
-                                            )}
-                                        <ChevronRight
-                                            size={16}
-                                            className={`transition-transform ${
-                                                expanded ? "rotate-90" : ""
-                                            }`}
-                                        />
-                                    </button>
-                                    {expanded && item.children && (
-                                        <div className="ml-4 mt-1 space-y-1">
-                                            {item.children.map((child) => {
-                                                const ChildIcon = child.icon;
-                                                const childActive = isActive(
-                                                    child.path
-                                                );
-                                                return (
-                                                    <Link
-                                                        key={child.id}
-                                                        to={child.path}
-                                                        className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 ${
-                                                            childActive
-                                                                ? "bg-blue-600/50 text-white"
-                                                                : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                                                        }`}
-                                                    >
-                                                        <ChildIcon size={16} />
-                                                        <span className="text-sm">
-                                                            {child.label}
-                                                        </span>
-                                                    </Link>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        }
 
                         return (
                             <Link
@@ -303,49 +145,53 @@ const Sidebar: React.FC<SidebarProps> = () => {
                                 onClick={() => setIsMobileOpen(false)}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                                     active
-                                        ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
+                                        ? "bg-red-600 text-white shadow-lg shadow-red-900/20"
                                         : "text-slate-400 hover:bg-slate-800 hover:text-white"
                                 }`}
                             >
                                 <Icon size={20} />
-                                <span className="font-medium flex-1">
+                                <span className="font-medium flex-1 text-left">
                                     {item.label}
                                 </span>
-                                {item.badge !== undefined && item.badge > 0 && (
-                                    <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                        {item.badge}
-                                    </span>
-                                )}
                                 {active && (
                                     <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
                                 )}
                             </Link>
                         );
                     })}
+
+                    {/* Public cross-product link: plain external navigation only. */}
+                    <a
+                        href="https://synapsecity.sbs"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-200"
+                    >
+                        <ExternalLink size={20} />
+                        <span className="font-medium flex-1 text-left">
+                            SynapseCity
+                        </span>
+                    </a>
                 </nav>
 
                 {/* User Section */}
                 <div className="p-4 border-t border-slate-800">
                     <div className="bg-slate-800/50 rounded-lg p-4">
                         <div className="flex items-center gap-3 mb-2">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center font-bold text-xs">
-                                {user?.email?.charAt(0).toUpperCase() || "A"}
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-500 to-orange-500 flex items-center justify-center font-bold text-xs">
+                                {user?.email?.charAt(0).toUpperCase() || "S"}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium truncate">
-                                    {user?.email || "Admin User"}
+                                    {user?.email || "SOS Operator"}
                                 </p>
                                 <p className="text-xs text-slate-400 capitalize">
-                                    {user?.role || "admin"}
+                                    {user?.role || "operator"}
                                 </p>
                             </div>
                         </div>
                         <Link
-                            to={
-                                user?.role === "technician"
-                                    ? "/technician/settings"
-                                    : "/admin/settings"
-                            }
+                            to="/admin/settings"
                             onClick={() => setIsMobileOpen(false)}
                             className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
                         >

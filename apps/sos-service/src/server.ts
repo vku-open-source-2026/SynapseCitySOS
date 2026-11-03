@@ -3,6 +3,9 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { CapabilitiesClient, CapabilitiesError } from '@synapsedx/capabilities';
+import { installAuthRoutes, requireSession } from './auth';
+import { normalizeDispatchAssignment } from './dispatch';
+import { hazardTtlHours, isHazardStale, sseHazardsFrame } from './hazards';
 import { proxyVietMapTile, vietMapAutocomplete, vietMapConfigured, vietMapGeocode, vietMapPlace, vietMapReverse, vietMapTileStyle } from './vietmap';
 
 const app = express();
@@ -35,7 +38,152 @@ const DATASETS = {
   afterAction: { id: 'sos-after-action-reports', name: 'SynapseCitySOS after action reports', entityType: 'AfterActionReport', description: 'Emergency after action reports' },
 } satisfies Record<string, Spec>;
 
+// Product-boundary invariant: SOS may only ever touch sos-* datasets. A city-*
+// dataset belongs to the separate SynapseCity product and must never be read
+// or written from this service.
+for (const spec of Object.values(DATASETS)) {
+  if (!spec.id.startsWith('sos-')) throw new Error(`SynapseCitySOS dataset must use the sos- prefix: ${spec.id}`);
+}
+
+const PUBLIC_URL = 'https://sos.synapsecity.sbs';
+
+const SOS_METADATA = {
+  product: 'synapsecity-sos',
+  domain: 'emergency-operations',
+  publicUrl: PUBLIC_URL,
+  features: [
+    'hazards',
+    'emergency events',
+    'public emergency projection',
+    'EOP',
+    'dispatch',
+    'resource units',
+    'SITREP',
+    'AAR',
+    'live hazard stream',
+    'command centre',
+    'phase boards',
+    'rescue operations',
+    'public hazard map',
+    'map',
+    'geocoding',
+    'ai',
+    'auth-shell',
+  ],
+  notOwned: [
+    'city assets',
+    'city incidents',
+    'city users',
+    'IoT',
+    'maintenance',
+    'preventive maintenance',
+    'technician portal',
+    'infrastructure alerts',
+    'notifications',
+    'budgets',
+    'operational reports',
+    'geofences',
+    'ingest',
+    'public asset map',
+    'public incident reporting',
+    'public incident lookup',
+  ],
+  datasets: Object.values(DATASETS).map((spec) => spec.id),
+  dependency: {
+    product: 'synapsedx',
+    tier: 2,
+    publicUrl: PUBLIC_TIER2_URL,
+    sdk: '@synapsedx/capabilities',
+  },
+};
+
+// City-infrastructure namespaces belong to SynapseCity (https://synapsecity.sbs).
+// Reject them here, before any emergency route or Tier-2 call, so a misrouted
+// request can never leak or mutate city data through the SOS service.
+const FOREIGN_V1_NAMESPACES: readonly string[] = [
+  'assets',
+  'incidents',
+  'maintenance',
+  'iot',
+  'alerts',
+  'budgets',
+  'reports',
+  'notifications',
+  'users',
+  'geofences',
+  'ingest',
+  'city',
+];
+const FOREIGN_V1_PUBLIC_NAMESPACES: readonly string[] = ['assets', 'incidents'];
+
+function decodedPath(value: string): string | null {
+  let current = value;
+  for (let round = 0; round < 3; round += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) return current;
+      current = decoded;
+    } catch { return null; }
+  }
+  return current;
+}
+
+function normalizedPath(raw: string): string {
+  const withoutQuery = (raw.split('?')[0] || '/').split('#')[0];
+  const decoded = decodedPath(withoutQuery);
+  if (decoded === null) return '/__invalid_path__';
+  const segments: string[] = [];
+  for (const segment of decoded.replace(/\\/g, '/').split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') { segments.pop(); continue; }
+    segments.push(segment.toLowerCase());
+  }
+  return `/${segments.join('/')}`;
+}
+
+function within(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+function isForeignNamespace(raw: string): boolean {
+  const path = normalizedPath(raw);
+  return FOREIGN_V1_NAMESPACES.some((namespace) => within(path, `/v1/${namespace}`))
+    || FOREIGN_V1_PUBLIC_NAMESPACES.some((namespace) => within(path, `/v1/public/${namespace}`));
+}
+
+// Public projections and provider reads are the only unauthenticated SOS API
+// surfaces. Everything else under /v1/emergency and /v1/hazards needs a shell
+// session. `/v1/emergency/stream/hazards` stays open because EventSource cannot
+// set an Authorization header; the console may still pass ?access_token=.
+function isPublicSosPath(path: string): boolean {
+  return path === '/v1/sos'
+    || within(path, '/v1/geo')
+    || within(path, '/v1/map')
+    || within(path, '/v1/ai')
+    || path === '/v1/emergency/public'
+    || path.startsWith('/v1/emergency/public/')
+    || path === '/v1/emergency/stream/hazards'
+    || path === '/v1/hazards/recent'
+    || path.startsWith('/v1/hazards/recent/')
+    || path === '/v1/hazards/vndms-live'
+    || within(path, '/v1/hazards/geo');
+}
+
+function requiresSession(path: string, method: string): boolean {
+  const verb = method.toUpperCase();
+  if (within(path, '/v1/emergency')) return !isPublicSosPath(path);
+  if (within(path, '/v1/hazards')) {
+    if (isPublicSosPath(path)) return false;
+    // The hazard feed is public data; only mutations (create/update/deploy/
+    // expire-stale) need a session.
+    return verb !== 'GET' && verb !== 'HEAD';
+  }
+  return false;
+}
+
 function client(req: Request): CapabilitiesClient {
+  const factory = app.locals.createClient as ((request: Request) => CapabilitiesClient) | undefined;
+  if (factory) return factory(req);
   const authorization = req.header('authorization');
   const token = authorization?.replace(/^Bearer\s+/i, '').trim() || process.env.SYNAPSEDX_TOKEN;
   return new CapabilitiesClient({
@@ -85,9 +233,9 @@ async function dataset(c: CapabilitiesClient, spec: Spec) {
   }
 }
 
-async function list(c: CapabilitiesClient, spec: Spec, req: Request): Promise<Data[]> {
+async function list(c: CapabilitiesClient, spec: Spec, req: Request, fallbackLimit = 100): Promise<Data[]> {
   const ds = await dataset(c, spec);
-  const page = await c.records.list(ds.id, { limit: limitOf(req), offset: offsetOf(req) });
+  const page = await c.records.list(ds.id, { limit: limitOf(req, fallbackLimit), offset: offsetOf(req) });
   return page.items.map(asData);
 }
 async function get(c: CapabilitiesClient, spec: Spec, id: string): Promise<Data> {
@@ -117,7 +265,7 @@ app.use(express.json({ limit: '4mb' }));
 app.use((req, res, next) => {
   res.setHeader('access-control-allow-origin', process.env.CORS_ORIGIN || 'https://sos.synapsecity.sbs');
   res.setHeader('access-control-allow-headers', 'authorization,content-type,x-api-key,x-correlation-id');
-  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,PATCH,OPTIONS');
+  res.setHeader('access-control-allow-methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('x-correlation-id', req.header('x-correlation-id') || randomUUID());
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -131,6 +279,22 @@ app.get('/health', async (req, res, next) => {
 app.get('/ready', async (req, res, next) => {
   try { res.json({ status: 'ready', service: 'synapsecity-sos', tier: 3, tier2: await client(req).health(), tier2Url: PUBLIC_TIER2_URL }); }
   catch (error) { next(error); }
+});
+
+app.get('/v1/sos', (_req, res) => res.json(SOS_METADATA));
+
+installAuthRoutes(app);
+
+app.use('/v1', (req, res, next) => {
+  if (!isForeignNamespace(req.originalUrl)) return next();
+  res.status(404).json({ error: 'not_found', product: 'synapsecity-sos' });
+});
+
+app.use('/v1', (req, res, next) => {
+  const path = normalizedPath(req.originalUrl);
+  if (path === '/v1/auth' || path.startsWith('/v1/auth/')) return next();
+  if (!requiresSession(path, req.method)) return next();
+  requireSession(req, res, next);
 });
 
 // Emergency events and the public emergency projection.
@@ -166,9 +330,26 @@ app.post('/v1/emergency/eop/:id/submit', async (req, res, next) => { try { const
 crud(DATASETS.eop, '/v1/emergency/eop');
 
 app.post('/v1/emergency/dispatch/optimize', async (req, res) => res.json({ optimized: 0, auto_assigned: 0, stale_flagged: 0, eta_reestimated: 0, algorithm: 'tiered-capability-baseline', triggered_by: 'synapsecity-sos', optimized_at: now() }));
-for (const [action, patch] of [['assign', { status: 'assigned' }], ['complete', { status: 'completed', completed_at: now() }], ['approve', { status: 'assigned' }], ['reject', { status: 'canceled' }]] as const) {
+for (const [action, patch] of [['complete', { status: 'completed', completed_at: now() }], ['reject', { status: 'canceled' }]] as const) {
   app.post(`/v1/emergency/dispatch/:id/${action}`, async (req, res, next) => { try { res.json(await update(client(req), DATASETS.dispatch, req.params.id, { ...patch, ...body(req) })); } catch (error) { next(error); } });
 }
+// Approval assigns one SOS resource unit. Normalize the inbound alias and mirror
+// the canonical `assigned_resource_unit_id` into every assignment field so old
+// and new console builds both display the unit.
+app.post('/v1/emergency/dispatch/:id/approve', async (req, res, next) => {
+  try {
+    const current = await get(client(req), DATASETS.dispatch, req.params.id);
+    const patch = normalizeDispatchAssignment(body(req), current.assignments, { status: 'assigned' });
+    res.json(await update(client(req), DATASETS.dispatch, req.params.id, patch));
+  } catch (error) { next(error); }
+});
+app.post('/v1/emergency/dispatch/:id/assign', async (req, res, next) => {
+  try {
+    const current = await get(client(req), DATASETS.dispatch, req.params.id);
+    const patch = normalizeDispatchAssignment(body(req), current.assignments, { status: 'assigned' });
+    res.json(await update(client(req), DATASETS.dispatch, req.params.id, patch));
+  } catch (error) { next(error); }
+});
 crud(DATASETS.dispatch, '/v1/emergency/dispatch');
 
 crud(DATASETS.resources, '/v1/emergency/resources', { statusAction: 'status' });
@@ -193,6 +374,22 @@ app.get('/v1/hazards/geo/near', async (req, res, next) => { try { res.json(await
 app.post('/v1/hazards/geo/in-polygon', async (req, res, next) => { try { res.json(await list(client(req), DATASETS.hazards, req)); } catch (error) { next(error); } });
 app.get('/v1/hazards/ingest/status', (_req, res) => res.json({ status: 'ready', last_run_at: null, source: 'synapsecity-sos', records_ingested: 0 }));
 app.get('/v1/hazards/vndms-live', async (req, res, next) => { try { res.json(await list(client(req), DATASETS.hazards, req)); } catch (error) { next(error); } });
+// Expire active hazard records older than the TTL. The predicate is pure and
+// unit-tested; this route only performs the Tier-2 writes.
+app.post('/v1/hazards/expire-stale', async (req, res, next) => {
+  try {
+    const ttlHours = hazardTtlHours(req.body?.ttl_hours);
+    const nowMs = Date.now();
+    const rows = await list(client(req), DATASETS.hazards, req, 500);
+    let updated = 0;
+    for (const hazard of rows) {
+      if (!isHazardStale(hazard, nowMs, ttlHours)) continue;
+      await update(client(req), DATASETS.hazards, String(hazard.id), { is_active: false, status: 'expired', expired_at: now() });
+      updated += 1;
+    }
+    res.json({ updated });
+  } catch (error) { next(error); }
+});
 crud(DATASETS.hazards, '/v1/hazards');
 app.post('/v1/hazards/:id/deploy', async (req, res, next) => {
   try {
@@ -200,7 +397,17 @@ app.post('/v1/hazards/:id/deploy', async (req, res, next) => {
     const event = await write(client(req), DATASETS.events, { title: hazard.title, description: hazard.description, event_type: hazard.event_type, severity: hazard.severity, source: 'forecast', status: 'active', location: { district: hazard.district, ward: hazard.ward }, geometry: hazard.geometry, metadata: { hazard_id: hazard.hazard_id || hazard.id } });
     const plan = await write(client(req), DATASETS.eop, { emergency_event_id: event.id, title: `EOP — ${event.title}`, status: 'draft', version: 1, objectives: [], operational_phases: ['respond'], actions: [], assignment_matrix: [], evacuation_plan: [], fallback_plan: [], communications_plan: [], metadata: {} });
     await update(client(req), DATASETS.hazards, req.params.id, { linked_event_id: event.id, linked_eop_plan_id: plan.id });
-    res.json({ hazard, event, eop_plan: plan });
+    // Return both the flat EOP-modal contract and the legacy nested objects so
+    // older console builds keep working during the rollout.
+    res.json({
+      hazard_id: hazard.id,
+      event_id: event.id,
+      eop_plan_id: plan.id,
+      markdown_body: typeof plan.markdown_body === 'string' ? plan.markdown_body : null,
+      hazard,
+      event,
+      eop_plan: plan,
+    });
   } catch (error) { next(error); }
 });
 
@@ -209,9 +416,11 @@ app.get('/v1/emergency/stream/hazards', async (req, res) => {
   res.setHeader('cache-control', 'no-cache');
   res.setHeader('connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  // Flush headers immediately so EventSource opens even while Tier-2 resolves.
+  res.write(': connected\n\n');
   const send = async () => {
-    try { res.write(`event: hazards\\ndata: ${JSON.stringify({ snapshot: await list(client(req), DATASETS.hazards, req) })}\\n\\n`); }
-    catch { res.write(`event: hazards\\ndata: ${JSON.stringify({ snapshot: [] })}\\n\\n`); }
+    try { res.write(sseHazardsFrame({ snapshot: await list(client(req), DATASETS.hazards, req) })); }
+    catch { res.write(sseHazardsFrame({ snapshot: [] })); }
   };
   await send();
   const timer = setInterval(() => { void send(); }, 30000);
@@ -258,6 +467,15 @@ app.get('/v1/map/status', (_req, res) => res.json({ provider: vietMapConfigured(
 // The emergency assistant is intentionally capability-backed and stateless.
 app.get('/v1/ai/status', (_req, res) => res.json({ status: 'ready', provider: 'synapsecity-sos', tier2: PUBLIC_TIER2_URL }));
 app.post('/v1/ai/chat', async (req, res) => res.json({ message: 'SynapseCitySOS assistant is ready. Use the hazard, event, EOP and dispatch panels for operational actions.', citations: [], request: req.body }));
+
+// Final /v1 fallback: unknown namespaces are not part of the SOS contract and
+// must not be mistaken for an emergency collection or a City namespace. The
+// normalized check also catches an encoded `v1` prefix.
+app.use((req, res, next) => {
+  const path = normalizedPath(req.originalUrl);
+  if (path !== '/v1' && !path.startsWith('/v1/')) return next();
+  res.status(404).json({ error: 'not_found', product: 'synapsecity-sos' });
+});
 
 app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
   const status = Number(error?.status) || (error instanceof CapabilitiesError ? Number(error.status) || 502 : 500);

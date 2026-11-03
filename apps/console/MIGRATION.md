@@ -1,4 +1,10 @@
-# Tech Stack Migration Guide
+# SOS Console Tech Stack Migration Guide
+
+> **Scope.** This guide covers the SynapseCitySOS emergency operations console
+> only. City assets, city incidents, IoT, maintenance, technician, infrastructure
+> alert, budget, operational report, geofence, ingest, public asset and City
+> user pages belong to SynapseCity (`https://synapsecity.sbs`) and must not be
+> added here. See [`../../PRODUCT_BOUNDARY.md`](../../PRODUCT_BOUNDARY.md).
 
 ## Overview
 
@@ -71,8 +77,8 @@ navigate({ to: '/admin' });
 import { useSearchParams } from 'react-router-dom';
 
 const [searchParams, setSearchParams] = useSearchParams();
-const assetId = searchParams.get('assetId');
-setSearchParams({ assetId: asset._id });
+const eventId = searchParams.get('eventId');
+setSearchParams({ eventId: event._id });
 ```
 
 **After:**
@@ -80,10 +86,13 @@ setSearchParams({ assetId: asset._id });
 import { useNavigate, useSearch } from '@tanstack/react-router';
 
 const searchParams = useSearch({ from: '/map' });
-const assetId = searchParams?.assetId;
+const eventId = searchParams?.eventId;
 
 const navigate = useNavigate();
-navigate({ to: '/map', search: { assetId: asset._id } });
+navigate({
+  to: '/admin/emergency-center/operations/$eventId',
+  params: { eventId: event._id },
+});
 ```
 
 ### 4. State Management - Zustand
@@ -241,7 +250,7 @@ src/
 │   └── index.ts         # Barrel exports
 ├── pages/               # Page components
 ├── hooks/               # Custom hooks
-├── api.ts               # API functions (updated to use httpClient)
+├── api/                 # API modules (updated to use httpClient)
 ├── main.tsx             # App entry (updated for TanStack Router)
 └── routeTree.gen.ts     # Auto-generated route tree (do not edit)
 ```

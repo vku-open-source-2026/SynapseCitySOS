@@ -9,13 +9,16 @@ import { CircleAlert, LogIn, Siren } from "lucide-react";
 interface NavigationItem {
     label: string;
     to: string;
-    search?: Record<string, unknown>;
     isButton?: boolean;
     isLogin?: boolean;
     isEmergency?: boolean;
     isCitizen?: boolean;
 }
 
+/**
+ * Public SOS navigation only. City-infrastructure pages belong to the
+ * SynapseCity product and are never linked from the emergency console.
+ */
 const navigationItems: NavigationItem[] = [
     {
         label: "Trung tâm chỉ huy",
@@ -24,7 +27,7 @@ const navigationItems: NavigationItem[] = [
     },
     {
         label: "Bản đồ nguy cơ",
-        to: "/disaster",
+        to: "/map",
         isCitizen: true,
     },
     {
@@ -108,15 +111,14 @@ const Header: React.FC = () => {
                                 <Link
                                     key={item.to}
                                     to={item.to}
-                                    search={item.search}
                                     onClick={closeMobileMenu}
-                                    className="ml-8 
-                                    text-base 
+                                    className="ml-8
+                                    text-base
                                     h-10 bg-linear-to-r
                                     from-[#f97316] from-21% to-[#dc5b43]
-                                    px-6 flex items-center rounded-full 
-                                    max-lg:mx-2 max-lg:w-4/5 max-lg:text-xl 
-                                    max-lg:flex-col max-lg:justify-center 
+                                    px-6 flex items-center rounded-full
+                                    max-lg:mx-2 max-lg:w-4/5 max-lg:text-xl
+                                    max-lg:flex-col max-lg:justify-center
                                     hover:shadow-lg transition-shadow
                                     z-70"
                                 >
@@ -180,6 +182,17 @@ const Header: React.FC = () => {
                             </Link>
                         );
                     })}
+
+                    {/* Public cross-product navigation only (never an API dependency). */}
+                    <a
+                        href="https://synapsecity.sbs"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={closeMobileMenu}
+                        className="ml-8 text-base text-[#6C7580] max-lg:text-lg max-lg:ml-2 max-lg:my-2 hover:text-[#4FACFE] transition-colors"
+                    >
+                        SynapseCity
+                    </a>
                 </nav>
             </div>
         </header>

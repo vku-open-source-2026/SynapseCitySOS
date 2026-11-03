@@ -1,5 +1,34 @@
 # OpenInfra Documentation
 
+> **Scope notice (2026-11-03).** This is a legacy OpenInfra infrastructure
+> document retained for historical reference. It describes the separate
+> **SynapseCity** product (`https://synapsecity.sbs`), not SynapseCitySOS.
+> Do not call these endpoints from this product.
+> SynapseCitySOS does not own or implement city assets, city incidents, IoT,
+> maintenance, infrastructure alerts, budgets, operational reports, city users,
+> geofences, data ingest, the technician portal, the public asset map or public
+> incident reporting. For SOS scope and routes, see
+> [`../../../PRODUCT_BOUNDARY.md`](../../../PRODUCT_BOUNDARY.md).
+
+
+## Current SynapseCity SOS scope
+
+SynapseCity SOS is an emergency-operations console. It owns only:
+
+- hazard feeds (flood, storm, landslide, VNDMS) and the live hazard SSE stream;
+- emergency events and public emergency projection;
+- emergency operations plans (EOP), dispatch orders and emergency resource units;
+- situation reports (SITREP) and after-action reports (AAR);
+- the emergency command centre, phase boards and rescue-operation view;
+- the public hazard/emergency map (`/map`) and the auth shell.
+
+Owned API namespaces: `/v1/sos`, `/v1/emergency*`, `/v1/hazards*`, `/v1/geo`,
+`/v1/map`, `/v1/ai`. The current, maintained API reference is the console page
+`/docs` (`src/pages/ApiDocsPage.tsx`).
+
+The pages linked below are the historical OpenInfra/SynapseCity documentation
+kept for migration context. They must not be used as the SOS feature list.
+
 Welcome to the OpenInfra Urban Infrastructure Asset Management System documentation. This documentation provides comprehensive guidance for understanding, developing, and deploying the system.
 
 ## 📚 Documentation Overview

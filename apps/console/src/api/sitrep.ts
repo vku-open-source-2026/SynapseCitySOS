@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { httpClient } from '../lib/httpClient';
+import { asList, httpClient } from '../lib/httpClient';
 import type {
   Sitrep,
   SitrepCreateRequest,
@@ -18,7 +18,7 @@ export interface SitrepListParams {
 export const sitrepApi = {
   list: async (params?: SitrepListParams): Promise<Sitrep[]> => {
     const response = await httpClient.get<Sitrep[]>('/emergency/sitrep', { params });
-    return response.data;
+    return asList<Sitrep>(response.data);
   },
 
   getById: async (id: string): Promise<Sitrep> => {

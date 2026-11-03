@@ -1,5 +1,16 @@
 # OpenInfra Database Design
 
+> **Scope notice (2026-11-03).** This is a legacy OpenInfra infrastructure
+> document retained for historical reference. It describes the separate
+> **SynapseCity** product (`https://synapsecity.sbs`), not SynapseCitySOS.
+> Do not call these endpoints from this product.
+> SynapseCitySOS does not own or implement city assets, city incidents, IoT,
+> maintenance, infrastructure alerts, budgets, operational reports, city users,
+> geofences, data ingest, the technician portal, the public asset map or public
+> incident reporting. For SOS scope and routes, see
+> [`../../../PRODUCT_BOUNDARY.md`](../../../PRODUCT_BOUNDARY.md).
+
+
 ## Executive Summary
 
 This document outlines the comprehensive database design for the OpenInfra Urban Infrastructure Asset Management System. After careful analysis of the requirements and current implementation, we recommend **MongoDB with geospatial indexing** as the primary database, with considerations for future PostgreSQL + PostGIS migration if relational integrity becomes critical.

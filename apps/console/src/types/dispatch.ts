@@ -12,11 +12,16 @@ export type DispatchStatus =
   | 'canceled';
 
 export interface DispatchAssignment {
+  /** Canonical SOS resource-unit id. */
+  assigned_resource_unit_id?: string | null;
+  /** Resource-unit id as stored on the assignment record. */
   resource_unit_id?: string | null;
+  /** @deprecated Legacy wire alias; mirror of assigned_resource_unit_id. */
   assigned_user_id?: string | null;
   role?: string;
   quantity?: number;
   notes?: string;
+  assigned_at?: string;
 }
 
 export interface DispatchOrder {
@@ -32,6 +37,9 @@ export interface DispatchOrder {
   priority: DispatchPriority;
   status: DispatchStatus;
   assignments: DispatchAssignment[];
+  /** Canonical SOS resource-unit id assigned to this order. */
+  assigned_resource_unit_id?: string | null;
+  /** @deprecated Legacy wire alias; mirror of assigned_resource_unit_id. */
   assigned_user_id?: string | null;
   eta_minutes?: number;
   started_at?: string;

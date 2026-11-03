@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { httpClient } from '../lib/httpClient';
+import { asList, httpClient } from '../lib/httpClient';
 import type {
   EmergencyEvent,
   EmergencyEventCreateRequest,
@@ -42,7 +42,7 @@ export interface SosTimelineItem {
 export const emergencyApi = {
   list: async (params?: EmergencyListParams): Promise<EmergencyEvent[]> => {
     const response = await httpClient.get<EmergencyEvent[]>('/emergency', { params });
-    return response.data;
+    return asList<EmergencyEvent>(response.data);
   },
 
   getById: async (id: string): Promise<EmergencyEvent> => {
@@ -76,13 +76,13 @@ export const emergencyApi = {
     const response = await httpClient.get<SosTimelineItem[]>('/emergency/sos/timeline', {
       params,
     });
-    return response.data;
+    return asList<SosTimelineItem>(response.data);
   },
 
   listPublic: async (params?: { limit?: number }): Promise<PublicEmergencyEvent[]> => {
     const response = await httpClient.get<PublicEmergencyEvent[]>('/emergency/public', {
       params,
     });
-    return response.data;
+    return asList<PublicEmergencyEvent>(response.data);
   },
 };

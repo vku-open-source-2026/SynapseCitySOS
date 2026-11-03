@@ -14,19 +14,19 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'seasonal-forecast-feed',
         title: 'Seasonal Forecast Feed',
-        description: 'Ingest forecast windows and weather anomaly alerts for pre-event readiness.',
+        description: 'Load forecast windows and weather anomaly alerts for pre-event readiness.',
         extensionHint: 'Connector hook: add parser + polling in a dedicated preparedness data module.',
       },
       {
-        id: 'asset-vulnerability-index',
-        title: 'Asset Vulnerability Index',
-        description: 'Track infrastructure risk scores by district and criticality tiers.',
+        id: 'community-vulnerability-index',
+        title: 'Community Vulnerability Index',
+        description: 'Track commune risk scores and critical-facility exposure by district.',
         extensionHint: 'Extension point: map new scoring algorithm versions without touching other phases.',
       },
       {
-        id: 'maintenance-readiness-backlog',
-        title: 'Maintenance Readiness Backlog',
-        description: 'Monitor pending preventive maintenance items for critical assets.',
+        id: 'resource-readiness-backlog',
+        title: 'Resource Readiness Backlog',
+        description: 'Monitor pending equipment checks and readiness gaps for rescue resource units.',
         extensionHint: 'Data contract: keep backlog item shape local to before-phase services.',
       },
     ],
@@ -34,7 +34,7 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'kpi-risk-coverage',
         title: 'Risk Coverage Ratio',
-        description: 'Percent of high-risk assets with active mitigation plans.',
+        description: 'Percent of high-risk communes with active mitigation plans.',
         extensionHint: 'KPI owner: preparedness analytics team.',
       },
       {
@@ -83,12 +83,12 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
         id: 'live-hazard-stream',
         title: 'Live Hazard Stream',
         description: 'Consume SSE/WebSocket hazard updates and deduplicate active alerts.',
-        extensionHint: 'Realtime ingestion hook isolated for response team iteration speed.',
+        extensionHint: 'Realtime stream hook isolated for response team iteration speed.',
       },
       {
-        id: 'sos-incident-timeline',
-        title: 'SOS Incident Timeline',
-        description: 'Merge SOS intake and incident lifecycle events into one chronological stream.',
+        id: 'sos-event-timeline',
+        title: 'SOS Event Timeline',
+        description: 'Merge SOS intake and emergency-event lifecycle updates into one chronological stream.',
         extensionHint: 'Timeline enrichers can be added without changing before/after data models.',
       },
       {
@@ -102,7 +102,7 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'kpi-response-sla',
         title: 'Response SLA Breach Rate',
-        description: 'Share of active incidents crossing escalation thresholds.',
+        description: 'Share of active emergency events crossing escalation thresholds.',
         extensionHint: 'KPI formula tuning can ship by response analytics team only.',
       },
       {
@@ -122,7 +122,7 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'queue-triage',
         title: 'Triage Queue',
-        description: 'Prioritize incoming incidents by severity, confidence, and impact radius.',
+        description: 'Prioritize incoming emergency reports by severity, confidence, and impact radius.',
         extensionHint: 'Triage policy engine can evolve without touching preparedness/postmortem code.',
       },
       {
@@ -145,7 +145,7 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
     tabLabel: 'After',
     title: 'After Disaster Board',
     subtitle: 'Recovery execution, learning loops, and long-tail closure management.',
-    teamBoundary: 'Recovery and governance team owns this board and can iterate post-incident workflows independently.',
+    teamBoundary: 'Recovery and governance team owns this board and can iterate post-event workflows independently.',
     dataSourceStubs: [
       {
         id: 'after-action-reports',
@@ -160,9 +160,9 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
         extensionHint: 'Survey collectors remain encapsulated in after-phase domain.',
       },
       {
-        id: 'recovery-budget-claims',
-        title: 'Recovery Budget Claims',
-        description: 'Track recovery funding requests and disbursement status.',
+        id: 'recovery-cost-claims',
+        title: 'Recovery Cost Claims',
+        description: 'Track recovery cost estimates and reimbursement status.',
         extensionHint: 'Finance-specific enrichment can be added by recovery squad only.',
       },
     ],
@@ -170,33 +170,33 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'kpi-restoration-time',
         title: 'Mean Restoration Time',
-        description: 'Average duration from incident resolution to service normalization.',
+        description: 'Average duration from emergency-event resolution to service normalization.',
         extensionHint: 'KPI windows can be versioned independently per recovery policy.',
       },
       {
-        id: 'kpi-recovery-budget-burn',
-        title: 'Recovery Budget Burn',
-        description: 'Budget consumed versus approved recovery envelope.',
+        id: 'kpi-recovery-funding-burn',
+        title: 'Recovery Funding Burn',
+        description: 'Recovery funding consumed versus the approved envelope.',
         extensionHint: 'Finance formulas and audit fields remain after-phase local.',
       },
       {
         id: 'kpi-capa-closure',
         title: 'CAPA Closure Rate',
-        description: 'Closure progress for corrective and preventive actions from postmortems.',
-        extensionHint: 'CAPA taxonomy changes do not impact live incident handling.',
+        description: 'Closure progress for corrective and preventive actions from post-event reviews.',
+        extensionHint: 'CAPA taxonomy changes do not impact live emergency response.',
       },
     ],
     actionQueueStubs: [
       {
         id: 'queue-postmortem',
         title: 'Postmortem Workflow',
-        description: 'Track owner assignments and due dates for post-incident reviews.',
+        description: 'Track owner assignments and due dates for post-event reviews.',
         extensionHint: 'Recovery team can add board-specific templates and checklists.',
       },
       {
         id: 'queue-restoration-milestones',
         title: 'Restoration Milestones',
-        description: 'Monitor utility restoration milestones with district-level targets.',
+        description: 'Monitor service restoration milestones with district-level targets.',
         extensionHint: 'Milestone scoring rules are isolated to after-phase code.',
       },
       {

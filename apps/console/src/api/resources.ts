@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { httpClient } from '../lib/httpClient';
+import { asList, httpClient } from '../lib/httpClient';
 import type {
   ResourceStatus,
   ResourceUnit,
@@ -19,7 +19,7 @@ export interface ResourceListParams {
 export const resourcesApi = {
   list: async (params?: ResourceListParams): Promise<ResourceUnit[]> => {
     const response = await httpClient.get<ResourceUnit[]>('/emergency/resources', { params });
-    return response.data;
+    return asList<ResourceUnit>(response.data);
   },
 
   getById: async (id: string): Promise<ResourceUnit> => {

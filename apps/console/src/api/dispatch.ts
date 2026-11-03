@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { httpClient } from '../lib/httpClient';
+import { asList, httpClient } from '../lib/httpClient';
 import type {
   DispatchOptimizeRequest,
   DispatchOptimizeResult,
@@ -20,7 +20,7 @@ export interface DispatchListParams {
 export const dispatchApi = {
   list: async (params?: DispatchListParams): Promise<DispatchOrder[]> => {
     const response = await httpClient.get<DispatchOrder[]>('/emergency/dispatch', { params });
-    return response.data;
+    return asList<DispatchOrder>(response.data);
   },
 
   getById: async (id: string): Promise<DispatchOrder> => {
@@ -53,9 +53,16 @@ export const dispatchApi = {
     return response.data;
   },
 
-  approve: async (id: string, userId: string, notes?: string): Promise<DispatchOrder> => {
+  /**
+   * Approve a dispatch order and assign an SOS resource-unit id.
+   *
+   * `assigned_resource_unit_id` is the canonical field. The service mirrors it
+   * into the legacy `assigned_user_id` wire alias for older clients; callers
+   * must treat the value as an opaque resource-unit id, never a City user.
+   */
+  approve: async (id: string, assigneeId: string, notes?: string): Promise<DispatchOrder> => {
     const response = await httpClient.post<DispatchOrder>(`/emergency/dispatch/${id}/approve`, {
-      user_id: userId,
+      assigned_resource_unit_id: assigneeId,
       notes,
     });
     return response.data;

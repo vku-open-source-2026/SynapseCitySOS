@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import type { User } from '../types/user';
+import type { AuthUser } from '../types/auth';
 
 // Storage keys
 const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
@@ -26,7 +26,7 @@ interface StoredCredential {
   username: string;
   accessToken: string;
   refreshToken: string;
-  user: User;
+  user: AuthUser;
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -116,7 +116,7 @@ export function useBiometricAuth() {
     username: string,
     accessToken: string,
     refreshToken: string,
-    user: User
+    user: AuthUser
   ): Promise<boolean> => {
     if (!state.isAvailable) {
       setState(prev => ({ ...prev, error: 'Biometric not available on this device' }));

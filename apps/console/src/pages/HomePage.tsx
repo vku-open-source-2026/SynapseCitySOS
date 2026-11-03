@@ -4,91 +4,107 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
     ArrowRight,
-    BarChart3,
-    Droplet,
-    MapPin,
+    ClipboardList,
     Download,
+    FileCheck2,
+    MapPin,
+    Phone,
+    Radio,
     Siren,
     ShieldAlert,
-    Radio,
-    ClipboardList,
+    Truck,
+    Waves,
 } from "lucide-react";
-import { getAssets, getLeaderboard } from "../api";
-import AIChatWidget from "../components/AIChatWidget";
+
+import { emergencyApi } from "../api/emergency";
+import { hazardsApi } from "../api/hazards";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
-import mapImage from "../assets/map.png";
 import { usePWA } from "../hooks/usePWA";
 
-const featureCards = [
+const capabilities = [
     {
-        icon: MapPin,
-        title: "Bản đồ tương tác",
+        icon: Waves,
+        title: "Cảnh báo thiên tai",
         description:
-            "Toàn bộ hạ tầng hiển thị trực quan, tìm kiếm và điều hướng ngay trên bản đồ.",
+            "Theo dõi lũ, bão, sạt lở và dữ liệu VNDMS trực tiếp trên bản đồ nguy cơ công khai.",
+        to: "/map" as const,
+        cta: "Mở bản đồ nguy cơ",
     },
     {
-        icon: Droplet,
-        title: "Quản lý nước",
+        icon: Siren,
+        title: "Sự kiện khẩn cấp",
         description:
-            "Giám sát lưu lượng, cảnh báo rò rỉ và lập kế hoạch bảo trì chủ động.",
+            "Tiếp nhận, phân loại và theo dõi sự kiện khẩn cấp theo mức độ và vòng đời xử lý.",
+        to: "/admin/emergency-center" as const,
+        cta: "Vào trung tâm chỉ huy",
     },
     {
-        icon: BarChart3,
-        title: "Phân tích chi tiết",
+        icon: ClipboardList,
+        title: "Kế hoạch ứng phó (EOP)",
         description:
-            "Số liệu vận hành, biểu đồ và thống kê giúp bạn ra quyết định nhanh.",
+            "Tạo bản nháp EOP bằng AI, duyệt, xuất bản và sinh nhiệm vụ điều phối tự động.",
+        to: "/admin/emergency-center/before" as const,
+        cta: "Bảng trước thiên tai",
+    },
+    {
+        icon: Truck,
+        title: "Điều phối & nguồn lực",
+        description:
+            "Phân công đơn vị ứng cứu, tối ưu lệnh điều phối và theo dõi trạng thái triển khai.",
+        to: "/admin/emergency-center/during" as const,
+        cta: "Bảng điều phối",
+    },
+    {
+        icon: Radio,
+        title: "SITREP thời gian thực",
+        description:
+            "Cập nhật tình hình hiện trường, delta báo cáo và tín hiệu vận hành trong suốt sự kiện.",
+        to: "/admin/emergency-center/during" as const,
+        cta: "Xem SITREP",
+    },
+    {
+        icon: FileCheck2,
+        title: "Báo cáo sau sự kiện (AAR)",
+        description:
+            "Tổng hợp KPI, bài học kinh nghiệm và xuất bản after-action report sau mỗi chiến dịch.",
+        to: "/admin/emergency-center/after" as const,
+        cta: "Bảng sau thiên tai",
     },
 ];
-
-const benefitHighlights = [
-    {
-        title: "Rút ngắn thời gian phản ứng",
-        desc: "Phát hiện sự cố nhanh hơn.",
-    },
-    { title: "Tiết kiệm chi phí", desc: "Tối ưu vận hành hiệu quả." },
-    { title: "Độ tin cậy", desc: "Hệ thống giám sát liên tục." },
-];
-
-const dashboardImage =
-    "https://images.unsplash.com/photo-1553877522-43269d4ea984?auto=format&fit=crop&w=1200&q=80";
 
 const HomePage = () => {
     const { canShowInstallButton, promptInstall } = usePWA();
-    const [assetCount, setAssetCount] = useState<number | null>(null);
-    const [, setContributorCount] = useState<number | null>(null);
-    const [, setTotalContributions] = useState<number | null>(null);
-    const [loadingAssets, setLoadingAssets] = useState(true);
-    const [, setLoadingLeaderboard] = useState(true);
+    const [activeEvents, setActiveEvents] = useState<number | null>(null);
+    const [activeHazards, setActiveHazards] = useState<number | null>(null);
+    const [criticalHazards, setCriticalHazards] = useState<number | null>(null);
 
     useEffect(() => {
         let cancelled = false;
 
-        Promise.allSettled([getAssets(), getLeaderboard()]).then((results) => {
-            if (cancelled) return;
-
-            const [assetsResult, leaderboardResult] = results;
-
-            if (assetsResult.status === "fulfilled") {
-                setAssetCount(assetsResult.value.length);
-            } else {
-                setAssetCount(null);
+        Promise.allSettled([
+            emergencyApi.listPublic({ limit: 200 }),
+            hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
+        ]).then(([eventsResult, hazardsResult]) => {
+            if (cancelled) {
+                return;
             }
-            setLoadingAssets(false);
 
-            if (leaderboardResult.status === "fulfilled") {
-                const leaderboard = leaderboardResult.value;
-                setContributorCount(leaderboard.length);
-                const total = leaderboard.reduce(
-                    (sum, entry) => sum + (entry.count || 0),
-                    0
+            if (eventsResult.status === "fulfilled") {
+                setActiveEvents(eventsResult.value.length);
+            } else {
+                setActiveEvents(null);
+            }
+
+            if (hazardsResult.status === "fulfilled") {
+                setActiveHazards(hazardsResult.value.length);
+                setCriticalHazards(
+                    hazardsResult.value.filter((hazard) => hazard.severity === "critical").length
                 );
-                setTotalContributions(total);
             } else {
-                setContributorCount(null);
-                setTotalContributions(null);
+                setActiveHazards(null);
+                setCriticalHazards(null);
             }
-            setLoadingLeaderboard(false);
         });
 
         return () => {
@@ -96,55 +112,62 @@ const HomePage = () => {
         };
     }, []);
 
-    const assetCountLabel =
-        assetCount !== null
-            ? `${new Intl.NumberFormat("vi-VN", {
-                  notation: "compact",
-                  maximumFractionDigits: 1,
-              }).format(assetCount)} điểm giám sát đang hoạt động`
-            : loadingAssets
-            ? "Đang tải số điểm giám sát..."
-            : "200+ điểm giám sát đang hoạt động";
+    const statCards = [
+        {
+            label: "Sự kiện đang xử lý",
+            value: activeEvents === null ? "—" : String(activeEvents),
+            tone: "text-red-600",
+        },
+        {
+            label: "Cảnh báo đang hoạt động",
+            value: activeHazards === null ? "—" : String(activeHazards),
+            tone: "text-amber-600",
+        },
+        {
+            label: "Cảnh báo nghiêm trọng",
+            value: criticalHazards === null ? "—" : String(criticalHazards),
+            tone: "text-rose-700",
+        },
+    ];
 
     return (
         <div className="min-h-screen bg-white text-gray-heading">
             <Header />
             <main className="pt-28">
-                {/* Hero Section */}
-                <section
-                    id="about-us"
-                    className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24"
-                >
+                {/* Hero */}
+                <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
                     <div className="grid md:grid-cols-2 gap-12 items-center">
                         <div className="space-y-6">
-                            <div className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                                Giải pháp hạ tầng số
+                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                                <Siren className="w-4 h-4" />
+                                Điều hành khẩn cấp
                             </div>
                             <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight">
-                                Quản lý hạ tầng thông minh{" "}
-                                <span className="bg-gradient-to-r from-main-blue to-main-cyan bg-clip-text text-transparent">
-                                    trở nên dễ dàng
+                                Ứng phó thiên tai{" "}
+                                <span className="bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent">
+                                    nhanh và có tổ chức
                                 </span>
                             </h1>
                             <p className="text-lg text-slate-600 leading-relaxed">
-                                Bản đồ hạ tầng số giúp bạn giám sát, quản lý và
-                                tối ưu toàn bộ hệ thống từ một bảng điều khiển
-                                trực quan.
+                                SynapseCity SOS hợp nhất cảnh báo thiên tai, sự kiện
+                                khẩn cấp, kế hoạch ứng phó (EOP), điều phối nguồn
+                                lực, SITREP và báo cáo sau sự kiện trong một trung
+                                tâm chỉ huy duy nhất.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-4 pt-2">
                                 <Link
-                                    to="/map"
-                                    search={{ assetId: undefined }}
-                                    className="inline-flex items-center justify-center px-6 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-[#00F2FE] from-21% to-[#4FACFE] shadow-lg hover:shadow-xl transition-shadow"
+                                    to="/admin/emergency-center"
+                                    className="inline-flex items-center justify-center px-6 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-red-600 to-orange-500 shadow-lg hover:shadow-xl transition-shadow"
                                 >
-                                    Trải nghiệm ngay{" "}
-                                    <ArrowRight className="w-4 h-4 ml-2" />
+                                    <Siren className="w-4 h-4 mr-2" />
+                                    Vào trung tâm chỉ huy
                                 </Link>
                                 <Link
-                                    to="/docs"
-                                    className="inline-flex items-center justify-center px-6 py-3 border border-slate-200 text-slate-700 rounded-full hover:border-blue hover:text-blue transition-colors"
+                                    to="/map"
+                                    className="inline-flex items-center justify-center px-6 py-3 border border-slate-200 text-slate-700 rounded-full hover:border-red-400 hover:text-red-600 transition-colors"
                                 >
-                                    Dùng API
+                                    <MapPin className="w-4 h-4 mr-2" />
+                                    Bản đồ nguy cơ
                                 </Link>
                                 {canShowInstallButton && (
                                     <button
@@ -157,313 +180,203 @@ const HomePage = () => {
                                 )}
                             </div>
                         </div>
+
                         <div className="relative z-0">
-                            <div className="bg-gradient-to-br from-blue-100 to-cyan-100 rounded-2xl p-6 shadow-2xl">
-                                <div className="relative overflow-hidden rounded-xl group">
-                                    <img
-                                        src={mapImage}
-                                        alt="Bản đồ hạ tầng"
-                                        className="w-full h-full object-cover transition-all duration-300 group-hover:blur-sm"
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/20">
-                                        <Link
-                                            to="/map"
-                                            search={{ assetId: undefined }}
-                                            className="px-8 py-3 bg-white/90 text-blue font-semibold rounded-full shadow-lg hover:bg-white transition-colors backdrop-blur-sm"
+                            <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-red-900 to-orange-700 p-6 shadow-2xl text-white">
+                                <div className="flex items-center justify-between mb-5">
+                                    <span className="text-sm font-semibold">
+                                        Tình hình vận hành
+                                    </span>
+                                    <span className="flex items-center gap-1.5 text-xs font-medium text-red-100">
+                                        <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                                        LIVE
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {statCards.map((stat) => (
+                                        <div
+                                            key={stat.label}
+                                            className="flex items-center justify-between rounded-lg bg-white/10 px-4 py-3"
                                         >
-                                            Trải nghiệm ngay
-                                        </Link>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="absolute -bottom-6 -left-6 bg-white rounded-lg p-4 shadow-lg border border-slate-200">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                                    <span className="text-sm font-medium text-slate-700">
-                                        {assetCountLabel}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Features Section */}
-                <section id="features" className="bg-white py-20">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="text-center mb-16">
-                            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-slate-900">
-                                Tính năng nổi bật
-                            </h2>
-                            <p className="text-lg text-slate-600">
-                                Đầy đủ công cụ để quản lý hạ tầng hiệu quả
-                            </p>
-                        </div>
-                        <div className="grid md:grid-cols-3 gap-8">
-                            {featureCards.map((feature, index) => (
-                                <div
-                                    key={feature.title + index}
-                                    className="bg-white border border-slate-200 rounded-xl p-6 hover:border-[#4FACFE] hover:shadow-lg transition-all"
-                                >
-                                    <feature.icon className="w-8 h-8 text-[#4FACFE] mb-4" />
-                                    <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                                        {feature.title}
-                                    </h3>
-                                    <p className="text-slate-600">
-                                        {feature.description}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                {/* Benefits Section */}
-                <section
-                    id="benefits"
-                    className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20"
-                >
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-                            Lợi ích
-                        </h2>
-                        <p className="text-lg text-slate-600">
-                            Tối ưu quản lý hạ tầng của bạn
-                        </p>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-12">
-                        <div className="space-y-6">
-                            {benefitHighlights.map((item) => (
-                                <div key={item.title} className="flex gap-4">
-                                    <div>
-                                        <h3 className="font-semibold text-slate-900">
-                                            {item.title}
-                                        </h3>
-                                        <p className="text-slate-600">
-                                            {item.desc}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-8 border border-blue-200 shadow-md">
-                            <img
-                                src={dashboardImage}
-                                alt="Bảng điều khiển"
-                                className="rounded-lg w-full object-cover"
-                            />
-                        </div>
-                    </div>
-                </section>
-
-                {/* SOSConn Section */}
-                <section className="bg-gradient-to-br from-red-50 via-orange-50 to-amber-50 py-20 border-y border-red-100">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="grid md:grid-cols-2 gap-12 items-center">
-                            <div className="space-y-6">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
-                                    <Siren className="w-4 h-4" />
-                                    SOSConn — Điều hành khẩn cấp
-                                </div>
-                                <h2 className="text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
-                                    Ứng phó thảm họa{" "}
-                                    <span className="bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent">
-                                        nhanh hơn, chính xác hơn
-                                    </span>
-                                </h2>
-                                <p className="text-lg text-slate-600 leading-relaxed">
-                                    Hệ thống điều hành khẩn cấp tích hợp — theo dõi sự kiện thảm họa, tạo kế hoạch ứng phó (EOP) bằng AI, điều phối nguồn lực và cảnh báo cộng đồng từ một bảng điều khiển duy nhất.
-                                </p>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {[
-                                        { icon: ShieldAlert, label: "Theo dõi thảm họa thời gian thực" },
-                                        { icon: ClipboardList, label: "EOP tự động bằng AI" },
-                                        { icon: Radio, label: "Điều phối nguồn lực tối ưu" },
-                                        { icon: BarChart3, label: "Báo cáo sau sự cố (AAR)" },
-                                    ].map(({ icon: Icon, label }) => (
-                                        <div key={label} className="flex items-start gap-2 text-sm text-slate-700">
-                                            <Icon className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                                            <span>{label}</span>
+                                            <span className="text-sm text-white/85">
+                                                {stat.label}
+                                            </span>
+                                            <span className="text-2xl font-bold">
+                                                {stat.value}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
-                                <Link
-                                    to="/admin/emergency-center"
-                                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-                                >
-                                    <Siren className="w-4 h-4" />
-                                    Vào Trung tâm điều hành
-                                    <ArrowRight className="w-4 h-4" />
-                                </Link>
-                            </div>
-                            <div className="relative">
-                                <div className="bg-white rounded-2xl p-6 shadow-xl border border-red-100">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <span className="text-sm font-semibold text-slate-700">Sự kiện khẩn cấp đang hoạt động</span>
-                                        <span className="flex items-center gap-1.5 text-xs text-red-600 font-medium">
-                                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                                            LIVE
-                                        </span>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {[
-                                            { type: "Lũ lụt", area: "Quảng Nam", level: "Nghiêm trọng", color: "red" },
-                                            { type: "Mất điện", area: "Đà Nẵng - Q. Hải Châu", level: "Trung bình", color: "orange" },
-                                            { type: "Sạt lở", area: "Kon Tum - Đắk Glei", level: "Theo dõi", color: "amber" },
-                                        ].map((item) => (
-                                            <div key={item.area} className={`flex items-center justify-between p-3 rounded-lg border bg-${item.color}-50 border-${item.color}-100`}>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-slate-800">{item.type}</p>
-                                                    <p className="text-xs text-slate-500">{item.area}</p>
-                                                </div>
-                                                <span className={`text-xs px-2 py-1 rounded-full font-medium bg-${item.color}-100 text-${item.color}-700`}>
-                                                    {item.level}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                                        <span>3 sự kiện đang hoạt động</span>
-                                        <span>Cập nhật: vừa xong</span>
-                                    </div>
-                                </div>
+                                <p className="mt-5 text-xs text-white/70">
+                                    Số liệu lấy trực tiếp từ API sự kiện khẩn cấp
+                                    và cảnh báo thiên tai của SOS.
+                                </p>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                {/* Citizen Services Section */}
-                <section className="bg-gradient-to-br from-amber-50 via-white to-cyan-50 py-20 border-y border-amber-100">
+                {/* Capabilities */}
+                <section id="features" className="bg-slate-50 py-20 border-y border-slate-100">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="grid md:grid-cols-2 gap-12 items-center">
-                            <div className="space-y-6">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
-                                    <ShieldAlert className="w-4 h-4" />
-                                    Dành cho người dân
-                                </div>
-                                <h2 className="text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
-                                    Bản đồ cảnh báo thiên tai
-                                    <span className="bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent"> theo thời gian thực</span>
-                                </h2>
-                                <p className="text-lg text-slate-600 leading-relaxed">
-                                    Theo dõi mưa, gió, lũ, mực nước và động đất trên toàn quốc từ dữ liệu VNDMS chính thức. Báo sự cố ngay tại bản đồ để chính quyền xử lý kịp thời.
-                                </p>
-                                <div className="grid sm:grid-cols-3 gap-3 text-sm">
-                                    <div className="rounded-lg border border-amber-200 bg-white p-3 text-slate-700">🌊 Cảnh báo lũ, bão, động đất</div>
-                                    <div className="rounded-lg border border-amber-200 bg-white p-3 text-slate-700">📍 Lọc theo khu vực, mức độ</div>
-                                    <div className="rounded-lg border border-amber-200 bg-white p-3 text-slate-700">📢 Báo sự cố trực tiếp trên bản đồ</div>
-                                </div>
-                                <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                        <div className="text-center mb-14">
+                            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-slate-900">
+                                Năng lực điều hành khẩn cấp
+                            </h2>
+                            <p className="text-lg text-slate-600">
+                                Từ chuẩn bị, ứng phó đến phục hồi — tất cả trong
+                                một luồng nghiệp vụ.
+                            </p>
+                        </div>
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {capabilities.map((capability) => (
+                                <div
+                                    key={capability.title}
+                                    className="bg-white border border-slate-200 rounded-xl p-6 hover:border-red-300 hover:shadow-lg transition-all flex flex-col"
+                                >
+                                    <capability.icon className="w-8 h-8 text-red-500 mb-4" />
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                                        {capability.title}
+                                    </h3>
+                                    <p className="text-slate-600 text-sm flex-1">
+                                        {capability.description}
+                                    </p>
                                     <Link
-                                        to="/disaster"
-                                        className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all"
+                                        to={capability.to}
+                                        className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-red-600 hover:text-red-700"
                                     >
-                                        <ShieldAlert className="w-4 h-4 mr-2" />
-                                        Bản đồ thiên tai
-                                        <ArrowRight className="w-4 h-4 ml-2" />
+                                        {capability.cta}
+                                        <ArrowRight className="w-4 h-4" />
                                     </Link>
                                 </div>
-                            </div>
-                            <div className="bg-white rounded-2xl border border-amber-100 shadow-xl p-6 space-y-4">
-                                <h3 className="text-lg font-semibold text-slate-900">Dịch vụ công dân hiện có</h3>
-                                <div className="space-y-3">
-                                    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
-                                        <ClipboardList className="w-5 h-5 text-amber-600 mt-0.5" />
-                                        <div>
-                                            <p className="font-medium text-slate-900">Báo sự cố trực tuyến</p>
-                                            <p className="text-sm text-slate-600">Gửi mô tả, vị trí, mức độ nghiêm trọng và ảnh minh chứng.</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
-                                        <Radio className="w-5 h-5 text-amber-600 mt-0.5" />
-                                        <div>
-                                            <p className="font-medium text-slate-900">Theo dõi trạng thái xử lý</p>
-                                            <p className="text-sm text-slate-600">Tra cứu bằng mã báo cáo hoặc ID để cập nhật mới nhất.</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
-                                        <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
-                                        <div>
-                                            <p className="font-medium text-slate-900">Quy trình xác minh minh bạch</p>
-                                            <p className="text-sm text-slate-600">Báo cáo được tiếp nhận, phân loại và điều phối xử lý có theo dõi trạng thái.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            ))}
                         </div>
                     </div>
                 </section>
 
-                {/* CTA Section */}
-                <section className="bg-white py-20">
+                {/* Public hazard map strip */}
+                <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <div className="grid md:grid-cols-2 gap-12 items-center">
+                        <div className="space-y-5">
+                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                                <ShieldAlert className="w-4 h-4" />
+                                Dành cho người dân
+                            </div>
+                            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
+                                Bản đồ cảnh báo thiên tai{" "}
+                                <span className="bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">
+                                    theo thời gian thực
+                                </span>
+                            </h2>
+                            <p className="text-lg text-slate-600 leading-relaxed">
+                                Theo dõi mưa, gió, lũ và mực nước từ dữ liệu VNDMS
+                                chính thức, xem các chiến dịch cứu hộ đang diễn ra
+                                và tìm nơi trú ẩn gần nhất.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <Link
+                                    to="/map"
+                                    className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all"
+                                >
+                                    <MapPin className="w-4 h-4 mr-2" />
+                                    Mở bản đồ nguy cơ
+                                </Link>
+                                <a
+                                    href="tel:114"
+                                    className="inline-flex items-center justify-center px-6 py-3 border border-red-200 text-red-600 font-semibold rounded-full hover:bg-red-50 transition-colors"
+                                >
+                                    <Phone className="w-4 h-4 mr-2" />
+                                    Gọi 114
+                                </a>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-2xl border border-amber-100 shadow-xl p-6 space-y-4">
+                            <h3 className="text-lg font-semibold text-slate-900">
+                                Trên bản đồ công khai
+                            </h3>
+                            {[
+                                "Cảnh báo lũ, bão, sạt lở và động đất",
+                                "Lọc theo mức độ nghiêm trọng và vị trí gần bạn",
+                                "Vị trí các chiến dịch cứu hộ đang triển khai",
+                                "Chỉ đường tới nơi trú ẩn và đầu mối hỗ trợ",
+                            ].map((item) => (
+                                <div
+                                    key={item}
+                                    className="flex items-start gap-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"
+                                >
+                                    <span className="mt-1 w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                                    {item}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
+                {/* CTA */}
+                <section className="bg-slate-50 py-20 border-t border-slate-100">
                     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
                         <h2 className="text-3xl md:text-5xl font-bold text-slate-900">
-                            Dùng thử ngay
+                            Sẵn sàng cho mùa mưa bão
                         </h2>
                         <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-                            Khám phá bản đồ hạ tầng trực quan hoặc tích hợp dữ
-                            liệu mở vào ứng dụng của bạn qua API
+                            Bắt đầu từ bảng chuẩn bị, chuyển sang điều phối khi
+                            thiên tai xảy ra và khép lại bằng báo cáo sau sự kiện.
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-6 justify-center pt-6">
+                        <div className="flex flex-col sm:flex-row gap-6 justify-center pt-4">
                             <Link
-                                to="/map"
-                                search={{ assetId: undefined }}
-                                className="inline-flex items-center justify-center px-10 py-4 text-white font-bold text-lg rounded-full bg-gradient-to-r from-[#00F2FE] from-21% to-[#4FACFE] shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
+                                to="/admin/emergency-center/before"
+                                className="inline-flex items-center justify-center px-8 py-4 text-white font-bold text-lg rounded-full bg-gradient-to-r from-red-600 to-orange-500 shadow-lg hover:shadow-xl transition-all"
                             >
-                                Khám phá bản đồ →
+                                Bắt đầu chuẩn bị
                             </Link>
                             <Link
                                 to="/docs"
-                                className="inline-flex items-center justify-center px-10 py-4 border-2 border-slate-300 text-slate-700 font-bold text-lg rounded-full hover:border-[#4FACFE] hover:text-[#4FACFE] transition-all transform hover:scale-105"
+                                className="inline-flex items-center justify-center px-8 py-4 border-2 border-slate-300 text-slate-700 font-bold text-lg rounded-full hover:border-red-400 hover:text-red-600 transition-all"
                             >
-                                Dùng API
+                                Tài liệu API
                             </Link>
                         </div>
                     </div>
                 </section>
 
-                {/* Contribute Section */}
-                <section className="bg-slate-50 py-20">
-                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-                        <div className="inline-block px-4 py-1 bg-cyan-100 text-cyan-700 rounded-full text-sm font-medium mb-4">
+                {/* Open source */}
+                <section className="bg-white py-16">
+                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+                        <div className="inline-block px-4 py-1 bg-rose-100 text-rose-700 rounded-full text-sm font-medium">
                             Mã nguồn mở
                         </div>
-                        <h2 className="text-3xl md:text-5xl font-bold text-slate-900">
-                            Cùng đóng góp với chúng tôi
+                        <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
+                            Cùng xây dựng năng lực ứng phó
                         </h2>
-                        <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-                            SynapseCity SOS là dự án mã nguồn mở. Bạn có thể đóng góp
-                            mã, báo lỗi hoặc bổ sung dữ liệu hạ tầng để xây dựng
+                        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+                            SynapseCity SOS là dự án mã nguồn mở. Bạn có thể đóng
+                            góp mã, báo lỗi hoặc bổ sung kịch bản ứng phó cho
                             cộng đồng.
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-6 justify-center pt-6">
+                        <div className="flex flex-col sm:flex-row gap-6 justify-center pt-2">
                             <a
                                 href="https://github.com/vku-open-source-2026/SynapseCitySOS"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center gap-3 px-10 py-4 bg-white text-slate-900 font-bold text-lg rounded-full hover:bg-slate-100 transition-all transform hover:scale-105"
+                                className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-slate-900 text-white font-bold rounded-full hover:bg-slate-800 transition-all"
                             >
-                                <svg
-                                    className="w-6 h-6"
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        fillRule="evenodd"
-                                        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-                                        clipRule="evenodd"
-                                    />
-                                </svg>
                                 Xem mã nguồn
                             </a>
+                            <a
+                                href="https://github.com/vku-open-source-2026/SynapseCitySOS/issues"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center gap-3 px-8 py-4 bg-white border border-slate-200 text-slate-700 font-bold rounded-full hover:border-red-300 hover:text-red-600 transition-all"
+                            >
+                                Báo lỗi
+                            </a>
                         </div>
-                        {/* License Links */}
                         <div className="flex flex-wrap items-center justify-center gap-6 pt-4 text-sm text-slate-500">
                             <a
                                 href="https://github.com/vku-open-source-2026/SynapseCitySOS/blob/main/LICENSE"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="hover:text-[#4FACFE] transition-colors"
+                                className="hover:text-red-600 transition-colors"
                             >
                                 Mã nguồn: Apache 2.0
                             </a>
@@ -472,7 +385,7 @@ const HomePage = () => {
                                 href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="hover:text-[#4FACFE] transition-colors"
+                                className="hover:text-red-600 transition-colors"
                             >
                                 Dữ liệu: OGL v3.0
                             </a>
@@ -481,7 +394,6 @@ const HomePage = () => {
                 </section>
             </main>
             <Footer />
-            <AIChatWidget />
         </div>
     );
 };

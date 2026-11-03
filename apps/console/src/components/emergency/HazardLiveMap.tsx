@@ -3,7 +3,7 @@
 import React from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { httpClient } from '@/lib/httpClient';
+import { asList, isNonListPayload, httpClient } from '@/lib/httpClient';
 import { fetchTileConfig } from '@/lib/tileConfig';
 
 // ---------------------------------------------------------------------------
@@ -93,7 +93,13 @@ const HazardLiveMap: React.FC<{ hazards?: any[] }> = () => {
     setError(null);
     try {
       const resp = await httpClient.get<VndmsHazard[]>('/hazards/vndms-live');
-      setHazards(resp.data ?? []);
+      const items = asList<VndmsHazard>(resp.data);
+      setHazards(items);
+      // A 200 HTML/non-array response is not a backend outage, but it must not
+      // crash the marker loop. Keep the map rendered and surface the bad shape.
+      if (isNonListPayload(resp.data) && items.length === 0) {
+        setError('Dữ liệu cảnh báo không hợp lệ (không phải danh sách).');
+      }
       setLastUpdated(new Date());
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Không thể tải dữ liệu';
@@ -124,20 +130,27 @@ const HazardLiveMap: React.FC<{ hazards?: any[] }> = () => {
       scrollWheelZoom: true,
     });
 
+    let cancelled = false;
+
     // Use VietMap tiles (falls back to OSM if not configured)
-    fetchTileConfig().then((cfg) => {
-      if (!mapRef.current) return;
-      L.tileLayer(cfg.tileUrl, {
-        attribution: cfg.attribution,
-        maxZoom: cfg.maxZoom,
-        ...(cfg.maxNativeZoom ? { maxNativeZoom: cfg.maxNativeZoom } : {}),
-      }).addTo(mapRef.current);
-    });
+    fetchTileConfig()
+      .then((cfg) => {
+        if (cancelled || mapRef.current !== map) return;
+        L.tileLayer(cfg.tileUrl, {
+          attribution: cfg.attribution,
+          maxZoom: cfg.maxZoom,
+          ...(cfg.maxNativeZoom ? { maxNativeZoom: cfg.maxNativeZoom } : {}),
+        }).addTo(map);
+      })
+      .catch((err) => {
+        console.error('Failed to load tile config', err);
+      });
 
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     return () => {
+      cancelled = true;
       map.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
@@ -149,8 +162,9 @@ const HazardLiveMap: React.FC<{ hazards?: any[] }> = () => {
     if (!mapRef.current || !markerLayerRef.current) return;
     const markerLayer = markerLayerRef.current;
     markerLayer.clearLayers();
+    const safeHazards = Array.isArray(hazards) ? hazards : [];
 
-    hazards.forEach((h) => {
+    safeHazards.forEach((h) => {
       const color = TYPE_COLOR[h.warning_type] ?? '#94a3b8';
       const radius = getRadius(h);
       L.circleMarker([h.lat, h.lon], {

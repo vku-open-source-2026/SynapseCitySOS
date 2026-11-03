@@ -1,6 +1,9 @@
 # End-to-End (E2E) Tests
 
-This directory contains Vitest browser mode end-to-end tests for the OpenInfra frontend application.
+This directory contains Vitest browser mode end-to-end tests for the
+SynapseCity SOS emergency-operations console (command centre, hazard map and
+auth shell). City-infrastructure specs (assets, incidents, IoT, maintenance,
+budgets, reports, alerts, users, ingest, technician) belong to SynapseCity.
 
 ## Setup
 
@@ -54,11 +57,10 @@ pnpm exec vitest --browser --watch
 ## Test Structure
 
 - `auth.spec.ts` - Authentication flow tests (login, register, validation)
-- `map.spec.ts` - Public map page tests (map display, asset selection, geospatial features)
-- `dashboard.spec.ts` - Admin dashboard tests (navigation, sidebar, notifications)
-- `incidents.spec.ts` - Incidents module tests (list, create, filters)
+- `map.spec.ts` - Public hazard/emergency map tests (Leaflet render, hazard layers, 114 help actions)
+- `dashboard.spec.ts` - SOS dashboard tests (emergency summary cards, SOS-only sidebar)
+- `emergency.spec.ts` - Emergency command centre, phase boards and rescue operation tests
 - `navigation.spec.ts` - Navigation flow tests (routing, protected routes)
-- `geospatial.spec.ts` - Geospatial feature tests (address search, nearby search, polygon drawing)
 - `setup.ts` - Global test setup and configuration
 
 ## Configuration

@@ -10,6 +10,7 @@ import { eopApi } from '@/api/eop';
 import { hazardsApi, type DeployHazardResponse } from '@/api/hazards';
 import { resourcesApi } from '@/api/resources';
 import { sitrepApi } from '@/api/sitrep';
+import { asList } from '@/lib/httpClient';
 import { useAuthStore } from '@/stores';
 import HazardLiveMap from '@/components/emergency/HazardLiveMap';
 import DeployEopModal from '@/components/emergency/DeployEopModal';
@@ -113,8 +114,8 @@ const EmergencyCenter: React.FC = () => {
       hazardsApi.list({ limit: 200, is_active: true }),
       hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
     ]);
-    setHazards(hazardData);
-    setRecentHazardItems(recentItems);
+    setHazards(asList<Hazard>(hazardData));
+    setRecentHazardItems(asList<RecentHazardItem>(recentItems));
     setLastHazardRefresh(new Date());
   }, []);
 
@@ -139,19 +140,20 @@ const EmergencyCenter: React.FC = () => {
             hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
           ]);
 
-        setEvents(eventData);
-        setEopPlans(eopData);
-        setDispatchOrders(dispatchData);
-        setResources(resourceData);
-        setSitreps(sitrepData);
-        setHazards(hazardData);
-        setAfterActionReports(aarData);
-        setSosTimeline(timelineData);
-        setRecentHazardItems(recentHazardData);
+        setEvents(asList<EmergencyEvent>(eventData));
+        setEopPlans(asList<EOPPlan>(eopData));
+        setDispatchOrders(asList<DispatchOrder>(dispatchData));
+        setResources(asList<ResourceUnit>(resourceData));
+        setSitreps(asList<Sitrep>(sitrepData));
+        setHazards(asList<Hazard>(hazardData));
+        setAfterActionReports(asList<AfterActionReport>(aarData));
+        setSosTimeline(asList<SosTimelineItem>(timelineData));
+        setRecentHazardItems(asList<RecentHazardItem>(recentHazardData));
         setLastHazardRefresh(new Date());
 
-        if (!selectedEventId && eventData.length > 0) {
-          const firstActiveEvent = eventData.find((event) => event.status === 'active') || eventData[0];
+        const safeEvents = asList<EmergencyEvent>(eventData);
+        if (!selectedEventId && safeEvents.length > 0) {
+          const firstActiveEvent = safeEvents.find((event) => event.status === 'active') || safeEvents[0];
           setSelectedEventId(firstActiveEvent.id);
         }
       } catch (err) {
@@ -317,7 +319,9 @@ const EmergencyCenter: React.FC = () => {
       const result = await hazardsApi.deploy(hazardId);
       setDeployModalData(result);
       // Refresh recent hazards to reflect linked_event_id
-      void hazardsApi.listRecentItems({ hours: 24, limit: 200 }).then(setRecentHazardItems);
+      void hazardsApi.listRecentItems({ hours: 24, limit: 200 }).then((items) => {
+        setRecentHazardItems(asList<RecentHazardItem>(items));
+      });
     } catch (err) {
       console.error(err);
       setError('Triển khai thất bại. Vui lòng thử lại.');

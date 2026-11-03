@@ -7,7 +7,7 @@ import { authApi } from '../api/auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'technician' | 'citizen';
+  requiredRole?: 'admin' | 'manager' | 'operator' | 'responder';
   requiredPermission?: string;
 }
 
@@ -35,7 +35,7 @@ export function ProtectedRoute({
       }
 
       // Check permission if required
-      if (requiredPermission && !user?.permissions.includes(requiredPermission)) {
+      if (requiredPermission && !user?.permissions?.includes(requiredPermission)) {
         navigate({ to: '/' });
         setIsChecking(false);
         return;

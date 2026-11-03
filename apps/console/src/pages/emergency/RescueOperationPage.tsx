@@ -3,14 +3,16 @@
 import React, { useState, useCallback } from 'react';
 import { useParams, Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Check, X, Pencil, User } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, X, Pencil, Truck } from 'lucide-react';
 
 import { emergencyApi } from '@/api/emergency';
 import { eopApi } from '@/api/eop';
 import { dispatchApi } from '@/api/dispatch';
-import { usersApi } from '@/api/users';
+import { resourcesApi } from '@/api/resources';
 import DeployEopModal from '@/components/emergency/DeployEopModal';
+import { resolveAssignedResourceUnitId } from '@/lib/dispatchAssignment';
 import type { DispatchOrder } from '@/types/dispatch';
+import type { ResourceType, ResourceUnit } from '@/types/resource-unit';
 import type { DeployHazardResponse } from '@/api/hazards';
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
@@ -42,24 +44,48 @@ const STATUS_LABEL: Record<string, string> = {
   reassigned: 'Phân công lại',
 };
 
+const RESOURCE_TYPE_LABEL: Record<ResourceType, string> = {
+  personnel: 'Đội ứng cứu',
+  vehicle: 'Phương tiện',
+  medical_supply: 'Vật tư y tế',
+  rescue_equipment: 'Thiết bị cứu hộ',
+  shelter: 'Nơi trú ẩn',
+};
+
+function formatResourceLabel(resource: ResourceUnit): string {
+  const typeLabel = RESOURCE_TYPE_LABEL[resource.resource_type] ?? resource.resource_type;
+  const code = resource.resource_code ? ` · ${resource.resource_code}` : '';
+  return `${resource.name} (${typeLabel}${code})`;
+}
+
+function formatResourceCapacity(resource: ResourceUnit): string {
+  if (typeof resource.capacity !== 'number' || resource.capacity <= 0) {
+    return resource.district ?? '';
+  }
+  const unit = resource.capacity_unit ? ` ${resource.capacity_unit}` : '';
+  return `${resource.capacity}${unit}`;
+}
+
 // ── Task row ──────────────────────────────────────────────────────────────────
 
 interface TaskRowProps {
   order: DispatchOrder;
-  volunteers: { id: string; full_name: string; username: string }[];
-  onApprove: (orderId: string, userId: string) => Promise<void>;
+  resources: ResourceUnit[];
+  onApprove: (orderId: string, assigneeId: string) => Promise<void>;
   onReject: (orderId: string) => Promise<void>;
 }
 
-const TaskRow: React.FC<TaskRowProps> = ({ order, volunteers, onApprove, onReject }) => {
-  const [selectedUserId, setSelectedUserId] = useState<string>(
-    order.assigned_user_id ??
-      order.assignments.find((a) => a.assigned_user_id)?.assigned_user_id ??
-      '',
+const TaskRow: React.FC<TaskRowProps> = ({ order, resources, onApprove, onReject }) => {
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>(
+    resolveAssignedResourceUnitId(order) ?? '',
   );
   const [busy, setBusy] = useState(false);
 
   const isDone = ['completed', 'canceled', 'assigned'].includes(order.status);
+  const availableResources = resources.filter((resource) => resource.status === 'available');
+
+  const assignedId = resolveAssignedResourceUnitId(order);
+  const assignedResource = resources.find((resource) => resource.id === assignedId);
 
   return (
     <article
@@ -86,26 +112,27 @@ const TaskRow: React.FC<TaskRowProps> = ({ order, volunteers, onApprove, onRejec
 
       {!isDone && (
         <div className="flex items-center gap-2 mt-3">
-          <User size={13} className="text-slate-400 shrink-0" />
+          <Truck size={13} className="text-slate-400 shrink-0" />
           <select
-            value={selectedUserId}
-            onChange={(e) => setSelectedUserId(e.target.value)}
+            value={selectedAssigneeId}
+            onChange={(e) => setSelectedAssigneeId(e.target.value)}
             disabled={busy}
             className="flex-1 text-xs rounded-md border border-slate-300 px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60"
           >
-            <option value="">Chọn tình nguyện viên...</option>
-            {volunteers.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.full_name} (@{v.username})
+            <option value="">Chọn đơn vị ứng cứu...</option>
+            {availableResources.map((resource) => (
+              <option key={resource.id} value={resource.id}>
+                {formatResourceLabel(resource)}
+                {formatResourceCapacity(resource) ? ` — ${formatResourceCapacity(resource)}` : ''}
               </option>
             ))}
           </select>
           <button
             type="button"
-            disabled={busy || !selectedUserId}
+            disabled={busy || !selectedAssigneeId}
             onClick={async () => {
               setBusy(true);
-              try { await onApprove(order.id, selectedUserId); } finally { setBusy(false); }
+              try { await onApprove(order.id, selectedAssigneeId); } finally { setBusy(false); }
             }}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
           >
@@ -130,10 +157,7 @@ const TaskRow: React.FC<TaskRowProps> = ({ order, volunteers, onApprove, onRejec
       {order.status === 'assigned' && (
         <div className="mt-2 text-xs text-blue-700 font-medium">
           ✔ Đã phân công →{' '}
-          {volunteers.find(
-            (v) =>
-              v.id === (order.assigned_user_id ?? order.assignments.find((a) => a.assigned_user_id)?.assigned_user_id),
-          )?.full_name ?? 'Tình nguyện viên'}
+          {assignedResource?.name ?? 'Đơn vị ứng cứu'}
         </div>
       )}
     </article>
@@ -169,22 +193,25 @@ const RescueOperationPage: React.FC = () => {
     refetchInterval: 30_000,
   });
 
-  const { data: volunteers = [] } = useQuery({
-    queryKey: ['users', 'volunteers'],
-    queryFn: () => usersApi.listVolunteers('active'),
-    staleTime: 5 * 60_000,
+  // SOS-owned responder pool: emergency resource units. The City user directory
+  // is never queried from this product.
+  const { data: resourceUnits = [] } = useQuery({
+    queryKey: ['resources', 'roster'],
+    queryFn: () => resourcesApi.list({ limit: 200 }),
+    staleTime: 60_000,
   });
 
   const invalidate = useCallback(() => {
     void qc.invalidateQueries({ queryKey: ['dispatch', 'event', eventId] });
+    void qc.invalidateQueries({ queryKey: ['resources', 'roster'] });
   }, [qc, eventId]);
 
   const handleApprove = useCallback(
-    async (orderId: string, userId: string) => {
+    async (orderId: string, assigneeId: string) => {
       setError(null);
       try {
-        await dispatchApi.approve(orderId, userId);
-        setInfo('Đã duyệt và phân công task.');
+        await dispatchApi.approve(orderId, assigneeId);
+        setInfo('Đã duyệt và phân công đơn vị ứng cứu.');
         invalidate();
       } catch (err) {
         console.error(err);
@@ -262,6 +289,9 @@ const RescueOperationPage: React.FC = () => {
                   <p>
                     {orders.length} task · {pendingOrders.length} chờ · {activeOrders.length} đang thực hiện
                   </p>
+                  <p className="mt-1">
+                    {resourceUnits.filter((resource) => resource.status === 'available').length} nguồn lực sẵn sàng
+                  </p>
                 </div>
               </div>
             </div>
@@ -335,7 +365,7 @@ const RescueOperationPage: React.FC = () => {
                       <TaskRow
                         key={order.id}
                         order={order}
-                        volunteers={volunteers}
+                        resources={resourceUnits}
                         onApprove={handleApprove}
                         onReject={handleReject}
                       />
@@ -355,7 +385,7 @@ const RescueOperationPage: React.FC = () => {
                       <TaskRow
                         key={order.id}
                         order={order}
-                        volunteers={volunteers}
+                        resources={resourceUnits}
                         onApprove={handleApprove}
                         onReject={handleReject}
                       />
@@ -375,7 +405,7 @@ const RescueOperationPage: React.FC = () => {
                       <TaskRow
                         key={order.id}
                         order={order}
-                        volunteers={volunteers}
+                        resources={resourceUnits}
                         onApprove={handleApprove}
                         onReject={handleReject}
                       />

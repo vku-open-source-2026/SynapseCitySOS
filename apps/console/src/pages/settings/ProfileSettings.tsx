@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { usersApi } from "@/api/users";
 import { authApi } from "@/api/auth";
 import {
     Form,
@@ -13,16 +12,21 @@ import {
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
-import { Skeleton } from "../../components/ui/skeleton";
 import { useAuthStore } from "../../stores/authStore";
 import { useBiometricAuth } from "../../hooks/useBiometricAuth";
-import type { ProfileUpdateRequest } from "../../types/user";
 import { Fingerprint, ShieldCheck, ShieldOff } from "lucide-react";
 
+/**
+ * Auth-shell profile settings.
+ *
+ * The emergency console only manages the signed-in session: reading identity
+ * from the auth store, changing the password through /v1/auth and managing the
+ * local biometric login. City operator administration is a SynapseCity feature.
+ */
 const ProfileSettings: React.FC = () => {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
-    const { user, setUser, logout, accessToken, refreshToken } = useAuthStore();
+    const { user, logout, accessToken, refreshToken } = useAuthStore();
     const {
         isAvailable: biometricAvailable,
         isEnabled: biometricEnabled,
@@ -31,9 +35,6 @@ const ProfileSettings: React.FC = () => {
         registerBiometric,
         disableBiometric,
     } = useBiometricAuth();
-    const [formData, setFormData] = useState<
-        Partial<ProfileUpdateRequest> | null
-    >(null);
     const [passwordData, setPasswordData] = useState({
         current_password: "",
         new_password: "",
@@ -41,47 +42,10 @@ const ProfileSettings: React.FC = () => {
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const { data: currentUser, isLoading } = useQuery({
-        queryKey: ["current-user"],
-        queryFn: () => usersApi.getCurrentUser(),
-        enabled: !!user,
-    });
-
-    const effectiveFormData: Partial<ProfileUpdateRequest> =
-        formData ??
-        (currentUser
-            ? {
-                  email: currentUser.email,
-                  full_name: currentUser.full_name,
-                  phone: currentUser.phone,
-              }
-            : {});
-
     const getApiErrorDetail = (error: unknown): string | undefined => {
         return (error as { response?: { data?: { detail?: string } } })
             .response?.data?.detail;
     };
-
-    const updateMutation = useMutation({
-        mutationFn: (data: ProfileUpdateRequest) =>
-            usersApi.updateCurrentUser(data),
-        onSuccess: (updatedUser) => {
-            setUser(updatedUser);
-            queryClient.invalidateQueries({ queryKey: ["current-user"] });
-            setErrors({});
-            setFormData({
-                email: updatedUser.email,
-                full_name: updatedUser.full_name,
-                phone: updatedUser.phone,
-            });
-        },
-        onError: (error: unknown) => {
-            const detail = getApiErrorDetail(error);
-            if (detail) {
-                setErrors({ submit: detail });
-            }
-        },
-    });
 
     const changePasswordMutation = useMutation({
         mutationFn: ({
@@ -110,18 +74,6 @@ const ProfileSettings: React.FC = () => {
             }
         },
     });
-
-    const handleProfileSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setErrors({});
-
-        if (!effectiveFormData.email?.trim()) {
-            setErrors({ email: "Email là bắt buộc" });
-            return;
-        }
-
-        updateMutation.mutate(effectiveFormData as ProfileUpdateRequest);
-    };
 
     const handlePasswordSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -157,15 +109,6 @@ const ProfileSettings: React.FC = () => {
         navigate({ to: "/" });
     };
 
-    if (isLoading) {
-        return (
-            <div className="p-6 space-y-4">
-                <Skeleton className="h-8 w-64" />
-                <Skeleton className="h-64 w-full" />
-            </div>
-        );
-    }
-
     return (
         <div className="p-6 space-y-6">
             <div>
@@ -173,82 +116,56 @@ const ProfileSettings: React.FC = () => {
                     Cài đặt tài khoản
                 </h1>
                 <p className="text-slate-500 mt-1">
-                    Quản lý thông tin tài khoản của bạn
+                    Phiên đăng nhập và bảo mật của trung tâm điều hành SOS
                 </p>
             </div>
 
             <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold mb-4">
-                    Thông tin hồ sơ
+                    Thông tin phiên đăng nhập
                 </h2>
-                <Form onSubmit={handleProfileSubmit}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField>
-                            <FormLabel>Tên đăng nhập</FormLabel>
-                            <Input
-                                value={currentUser?.username || ""}
-                                disabled
-                                className="bg-slate-50"
-                            />
-                        </FormField>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField>
+                        <FormLabel>Tên đăng nhập</FormLabel>
+                        <Input
+                            value={user?.username || ""}
+                            disabled
+                            className="bg-slate-50"
+                        />
+                    </FormField>
 
-                        <FormField>
-                            <FormLabel required>Email</FormLabel>
-                            <Input
-                                type="email"
-                                value={effectiveFormData.email || ""}
-                                onChange={(e) =>
-                                    setFormData((prev) => ({
-                                        ...(prev ?? effectiveFormData),
-                                        email: e.target.value,
-                                    }))
-                                }
-                            />
-                            {errors.email && (
-                                <FormError>{errors.email}</FormError>
-                            )}
-                        </FormField>
+                    <FormField>
+                        <FormLabel>Email</FormLabel>
+                        <Input
+                            type="email"
+                            value={user?.email || ""}
+                            disabled
+                            className="bg-slate-50"
+                        />
+                    </FormField>
 
-                        <FormField>
-                            <FormLabel required>Họ và tên</FormLabel>
-                            <Input
-                                value={effectiveFormData.full_name || ""}
-                                onChange={(e) =>
-                                    setFormData((prev) => ({
-                                        ...(prev ?? effectiveFormData),
-                                        full_name: e.target.value,
-                                    }))
-                                }
-                            />
-                        </FormField>
+                    <FormField>
+                        <FormLabel>Họ và tên</FormLabel>
+                        <Input
+                            value={user?.full_name || ""}
+                            disabled
+                            className="bg-slate-50"
+                        />
+                    </FormField>
 
-                        <FormField>
-                            <FormLabel>Số điện thoại</FormLabel>
-                            <Input
-                                value={effectiveFormData.phone || ""}
-                                onChange={(e) =>
-                                    setFormData((prev) => ({
-                                        ...(prev ?? effectiveFormData),
-                                        phone: e.target.value,
-                                    }))
-                                }
-                            />
-                        </FormField>
-                    </div>
-
-                    {errors.submit && <FormError>{errors.submit}</FormError>}
-
-                    <div className="flex gap-4 mt-6">
-                        <Button
-                            type="submit"
-                            disabled={updateMutation.isPending}
-                        >
-                            {updateMutation.isPending
-                                ? "Đang cập nhật..."
-                                : "Cập nhật"}
-                        </Button>
-                    </div>
-                </Form>
+                    <FormField>
+                        <FormLabel>Vai trò</FormLabel>
+                        <Input
+                            value={user?.role || "operator"}
+                            disabled
+                            className="bg-slate-50 capitalize"
+                        />
+                    </FormField>
+                </div>
+                <p className="mt-4 text-xs text-slate-500">
+                    Thông tin danh tính do dịch vụ xác thực quản lý. Việc quản trị
+                    người dùng và phân quyền đô thị thuộc sản phẩm SynapseCity.
+                </p>
             </div>
 
             <div className="bg-white rounded-lg border border-slate-200 p-6">
@@ -328,7 +245,7 @@ const ProfileSettings: React.FC = () => {
                     <p className="text-sm text-slate-500 mb-4">
                         Sử dụng vân tay hoặc nhận diện khuôn mặt để đăng nhập nhanh và an toàn
                     </p>
-                    
+
                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                         <div className="flex items-center gap-3">
                             {biometricEnabled ? (
@@ -341,15 +258,15 @@ const ProfileSettings: React.FC = () => {
                                     {biometricEnabled ? 'Sinh trắc học đã bật' : 'Sinh trắc học chưa bật'}
                                 </p>
                                 <p className="text-sm text-slate-500">
-                                    {biometricEnabled 
-                                        ? 'Bạn có thể đăng nhập bằng vân tay hoặc nhận diện khuôn mặt' 
+                                    {biometricEnabled
+                                        ? 'Bạn có thể đăng nhập bằng vân tay hoặc nhận diện khuôn mặt'
                                         : 'Bật để đăng nhập nhanh hơn lần sau'}
                                 </p>
                             </div>
                         </div>
-                        
+
                         {biometricEnabled ? (
-                                <Button
+                            <Button
                                 variant="outline"
                                 onClick={disableBiometric}
                                 disabled={biometricLoading}
@@ -357,14 +274,14 @@ const ProfileSettings: React.FC = () => {
                                 Tắt
                             </Button>
                         ) : (
-                                <Button
+                            <Button
                                 onClick={async () => {
-                                    if (currentUser && accessToken && refreshToken) {
+                                    if (user && accessToken && refreshToken) {
                                         await registerBiometric(
-                                            currentUser.username,
+                                            user.username,
                                             accessToken,
                                             refreshToken,
-                                            currentUser
+                                            user
                                         );
                                     }
                                 }}
@@ -374,7 +291,7 @@ const ProfileSettings: React.FC = () => {
                             </Button>
                         )}
                     </div>
-                    
+
                     {biometricError && (
                         <p className="text-sm text-red-600 mt-2">{biometricError}</p>
                     )}
@@ -384,7 +301,7 @@ const ProfileSettings: React.FC = () => {
             <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold mb-4">Hành động tài khoản</h2>
                 <div className="flex gap-4">
-                        <Button
+                    <Button
                         type="button"
                         variant="destructive"
                         onClick={handleLogout}

@@ -1,7 +1,7 @@
 {
-    "name": "OpenInfra",
-    "short_name": "OpenInfra",
-    "description": "Smart Infrastructure Management Made Easy - Digital infrastructure map for monitoring and optimization",
+    "name": "SynapseCity SOS",
+    "short_name": "SOS",
+    "description": "Emergency operations console for hazard monitoring, EOP, dispatch and situation reports",
     "start_url": "/",
     "scope": "/",
     "display": "minimal-ui",
@@ -58,6 +58,6 @@
         "utilities",
         "productivity"
     ],
-    "lang": "en",
+    "lang": "vi",
     "prefer_related_applications": false
 }

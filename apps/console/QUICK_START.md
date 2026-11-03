@@ -24,12 +24,12 @@ import { Link, useNavigate } from '@tanstack/react-router';
 
 // Using Link
 <Link to="/map">Go to Map</Link>
-<Link to="/map" search={{ assetId: '123' }}>View Asset</Link>
+<Link to="/map" search={{ eventId: '123' }}>View Emergency Event</Link>
 
 // Using programmatic navigation
 const navigate = useNavigate();
 navigate({ to: '/admin' });
-navigate({ to: '/map', search: { assetId: asset._id } });
+navigate({ to: '/admin/emergency-center/operations/$eventId', params: { eventId: event._id } });
 ```
 
 ### Using Zustand Store
@@ -59,13 +59,16 @@ function Component() {
 import { httpClient } from '@/lib/httpClient';
 
 // GET request
-const response = await httpClient.get('/assets/');
-const assets = response.data;
+const response = await httpClient.get('/emergency');
+const events = response.data;
+
+// GET hazard feed
+const hazards = await httpClient.get('/hazards/recent');
 
 // POST request
-const response = await httpClient.post('/maintenance/', {
-  asset_id: '123',
-  description: 'Fix leak',
+const response = await httpClient.post('/emergency', {
+  title: 'Flood warning',
+  severity: 'high',
 });
 
 // The token is automatically added to headers if user is authenticated
@@ -75,20 +78,20 @@ const response = await httpClient.post('/maintenance/', {
 
 ```tsx
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getAssets, createAsset } from '@/api';
+import { emergencyApi } from '@/api';
 
 // Fetch data
 const { data, isLoading, error } = useQuery({
-  queryKey: ['assets'],
-  queryFn: getAssets,
+  queryKey: ['emergency-events'],
+  queryFn: () => emergencyApi.list(),
 });
 
 // Mutate data
 const mutation = useMutation({
-  mutationFn: createAsset,
+  mutationFn: emergencyApi.create,
   onSuccess: () => {
     // Invalidate and refetch
-    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    queryClient.invalidateQueries({ queryKey: ['emergency-events'] });
   },
 });
 ```
@@ -112,10 +115,10 @@ import { cn } from '@/lib/utils';
 ```tsx
 // src/routes/map.tsx
 export const Route = createFileRoute('/map')({
-  component: PublicMap,
+  component: PublicHazardMap,
   validateSearch: (search: Record<string, unknown>) => {
     return {
-      assetId: search.assetId as string | undefined,
+      eventId: search.eventId as string | undefined,
       view: search.view as 'list' | 'grid' | undefined,
     };
   },
@@ -127,13 +130,13 @@ export const Route = createFileRoute('/map')({
 import { useSearch, useNavigate } from '@tanstack/react-router';
 
 const searchParams = useSearch({ from: '/map' });
-const assetId = searchParams?.assetId;
+const eventId = searchParams?.eventId;
 const view = searchParams?.view || 'list';
 
 const navigate = useNavigate();
 navigate({
   to: '/map',
-  search: { assetId: '123', view: 'grid' }
+  search: { eventId: '123', view: 'grid' }
 });
 ```
 
@@ -180,8 +183,8 @@ import { Button } from '@/components/ui/button';
 
 ```tsx
 const { data, isLoading } = useQuery({
-  queryKey: ['assets'],
-  queryFn: getAssets,
+  queryKey: ['emergency-events'],
+  queryFn: () => emergencyApi.list(),
 });
 
 if (isLoading) {
@@ -195,8 +198,8 @@ return <div>{/* render data */}</div>;
 
 ```tsx
 const { data, error } = useQuery({
-  queryKey: ['assets'],
-  queryFn: getAssets,
+  queryKey: ['emergency-events'],
+  queryFn: () => emergencyApi.list(),
 });
 
 if (error) {
@@ -208,27 +211,27 @@ if (error) {
 
 ```tsx
 const mutation = useMutation({
-  mutationFn: updateAsset,
-  onMutate: async (newAsset) => {
+  mutationFn: emergencyApi.create,
+  onMutate: async (newEvent) => {
     // Cancel outgoing refetches
-    await queryClient.cancelQueries({ queryKey: ['assets'] });
+    await queryClient.cancelQueries({ queryKey: ['emergency-events'] });
 
     // Snapshot previous value
-    const previousAssets = queryClient.getQueryData(['assets']);
+    const previousEvents = queryClient.getQueryData(['emergency-events']);
 
     // Optimistically update
-    queryClient.setQueryData(['assets'], (old) => [...old, newAsset]);
+    queryClient.setQueryData(['emergency-events'], (old) => [...old, newEvent]);
 
     // Return context with previous value
-    return { previousAssets };
+    return { previousEvents };
   },
-  onError: (err, newAsset, context) => {
+  onError: (err, newEvent, context) => {
     // Rollback on error
-    queryClient.setQueryData(['assets'], context.previousAssets);
+    queryClient.setQueryData(['emergency-events'], context.previousEvents);
   },
   onSettled: () => {
     // Always refetch after error or success
-    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    queryClient.invalidateQueries({ queryKey: ['emergency-events'] });
   },
 });
 ```
@@ -276,8 +279,8 @@ src/
 
 ```env
 # .env
-VITE_BASE_API_URL=http://localhost:8000/api
-VITE_LEADERBOARD_URL=https://contribapi.openinfra.space/api
+VITE_BASE_API_URL=/v1
+VITE_LEADERBOARD_URL=/v1
 ```
 
 Access in code:
@@ -289,16 +292,16 @@ import.meta.env.VITE_BASE_API_URL
 
 ```bash
 # Start dev server
-pnpm run dev
+npm run dev
 
 # Build for production
-pnpm run build
+npm run build
 
 # Preview production build
-pnpm run preview
+npm run preview
 
 # Lint code
-pnpm run lint
+npm run lint
 ```
 
 ## Tips

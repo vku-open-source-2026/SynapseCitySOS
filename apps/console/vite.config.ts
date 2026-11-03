@@ -19,6 +19,15 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: true,
+    // Local development talks to the SOS service, not to the Vite SPA
+    // fallback. A missing service yields a proxy error instead of 200 HTML,
+    // so the hazard map and command centre can show their error state.
+    proxy: {
+      '/v1': {
+        target: process.env.VITE_DEV_API_PROXY || 'http://localhost:8084',
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     allowedHosts: true,

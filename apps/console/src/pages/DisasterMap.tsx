@@ -9,11 +9,11 @@ import {
     MapPin,
     Clock,
     ShieldAlert,
-    Megaphone,
     X,
     Phone,
     Crosshair,
     Home,
+    LifeBuoy,
     Siren,
 } from "lucide-react";
 import L from "leaflet";
@@ -25,7 +25,6 @@ import HazardMarkersLayer from "../components/HazardMarkersLayer";
 import EmergencyEventsLayer from "../components/EmergencyEventsLayer";
 import { hazardsApi } from "../api/hazards";
 import { usePublicEmergencyEvents } from "../hooks/usePublicEmergencyEvents";
-import IncidentReportForm from "../components/IncidentReportForm";
 import type { Hazard } from "../types/hazard";
 import type {
     PublicEmergencyEvent,
@@ -289,11 +288,85 @@ const StoredHazardCard: React.FC<{
     </div>
 );
 
+const SafetyHelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
+    <div
+        className="fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4"
+        onClick={onClose}
+    >
+        <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+        >
+            <div className="p-5 border-b border-slate-100 flex items-start justify-between bg-gradient-to-r from-red-50 to-orange-50">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                        <LifeBuoy className="text-red-600" size={20} />
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-slate-900 text-lg">
+                            Hướng dẫn an toàn
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                            Trợ giúp khẩn cấp và nơi trú ẩn
+                        </p>
+                    </div>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="p-1 hover:bg-white/60 rounded transition-colors"
+                    aria-label="Đóng hướng dẫn"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3 text-sm text-slate-700">
+                <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-red-700 font-medium">
+                    Khi tính mạng bị đe dọa, gọi ngay 114 (cứu hỏa &amp; cứu nạn)
+                    hoặc 112 (cứu hộ khẩn cấp).
+                </p>
+                <ul className="space-y-2">
+                    <li className="rounded-lg bg-slate-50 p-3">
+                        Theo dõi cảnh báo mới nhất trên bản đồ này và làm theo
+                        hướng dẫn của chính quyền địa phương.
+                    </li>
+                    <li className="rounded-lg bg-slate-50 p-3">
+                        Di chuyển đến nơi trú ẩn kiên cố gần nhất; tránh khu vực
+                        ngập sâu, sạt lở và ven sông suối.
+                    </li>
+                    <li className="rounded-lg bg-slate-50 p-3">
+                        Không tự ý vượt qua dòng nước chảy xiết hoặc khu vực đã
+                        được phong tỏa.
+                    </li>
+                    <li className="rounded-lg bg-slate-50 p-3">
+                        Giữ điện thoại và pin dự phòng; chuẩn bị nước uống, thuốc
+                        và giấy tờ tùy thân.
+                    </li>
+                </ul>
+                <p className="text-xs text-slate-500">
+                    Báo cáo hư hỏng hạ tầng đô thị (đường, điện, nước) thuộc hệ
+                    thống SynapseCity:{" "}
+                    <a
+                        href="https://synapsecity.sbs"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-red-600 hover:underline font-medium"
+                    >
+                        synapsecity.sbs
+                    </a>
+                    .
+                </p>
+            </div>
+        </div>
+    </div>
+);
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
-const DisasterMap: React.FC = () => {
+const PublicHazardMap: React.FC = () => {
     const containerRef = React.useRef<HTMLDivElement | null>(null);
     const mapRef = React.useRef<L.Map | null>(null);
+    const tileLayerRef = React.useRef<L.TileLayer | null>(null);
+    const userMarkerRef = React.useRef<L.Marker | null>(null);
     const [leafletMap, setLeafletMap] = useState<L.Map | null>(null);
 
     const [filterChip, setFilterChip] = useState<FilterChip>("all");
@@ -305,14 +378,7 @@ const DisasterMap: React.FC = () => {
     const [focusEventNonce, setFocusEventNonce] = useState(0);
     const [focusedHazardId, setFocusedHazardId] = useState<string | null>(null);
     const [focusHazardNonce, setFocusHazardNonce] = useState(0);
-
-    const [showReportModal, setShowReportModal] = useState(false);
-    const [isPickingOnMap, setIsPickingOnMap] = useState(false);
-    const [pickedCoords, setPickedCoords] = useState<
-        { latitude: number; longitude: number } | undefined
-    >(undefined);
-    const pickedMarkerRef = React.useRef<L.Marker | null>(null);
-    const userMarkerRef = React.useRef<L.Marker | null>(null);
+    const [showHelp, setShowHelp] = useState(false);
 
     const {
         data: vndmsHazards = [],
@@ -322,10 +388,7 @@ const DisasterMap: React.FC = () => {
         dataUpdatedAt: vndmsUpdatedAt,
     } = useVndmsHazards(true);
 
-    const {
-        data: storedHazards = [],
-        refetch: refetchStored,
-    } = useQuery({
+    const { data: storedHazards = [], refetch: refetchStored } = useQuery({
         queryKey: ["hazards", "active-public"],
         queryFn: () => hazardsApi.list({ is_active: true, limit: 200 }),
         staleTime: 60_000,
@@ -335,26 +398,52 @@ const DisasterMap: React.FC = () => {
     const { data: publicEvents = [], refetch: refetchEvents } =
         usePublicEmergencyEvents(true, 100);
 
-    // Initialize the map
+    // Initialize the map. The container must have an explicit height (the page
+    // body is a full-height flex column) or Leaflet renders a 0px canvas.
     React.useEffect(() => {
-        if (!containerRef.current || mapRef.current) return;
-        const map = L.map(containerRef.current, {
+        const container = containerRef.current;
+        if (!container || mapRef.current) return;
+
+        const map = L.map(container, {
             center: VIETNAM_CENTER,
             zoom: 6,
             maxZoom: 19,
             scrollWheelZoom: true,
         });
-        fetchTileConfig().then((cfg) => {
-            if (!mapRef.current) return;
-            L.tileLayer(cfg.tileUrl, {
-                attribution: cfg.attribution,
-                maxZoom: cfg.maxZoom,
-                ...(cfg.maxNativeZoom ? { maxNativeZoom: cfg.maxNativeZoom } : {}),
-            }).addTo(mapRef.current);
-        });
         mapRef.current = map;
         setLeafletMap(map);
+
+        let cancelled = false;
+        fetchTileConfig()
+            .then((cfg) => {
+                if (cancelled || mapRef.current !== map) return;
+                const tileLayer = L.tileLayer(cfg.tileUrl, {
+                    attribution: cfg.attribution,
+                    maxZoom: cfg.maxZoom,
+                    ...(cfg.maxNativeZoom ? { maxNativeZoom: cfg.maxNativeZoom } : {}),
+                });
+                tileLayer.addTo(map);
+                tileLayerRef.current = tileLayer;
+            })
+            .catch((err) => {
+                console.error("Failed to load tile config", err);
+            });
+
+        // The flex layout can settle after mount; make sure Leaflet measures it.
+        const resizeFrame = window.requestAnimationFrame(() => {
+            if (mapRef.current === map) {
+                map.invalidateSize();
+            }
+        });
+
         return () => {
+            cancelled = true;
+            window.cancelAnimationFrame(resizeFrame);
+            if (tileLayerRef.current) {
+                tileLayerRef.current.remove();
+                tileLayerRef.current = null;
+            }
+            userMarkerRef.current = null;
             map.remove();
             mapRef.current = null;
             setLeafletMap(null);
@@ -491,71 +580,6 @@ const DisasterMap: React.FC = () => {
         );
     }, [leafletMap]);
 
-    // ── Pick-on-map handlers (for incident report) ───────────────────────────
-    const placePickedMarker = useCallback(
-        (lat: number, lng: number) => {
-            if (!leafletMap) return;
-            if (pickedMarkerRef.current) {
-                pickedMarkerRef.current.setLatLng([lat, lng]);
-            } else {
-                const icon = L.divIcon({
-                    className: "",
-                    html: `<div style="
-                        width:32px;height:32px;border-radius:50% 50% 50% 0;
-                        background:#f59e0b;
-                        transform:rotate(-45deg);
-                        border:3px solid white;
-                        box-shadow:0 2px 6px rgba(0,0,0,0.4);
-                        display:flex;align-items:center;justify-content:center;
-                        ">
-                          <span style="transform:rotate(45deg);font-size:14px">📍</span>
-                        </div>`,
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 32],
-                });
-                pickedMarkerRef.current = L.marker([lat, lng], { icon }).addTo(
-                    leafletMap
-                );
-            }
-        },
-        [leafletMap]
-    );
-
-    const startPickOnMap = useCallback(() => {
-        setIsPickingOnMap(true);
-        setShowReportModal(false);
-    }, []);
-
-    React.useEffect(() => {
-        if (!leafletMap || !isPickingOnMap) return;
-        const container = leafletMap.getContainer();
-        const prevCursor = container.style.cursor;
-        container.style.cursor = "crosshair";
-
-        const handler = (e: L.LeafletMouseEvent) => {
-            const { lat, lng } = e.latlng;
-            setPickedCoords({ latitude: lat, longitude: lng });
-            placePickedMarker(lat, lng);
-            setIsPickingOnMap(false);
-            setShowReportModal(true);
-        };
-        leafletMap.on("click", handler);
-        return () => {
-            leafletMap.off("click", handler);
-            container.style.cursor = prevCursor;
-        };
-    }, [leafletMap, isPickingOnMap, placePickedMarker]);
-
-    const handleCloseReportModal = useCallback(() => {
-        setShowReportModal(false);
-        setIsPickingOnMap(false);
-        if (pickedMarkerRef.current && leafletMap) {
-            leafletMap.removeLayer(pickedMarkerRef.current);
-            pickedMarkerRef.current = null;
-        }
-        setPickedCoords(undefined);
-    }, [leafletMap]);
-
     // ── Render ────────────────────────────────────────────────────────────────
     const eventsForLayer = useMemo(
         () => publicEvents.filter((e) => !!pointFromEvent(e)),
@@ -567,7 +591,7 @@ const DisasterMap: React.FC = () => {
     return (
         <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900">
             {/* ── Top bar (red gradient, citizen-first) ── */}
-            <header className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white px-4 py-3 flex items-center gap-3 z-50 relative shadow-md">
+            <header className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white px-4 py-3 flex items-center gap-3 z-50 relative shadow-md shrink-0">
                 <Link to="/" className="hidden sm:block">
                     <h1 className="text-lg font-bold text-white drop-shadow-sm">
                         SynapseCity SOS
@@ -624,8 +648,8 @@ const DisasterMap: React.FC = () => {
             </header>
 
             {/* ── Body: full-width map + floating right panel ── */}
-            <div className="flex-1 relative overflow-hidden">
-                <div ref={containerRef} className="w-full h-full" />
+            <div className="flex-1 min-h-0 relative overflow-hidden">
+                <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
                 {leafletMap && filteredVndms.length > 0 && (
                     <VndmsHazardLayer map={leafletMap} hazards={filteredVndms} />
@@ -787,7 +811,7 @@ const DisasterMap: React.FC = () => {
                     </div>
                 </aside>
 
-                {/* Bottom CTA bar */}
+                {/* Bottom SOS help bar */}
                 <div className="absolute bottom-3 left-3 right-3 z-[1000] flex justify-center pointer-events-none">
                     <div className="bg-white/95 backdrop-blur rounded-2xl border border-slate-200 shadow-xl p-2 flex gap-2 pointer-events-auto">
                         <a
@@ -798,16 +822,15 @@ const DisasterMap: React.FC = () => {
                             <span className="text-sm">Gọi 114</span>
                         </a>
                         <button
-                            onClick={() => setShowReportModal(true)}
+                            onClick={() => setShowHelp(true)}
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 transition-colors shadow-sm"
                         >
-                            <Megaphone size={16} />
-                            <span className="text-sm">Báo sự cố</span>
+                            <LifeBuoy size={16} />
+                            <span className="text-sm">Hướng dẫn an toàn</span>
                         </button>
                         <button
-                            disabled
-                            title="Sắp ra mắt"
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-500 font-bold cursor-not-allowed"
+                            onClick={() => setShowHelp(true)}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors"
                         >
                             <Home size={16} />
                             <span className="text-sm">Nơi trú ẩn gần</span>
@@ -816,66 +839,9 @@ const DisasterMap: React.FC = () => {
                 </div>
             </div>
 
-            {/* ── Pick-on-map banner ── */}
-            {isPickingOnMap && (
-                <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[1500] bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-                    📍 Click vào vị trí trên bản đồ để chọn
-                    <button
-                        onClick={() => {
-                            setIsPickingOnMap(false);
-                            setShowReportModal(true);
-                        }}
-                        className="ml-2 text-white/80 hover:text-white text-xs underline"
-                    >
-                        Huỷ
-                    </button>
-                </div>
-            )}
-
-            {/* ── Report modal ── */}
-            {showReportModal && (
-                <div
-                    className="fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4"
-                    onClick={handleCloseReportModal}
-                >
-                    <div
-                        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="p-5 border-b border-slate-100 flex items-start justify-between bg-gradient-to-r from-amber-50 to-orange-50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                                    <Megaphone className="text-amber-600" size={20} />
-                                </div>
-                                <div>
-                                    <h2 className="font-bold text-slate-900 text-lg">
-                                        Báo sự cố
-                                    </h2>
-                                    <p className="text-xs text-slate-500">
-                                        Gửi thông tin tới chính quyền
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={handleCloseReportModal}
-                                className="p-1 hover:bg-white/60 rounded transition-colors"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-5">
-                            <IncidentReportForm
-                                hideLookup
-                                defaultCoordinates={pickedCoords}
-                                onPickOnMap={startPickOnMap}
-                                isPickingOnMap={isPickingOnMap}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
+            {showHelp && <SafetyHelpModal onClose={() => setShowHelp(false)} />}
         </div>
     );
 };
 
-export default DisasterMap;
+export default PublicHazardMap;

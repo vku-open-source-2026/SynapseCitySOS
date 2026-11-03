@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { httpClient } from '../lib/httpClient';
+import { asList, httpClient } from '../lib/httpClient';
 import type {
   EOPGenerateRequest,
   EOPMarkdownUpdateRequest,
@@ -20,7 +20,7 @@ export interface EOPListParams {
 export const eopApi = {
   list: async (params?: EOPListParams): Promise<EOPPlan[]> => {
     const response = await httpClient.get<EOPPlan[]>('/emergency/eop', { params });
-    return response.data;
+    return asList<EOPPlan>(response.data);
   },
 
   getById: async (id: string): Promise<EOPPlan> => {

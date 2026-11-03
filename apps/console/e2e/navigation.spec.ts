@@ -11,10 +11,9 @@ describe('Navigation Flow', () => {
     await waitFor(() => document.body, { timeout: 5000 });
   });
 
-  test('should navigate from homepage to map', async () => {
-    // Look for link or button to map
-    const mapLink = screen.queryByRole('link', { name: /map/i }) ||
-                    screen.queryByRole('button', { name: /map|explore/i });
+  test('should navigate from homepage to the public hazard map', async () => {
+    const mapLinks = screen.queryAllByRole('link', { name: /bản đồ nguy cơ/i });
+    const mapLink = mapLinks[0];
 
     if (mapLink) {
       await userEvent.click(mapLink);
@@ -25,8 +24,8 @@ describe('Navigation Flow', () => {
   });
 
   test('should navigate from homepage to login', async () => {
-  const loginLink = screen.queryByRole('link', { name: /login|đăng nhập/i }) ||
-                     screen.queryByRole('button', { name: /login|đăng nhập/i });
+    const loginLink = screen.queryByRole('link', { name: /login|đăng nhập/i }) ||
+                      screen.queryByRole('button', { name: /login|đăng nhập/i });
 
     if (loginLink) {
       await userEvent.click(loginLink);
@@ -36,26 +35,27 @@ describe('Navigation Flow', () => {
     }
   });
 
-  test('should navigate between public pages', async () => {
-    // Test navigation to map
+  test('should navigate between public SOS pages', async () => {
     await navigateTo('/map');
     await waitFor(() => {
       expect(window.location.pathname).toMatch(/.*map/);
     }, { timeout: 5000 });
 
-    // Test navigation to public report
-    await navigateTo('/public/report');
+    await navigateTo('/docs');
     await waitFor(() => {
-      expect(window.location.pathname).toMatch(/.*report/);
+      expect(window.location.pathname).toMatch(/.*docs/);
+    }, { timeout: 5000 });
+
+    await navigateTo('/about');
+    await waitFor(() => {
+      expect(window.location.pathname).toMatch(/.*about/);
     }, { timeout: 5000 });
   });
 
   test('should handle protected routes', async () => {
-    // Try to access admin route without auth
     await navigateTo('/admin');
     await waitFor(() => document.body, { timeout: 5000 });
 
-    // Should redirect to login or show access denied
     const currentPath = window.location.pathname;
     expect(currentPath.includes('/login') || currentPath.includes('/admin')).toBeTruthy();
   });

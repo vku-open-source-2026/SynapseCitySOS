@@ -1,0 +1,200 @@
+# SynapseCitySOS — product boundary
+
+Status: repo-local reference for the 2026-11-03 feature split. The authoritative
+workspace contract is `FEATURE_BOUNDARY.md` at the workspace root (outside this
+repository).
+
+## Identity
+
+| Field | Value |
+| --- | --- |
+| Product | SynapseCitySOS |
+| Tier | 3 |
+| Domain | Emergency operations |
+| Public URL | `https://sos.synapsecity.sbs` |
+| Console | `https://sos.synapsecity.sbs` (served through the gateway) |
+| API | `https://sos.synapsecity.sbs/v1` |
+| Sibling product | SynapseCity at `https://synapsecity.sbs` |
+| License | Apache-2.0 (`LICENSE`, `NOTICE`, `THIRD-PARTY.md`) |
+
+## Dependency contract
+
+```text
+SynapseCitySOS -> @synapsedx/capabilities -> @synapseone/sdk -> SynapseOne
+```
+
+- Tier 2 only: `https://synapsedx.sbs`, through `@synapsedx/capabilities`.
+- No `@synapseone/sdk` import, SynapseOne call, Tier-1 service access or Tier-2
+  database access from this repository.
+- No database, queue, cache or filesystem fallback. Domain records are written
+  through the Tier-2 records API; public projections are read through the
+  Tier-2 publication API.
+- No call to SynapseCity. A public HTTPS link to City is navigation only.
+
+## Owned capabilities
+
+- Flood, storm, landslide and other hazard feeds, including VNDMS live data.
+- Emergency events and public emergency projection.
+- Emergency operations plans (EOP).
+- Dispatch orders and responder assignment.
+- Emergency resource units: personnel, vehicles, medical supplies, equipment
+  and shelters.
+- SITREP and deltas.
+- AAR.
+- Live hazard SSE stream.
+- Emergency command centre, phase boards and rescue operation view.
+- Public hazard/emergency map.
+- Map tiles, geocoding, reverse geocoding and AI capability instance for this
+  product.
+
+## Not owned
+
+SynapseCitySOS does **not** own:
+
+- city assets or the asset registry/GIS lifecycle;
+- city incidents or citizen incident reports;
+- IoT sensors or readings;
+- maintenance work orders, preventive maintenance or the technician portal;
+- infrastructure alerts;
+- budgets or budget transactions;
+- operational reports;
+- city operators or user administration;
+- geofences or CSV/data ingestion;
+- the public asset map, public asset lookup or public incident reporting.
+
+These belong to SynapseCity at `https://synapsecity.sbs`. The only permitted
+reference is a public HTTPS navigation link; never an API call, shared dataset
+or embedded data source. An emergency event may store opaque
+`affected_asset_ids`; SOS does not resolve or copy those assets.
+
+## Responders are resource units
+
+SOS responders are represented as records in `sos-resource-units`, exposed
+through `/v1/emergency/resources`. They are **not** City user records:
+
+- SOS does not expose `/v1/users`.
+- SOS never reads or writes `city-users`.
+- Dispatch assignment references an SOS resource unit, not a City operator ID.
+  The canonical field is `assigned_resource_unit_id`; `assigned_user_id` is a
+  deprecated wire mirror of the same opaque resource-unit id.
+- Login/register/profile settings use the SOS `/v1/auth` session shell. They do
+  not make a responder a City user.
+
+## Auth shell
+
+`/v1/auth/*` is reachable through the gateway and implemented by
+`apps/sos-service`. It issues a stateless HS256 session token
+(`event: access | refresh`) signed with `AUTH_SECRET`. The shell stores no
+passwords and creates no SOS user dataset or City user record; registration and
+password change are acknowledgements only. If `AUTH_SECRET` is unset, the
+service generates an ephemeral secret at start-up and logs a warning.
+
+Production identity (password verification, MFA, account lifecycle, revocation)
+must be delegated to the Tier-1 IAM/API gateway. Until then any non-empty
+username/password opens a shell session, which is suitable only for the demo and
+internal console.
+
+Internal emergency routes require `Authorization: Bearer <access_token>`, as do
+hazard mutations (create/update/deploy/expire-stale). The unauthenticated public
+surface is limited to `/v1/emergency/public`, `/v1/emergency/stream/hazards`,
+`/v1/hazards` reads (`/v1/hazards`, `/v1/hazards/recent`,
+`/v1/hazards/vndms-live`, `/v1/hazards/geo/*`), `/v1/map/*`, `/v1/geo/*`,
+`/v1/ai/*`, `/v1/sos`, `/health` and `/ready`.
+
+## API namespace ownership
+
+Owned:
+
+```text
+GET  /health, /ready
+GET  /v1/sos
+*    /v1/auth
+*    /v1/emergency
+*    /v1/emergency/eop
+*    /v1/emergency/dispatch
+*    /v1/emergency/resources
+*    /v1/emergency/sitrep
+*    /v1/emergency/after-action
+*    /v1/emergency/stream/hazards
+*    /v1/hazards
+*    /v1/geo
+*    /v1/map
+*    /v1/ai
+```
+
+Foreign namespaces must return HTTP `404` with `{ "error": "not_found" }`
+before any handler or Tier-2 call:
+
+```text
+/v1/assets*        /v1/incidents*
+/v1/maintenance*   /v1/iot*
+/v1/alerts*        /v1/budgets*
+/v1/reports*       /v1/geofences*
+/v1/ingest*        /v1/notifications*
+/v1/public/assets* /v1/public/incidents*
+```
+
+`GET /v1/sos` advertises the owned features above and explicitly lists the
+not-owned city features.
+
+## Dataset ownership
+
+Every dataset uses the `sos-` prefix. A `city-` dataset is foreign and must
+never be read or written. The service fails at start-up if a configured dataset
+does not use the SOS prefix.
+
+```text
+sos-emergency-events        sos-eop-plans
+sos-dispatch-orders         sos-resource-units
+sos-sitreps                 sos-hazard-layers
+sos-after-action-reports
+```
+
+## Console route ownership
+
+Owned:
+
+```text
+/                              SOS landing
+/about                         SOS product
+/docs                          SOS API docs
+/map                           public hazard/emergency map
+/login /register               auth shell
+/admin                         emergency operations dashboard
+/admin/emergency-center        command centre
+/admin/emergency-center/before during after
+/admin/emergency-center/operations/$eventId
+/admin/settings                self-service profile (shared shell; no user administration)
+```
+
+Never add:
+
+```text
+/admin/assets* /admin/incidents* /admin/iot* /admin/budgets*
+/admin/reports* /admin/alerts* /admin/ingest /admin/users*
+/technician* /asset/$id /public/report* /public/incidents*
+/disaster (use /map for the public hazard map)
+```
+
+## Cross-product rules
+
+- Allowed: a public HTTPS link to `https://synapsecity.sbs` in navigation or
+  documentation.
+- Forbidden: calling a City endpoint, importing City modules or types, reading
+  a `city-*` dataset, sharing a queue/cache/database, or proxying City traffic
+  through the SOS gateway.
+- Map, geocoding and AI are per-product instances. They may use the same
+  external provider, but they never share a database, cache or server-side
+  proxy with City.
+- Auth, login, register and profile settings are shared **shell code** only.
+  They are copied per product and never share a user table or session store.
+
+## Change checklist
+
+1. The feature belongs to the owned list above.
+2. The API path is in the SOS namespace list and uses `sos-*` datasets.
+3. The console route is in the owned route list.
+4. Responders are resource units, never `/v1/users` entries.
+5. No import, URL or type comes from SynapseCity.
+6. `npm run build`, `npm test` and the gateway 404 tests pass.
+7. `README.md`, `AGENTS.md` and this file stay consistent.

@@ -14,10 +14,9 @@ const Footer = () => {
                     <div className="flex flex-col space-y-3">
                         <Link
                             to="/map"
-                            search={{ assetId: undefined }}
                             className="text-sm text-[#6C7580] flex w-fit items-center space-x-2 capitalize hover:underline"
                         >
-                            Bản đồ hạ tầng
+                            Bản đồ nguy cơ
                         </Link>
                         <Link
                             to="/docs"

@@ -1,296 +1,155 @@
-# SynapseCity SOS Frontend
+# SynapseCitySOS console
 
-Modern React application for infrastructure management and monitoring, built with cutting-edge technologies for optimal performance and developer experience.
+React 19 + TypeScript console for emergency operations. It is served at
+`https://sos.synapsecity.sbs` and talks to the SOS gateway under `/v1`.
 
-## Tech Stack
+This console is part of SynapseCitySOS only. It does not implement city
+infrastructure operations; those pages and APIs belong to the sibling
+SynapseCity product. See [`../../PRODUCT_BOUNDARY.md`](../../PRODUCT_BOUNDARY.md);
+the workspace `FEATURE_BOUNDARY.md` holds the authoritative split.
 
-### Core
-- **React 19.2** - Latest React with modern features
-- **TypeScript 5.9** - Type-safe JavaScript
-- **Vite 7.2** - Lightning-fast build tool
+## Product scope
 
-### Routing & Navigation
-- **TanStack Router 1.139** - Type-safe, file-based routing
-  - Auto-generated route tree
-  - Built-in code splitting
-  - Type-safe navigation and params
-  - Route devtools in development
+Owned console areas:
 
-### State Management
-- **Zustand 5.0** - Lightweight state management
-  - Minimal boilerplate
-  - TypeScript support
-  - Persistence middleware
-  - No context providers needed
+- emergency operations dashboard and command centre;
+- before/during/after phase boards;
+- rescue operation view per emergency event;
+- hazard feeds and the public hazard/emergency map;
+- emergency events and public emergency projection;
+- EOP plans;
+- dispatch orders and responder assignment;
+- emergency resource units;
+- SITREP and AAR;
+- live hazard SSE;
+- self-service profile settings.
 
-### Data Fetching
-- **TanStack Query 5.90** - Powerful async state management
-  - Smart caching
-  - Automatic refetching
-  - Optimistic updates
-  - Query devtools
+Not owned and never added here: city assets, city incidents, IoT, maintenance,
+technician portal, infrastructure alerts, budgets, operational reports, city
+users, geofences, data ingest, public asset map and public incident reporting.
+SOS responders are resource units, not City user records.
 
-### HTTP Client
-- **Axios 1.13** - Enhanced HTTP client
-  - Request/response interceptors
-  - Automatic auth token injection
-  - Centralized error handling
-  - Configurable timeouts
+## Tech stack
 
-### Styling
-- **Tailwind CSS 4.1** - Utility-first CSS framework
-- **clsx** - Conditional className utility
-- **tailwind-merge** - Merge Tailwind classes efficiently
-- **shadcn/ui** (configured) - Beautiful component system
+- React 19.2, TypeScript 5.9, Vite 7.2
+- TanStack Router 1.139 (file-based, type-safe routes)
+- TanStack Query 5.90 for server state
+- Zustand 5.0 for auth and app state
+- Axios 1.13 through `src/lib/httpClient.ts`
+- Tailwind CSS 4.1, shadcn/ui primitives, Lucide and Font Awesome icons
+- Leaflet 1.9 / React Leaflet 5.0, Leaflet Draw and Leaflet Heat
 
-### Maps & Visualization
-- **Leaflet 1.9** - Interactive maps
-- **React Leaflet 5.0** - React bindings for Leaflet
-- **Leaflet Draw** - Drawing tools for maps
-- **Leaflet Heat** - Heatmap visualization
+## Routes
 
-### UI Components & Icons
-- **Lucide React** - Beautiful icon library
-- **Font Awesome** - Additional icons
-- **React QR Code** - QR code generation
-
-## Project Structure
-
+```text
+/                              SOS landing
+/about                         SOS product
+/docs                          SOS API docs
+/map                           public hazard/emergency map
+/login /register               auth shell
+/admin                         emergency operations dashboard
+/admin/emergency-center        command centre
+/admin/emergency-center/before during after
+/admin/emergency-center/operations/$eventId
+/admin/settings                self-service profile
 ```
+
+`src/routeTree.gen.ts` is generated from `src/routes/` and must contain only
+these owned routes. There is no `/disaster` route; the public hazard map is
+`/map`.
+
+## Project structure
+
+```text
 src/
-├── components/          # Reusable UI components
-│   ├── ui/             # shadcn/ui components
-│   ├── Header.tsx
-│   ├── Map.tsx
-│   └── ...
-├── pages/              # Page components
-│   ├── HomePage.tsx
-│   ├── PublicMap.tsx
-│   └── Dashboard.tsx
-├── routes/             # TanStack Router routes
-│   ├── __root.tsx     # Root layout
-│   ├── index.tsx      # Home route
-│   ├── map.tsx        # Map route
-│   └── admin.tsx      # Admin route
-├── stores/             # Zustand stores
-│   ├── authStore.ts   # Authentication state
-│   ├── appStore.ts    # Application state
-│   └── index.ts
-├── lib/                # Utilities and configurations
-│   ├── httpClient.ts  # Axios configuration
-│   ├── queryClient.ts # TanStack Query config
-│   └── utils.ts       # Helper functions (cn, etc.)
-├── hooks/              # Custom React hooks
-├── utils/              # Utility functions
-├── api.ts              # API functions
-├── main.tsx            # Application entry point
-└── routeTree.gen.ts    # Auto-generated (don't edit)
+├── api/                   API modules and barrel exports
+├── components/            shared components (ui/, map, header)
+├── hooks/                 custom hooks
+├── lib/                   httpClient, queryClient, tile config, utils
+├── pages/                 page components (including pages/emergency)
+├── routes/                TanStack Router route files
+├── stores/                authStore, appStore
+├── types/                 SOS domain types
+└── routeTree.gen.ts       generated route tree (do not edit)
 ```
 
-## Getting Started
+## Getting started
 
-### Prerequisites
-- Node.js 20.19+ or 22.12+
-- pnpm (recommended) or npm
-
-### Installation
+Prerequisites: Node.js 20.19+ or 22.12+ and npm.
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Start development server
-pnpm run dev
-
-# Build for production
-pnpm run build
-
-# Preview production build
-pnpm run preview
-
-# Lint code
-pnpm run lint
+npm ci
+npm run dev          # development server
+npm run build        # production build
+npm run preview      # preview the production build
+npm run lint
+npm test
 ```
 
-### Environment Variables
-
-Create a `.env` file in the root directory:
+Environment:
 
 ```env
-VITE_BASE_API_URL=http://localhost:8000/api
-VITE_LEADERBOARD_URL=https://contribapi.sos.synapsecity.sbs/api
+VITE_BASE_API_URL=/v1
+VITE_LEADERBOARD_URL=/v1
+VITE_TURNSTILE_SITE_KEY=
 ```
 
-## Key Features
+Use the same-origin `/v1` path in production. Do not point the console at a
+private service, localhost dependency or the City origin.
 
-### Type-Safe Routing
-Routes are defined using file-based routing with full TypeScript support:
+## API calls
 
-```tsx
-// src/routes/map.tsx
-import { createFileRoute } from '@tanstack/react-router';
+Always use the configured client:
 
-export const Route = createFileRoute('/map')({
-  component: MapPage,
-  validateSearch: (search) => ({
-    assetId: search.assetId as string | undefined,
-  }),
+```ts
+import { httpClient } from '@/lib/httpClient';
+
+const events = await httpClient.get('/emergency');
+const hazards = await httpClient.get('/hazards/recent');
+await httpClient.post('/emergency', {
+  title: 'Flood warning',
+  severity: 'high',
+  status: 'monitoring',
 });
 ```
 
-### State Management
-Simple and powerful state management with Zustand:
+With TanStack Query:
 
-```tsx
-import { useAuthStore } from '@/stores';
-
-function Component() {
-  const { user, login, logout } = useAuthStore();
-  // Authentication state with persistence
-}
-```
-
-### Data Fetching
-Efficient data fetching with TanStack Query:
-
-```tsx
+```ts
 const { data, isLoading } = useQuery({
-  queryKey: ['assets'],
-  queryFn: getAssets,
+  queryKey: ['emergency-events'],
+  queryFn: () => httpClient.get('/emergency').then((response) => response.data),
 });
 ```
 
-### HTTP Client
-Configured Axios client with interceptors:
+The base URL is `/v1`, so paths in calls omit the `/v1` prefix.
 
-```tsx
-import { httpClient } from '@/lib/httpClient';
+Live hazard updates use the SOS SSE endpoint:
 
-// Automatic auth token injection
-// Centralized error handling
-// 401 auto-logout
-const response = await httpClient.get('/assets/');
+```ts
+const stream = new EventSource('/v1/emergency/stream/hazards');
+stream.onmessage = (message) => {
+  // update hazard layers / command-centre state
+};
 ```
 
-## Adding shadcn/ui Components
+## Map
 
-The project is pre-configured for shadcn/ui. Add components as needed:
-
-```bash
-# Add a button component
-npx shadcn@latest add button
-
-# Add multiple components
-npx shadcn@latest add button card dialog
-```
-
-Use the component:
-
-```tsx
-import { Button } from '@/components/ui/button';
-
-<Button variant="default">Click me</Button>
-```
-
-## Development
-
-### Creating a New Route
-
-1. Create a file in `src/routes/`:
-```tsx
-// src/routes/about.tsx
-export const Route = createFileRoute('/about')({
-  component: AboutPage,
-});
-```
-
-2. The route is automatically available at `/about`
-
-### Navigation
-
-```tsx
-import { Link, useNavigate } from '@tanstack/react-router';
-
-// Declarative
-<Link to="/map">Go to Map</Link>
-
-// Programmatic
-const navigate = useNavigate();
-navigate({ to: '/admin' });
-```
-
-### Making API Calls
-
-```tsx
-// Always use the configured httpClient
-import { httpClient } from '@/lib/httpClient';
-
-const response = await httpClient.get('/assets/');
-const data = response.data;
-```
-
-## Migration from React Router
-
-See [MIGRATION.md](./MIGRATION.md) for detailed migration guide from React Router DOM to TanStack Router.
-
-## Quick Reference
-
-See [QUICK_START.md](./QUICK_START.md) for common patterns and examples.
-
-## Build Configuration
-
-### Vite Configuration
-- TanStack Router plugin for route generation
-- Path aliases (`@/` → `src/`)
-- React Fast Refresh
-- Auto-reload on changes
-
-### TypeScript Configuration
-- Strict mode enabled
-- Path aliases configured
-- ESM module system
-- React JSX transform
-
-## Performance Features
-
-- Route-based code splitting
-- Optimistic UI updates
-- Smart query caching (5min stale time)
-- Request deduplication
-- Automatic retry with exponential backoff
-- Window focus refetching
-
-## Development Tools
-
-Available in development mode:
-- TanStack Router DevTools
-- TanStack Query DevTools (to be enabled)
-- React DevTools (browser extension)
-
-## Browser Support
-
-- Modern browsers (Chrome, Firefox, Safari, Edge)
-- ES2022 features
-- CSS Grid and Flexbox
-
-## Contributing
-
-1. Follow the existing code structure
-2. Use TypeScript for all new code
-3. Use the configured httpClient for API calls
-4. Use Zustand for global state, React Query for server state
-5. Add types for all components and functions
-6. Test your changes locally
+Leaflet and MapLibre render hazard layers and emergency events. Tiles,
+autocomplete, geocoding and reverse geocoding go through the SOS backend
+(`/v1/map` and `/v1/geo`); the VIETMAP key stays server-side. This is an SOS
+instance; do not reuse the City map, geocoding client or database.
 
 ## Documentation
 
-- [MIGRATION.md](./MIGRATION.md) - Tech stack migration guide
-- [QUICK_START.md](./QUICK_START.md) - Quick reference and examples
-- [TanStack Router Docs](https://tanstack.com/router)
-- [Zustand Docs](https://docs.pmnd.rs/zustand)
-- [TanStack Query Docs](https://tanstack.com/query)
-- [shadcn/ui Docs](https://ui.shadcn.com)
+- [SOS product boundary](../../PRODUCT_BOUNDARY.md)
+- [Tech stack migration](./MIGRATION.md)
+- [Quick start](./QUICK_START.md)
+- [TanStack Router](https://tanstack.com/router)
+- [TanStack Query](https://tanstack.com/query)
+- [Zustand](https://docs.pmnd.rs/zustand)
+- [shadcn/ui](https://ui.shadcn.com)
 
 ## License
 
-MIT
+Apache-2.0. See the repository `LICENSE`, `NOTICE` and `THIRD-PARTY.md`.

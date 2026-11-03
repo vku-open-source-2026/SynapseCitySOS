@@ -1,5 +1,16 @@
 # API Documentation for Frontend
 
+> **Scope notice (2026-11-03).** This is a legacy OpenInfra infrastructure
+> document retained for historical reference. It describes the separate
+> **SynapseCity** product (`https://synapsecity.sbs`), not SynapseCitySOS.
+> Do not call these endpoints from this product.
+> SynapseCitySOS does not own or implement city assets, city incidents, IoT,
+> maintenance, infrastructure alerts, budgets, operational reports, city users,
+> geofences, data ingest, the technician portal, the public asset map or public
+> incident reporting. For SOS scope and routes, see
+> [`../../../PRODUCT_BOUNDARY.md`](../../../PRODUCT_BOUNDARY.md).
+
+
 This document provides a comprehensive overview of all APIs available for frontend integration, including endpoints, request/response formats, authentication, and data flow.
 
 ## Table of Contents

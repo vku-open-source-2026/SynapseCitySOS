@@ -8,21 +8,7 @@ import axios, {
 import { useAuthStore } from "../stores";
 import type { AxiosResponse } from "axios";
 
-/** Normalize list endpoints that may return a bare array or an envelope. */
-export function asList<T>(value: unknown): T[] {
-    if (Array.isArray(value)) {
-        return value as T[];
-    }
-    if (value && typeof value === "object") {
-        const record = value as Record<string, unknown>;
-        for (const key of ["data", "items", "results"]) {
-            if (Array.isArray(record[key])) {
-                return record[key] as T[];
-            }
-        }
-    }
-    return [];
-}
+export { asList, isNonListPayload } from "./asList";
 
 // Create main API instance
 // Force HTTPS in production
@@ -36,17 +22,6 @@ const getApiBaseUrl = () => {
 
 export const httpClient: AxiosInstance = axios.create({
     baseURL: getApiBaseUrl(),
-    timeout: 30000,
-    headers: {
-        "Content-Type": "application/json",
-    },
-});
-
-// Create leaderboard API instance
-export const leaderboardApi: AxiosInstance = axios.create({
-    baseURL:
-        import.meta.env.VITE_LEADERBOARD_URL ||
-        "/v1",
     timeout: 30000,
     headers: {
         "Content-Type": "application/json",
@@ -123,16 +98,6 @@ httpClient.interceptors.request.use(
     requestErrorInterceptor
 );
 httpClient.interceptors.response.use(
-    responseInterceptor,
-    responseErrorInterceptor
-);
-
-// Apply interceptors to leaderboard API (if needed)
-leaderboardApi.interceptors.request.use(
-    requestInterceptor,
-    requestErrorInterceptor
-);
-leaderboardApi.interceptors.response.use(
     responseInterceptor,
     responseErrorInterceptor
 );

@@ -192,6 +192,22 @@ describe("Emergency Command Center", () => {
         expect(loadingOrContent.length).toBeGreaterThan(0);
     });
 
+    test("should survive a non-array HTML API response without crashing", async () => {
+        // In browser mode the Vite server answers /v1/* with index.html (HTTP
+        // 200). HazardLiveMap must normalize that to an empty list and keep the
+        // command centre rendered instead of throwing hazards.forEach.
+        await navigateTo("/admin/emergency-center");
+        await waitForEmergencyCenter();
+
+        if (isLoginViewVisible()) {
+            return;
+        }
+
+        expect(screen.queryByText(/Something went wrong/i)).toBeNull();
+        expect(screen.queryByText(/hazards\.forEach is not a function/i)).toBeNull();
+        expect(screen.queryByText(/Trung tâm chỉ huy|Emergency Command Center/i)).toBeTruthy();
+    });
+
     test("refresh button triggers data reload without crashing", async () => {
         if (isLoginViewVisible()) {
             return;
