@@ -12,6 +12,7 @@ port, queue or database.
 
 | SOS surface | Tier-2 endpoint (SDK method) | Failure behaviour |
 | --- | --- | --- |
+| Identity `/v1/auth/login`, `/register`, `/refresh`, `/logout`, `/me`, `/change-password` | `POST /v1/capabilities/auth/*` (`auth.login`, `auth.register`, `auth.refresh`, `auth.logout`, `auth.me`, `auth.changePassword`, optional `auth.exchange`) | mapped `401 invalid_credentials` / `400 invalid_request` / `409 identity_conflict` / `503 identity_not_configured`; the Tier-2 token stays inside the signed SOS session, roles come from `SOS_BOOTSTRAP_ADMIN_EMAILS`/`SOS_AUTH_DEFAULT_ROLE` (default responder) |
 | Public emergency projection `/v1/emergency/public` | `GET /v1/capabilities/datasets/sos-emergency-events/entities` (`datasets.entities`, SynapseLDS public entities) | `502 tier2_unavailable`; never falls back to the private records API and never returns a synthetic empty list |
 | Public hazard feeds `/v1/hazards/recent`, `/v1/hazards/vndms-live`, `/v1/emergency/public/status` | `datasets.entities` on `sos-hazard-layers` | same as above |
 | Hazard SSE `/v1/emergency/stream/hazards` | `GET /v1/capabilities/events` (`events.list`) + `datasets.entities` for the refreshed snapshot | named `error` frame + last good snapshot; degrades to a 30 s snapshot poll, counted as `sos_hazard_stream_total{transport="snapshot-poll"}` |

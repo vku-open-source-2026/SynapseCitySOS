@@ -61,15 +61,27 @@ operator IDs. Dispatch assignment references an SOS resource unit under
 `assigned_resource_unit_id`; `assigned_user_id` is a deprecated mirror.
 
 `/v1/auth/*` is a stateless HMAC session shell for the console. It stores no
-passwords and creates no user dataset. The shell is disabled by default and
-only opens when `ALLOW_DEMO_AUTH=true` is explicitly set for a non-production
-demo; `NODE_ENV=production` refuses to start with demo auth enabled. A
-client-supplied `role` is ignored: demo login is `responder`, registration is
-read-only `volunteer`, and demo sessions never grant `admin`/`manager`.
-Production identity must be delegated to the Tier-1 IAM/API gateway;
-`AUTH_SECRET` is optional and falls back to an ephemeral start-up secret with a
-warning. Tokens are accepted only from `Authorization: Bearer`, never a query
-string.
+passwords and creates no user dataset. Identity is verified through the Tier-2
+auth capability (`SOS_AUTH_MODE=tier2`, the default in every environment): the
+`auth` namespace (login/register/refresh/logout/me/changePassword/optional
+exchange) proxies Tier-1 IAM. The Tier-2 access/refresh token is kept inside the
+signed SOS session and forwarded only to Tier-2; it is never returned to the
+browser as a field. `AUTH_SECRET` is optional and falls back to an ephemeral
+start-up secret with a warning. Tokens are accepted only from
+`Authorization: Bearer`, never a query string.
+
+Roles are always server-assigned and never read from the request body, the
+token or `SOS_AUTH_DEFAULT_ROLE=admin`. A verified identity is a `responder`
+unless its email is in `SOS_BOOTSTRAP_ADMIN_EMAILS` (comma-separated), which
+grants `admin`; registration through Tier-2 creates a responder account (or
+`admin` for a bootstrap email). Password changes call Tier-2 when the session
+carries a Tier-2 token.
+
+Demo mode exists only with `SOS_AUTH_MODE=demo` **and** `ALLOW_DEMO_AUTH=true`
+outside production; `NODE_ENV=production` refuses to start with either demo
+switch enabled. Demo login is `responder`, registration is read-only
+`volunteer`, and demo sessions never grant `admin`/`manager`. `SOS_AUTH_MODE=demo`
+in production is a start-up error.
 
 Internal emergency routes require a session **and** a permission:
 `emergency:read` for reads, `emergency:write` for event/SITREP writes,

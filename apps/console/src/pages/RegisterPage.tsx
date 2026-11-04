@@ -14,7 +14,6 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const [formData, setFormData] = useState({
-    username: '',
     email: '',
     password: '',
     full_name: '',
@@ -29,11 +28,14 @@ export function RegisterPage() {
     setLoading(true);
 
     try {
+      // Registration creates a Tier-2 identity with the responder role. The
+      // client cannot request a role; only the operator's bootstrap allow-list
+      // can create an administrator.
       const response = await authApi.register(formData);
       login(response.access_token, response.refresh_token, response.user);
       navigate({ to: '/admin' });
     } catch (err: unknown) {
-      if (isAxiosError<{ detail?: string }>(err)) {
+      if (isAxiosError<{ detail?: string; error?: string }>(err)) {
         setError(err.response?.data?.detail || 'Đăng ký thất bại. Vui lòng thử lại.');
       } else {
         setError('Đăng ký thất bại. Vui lòng thử lại.');
@@ -49,7 +51,7 @@ export function RegisterPage() {
         <CardHeader>
           <CardTitle>Tạo tài khoản</CardTitle>
           <CardDescription>
-            Đăng ký shell demo (chỉ đọc). Danh tính và vai trò sản xuất do Tier-1 IAM cấp qua Tier-2.
+            Tài khoản ứng phó được tạo trên dịch vụ danh tính Tier-2 (Tier-1 IAM) với vai trò responder.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -61,22 +63,12 @@ export function RegisterPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="username">Tên đăng nhập</Label>
-              <Input
-                id="username"
-                type="text"
-                required
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                placeholder="Chọn tên đăng nhập"
-              />
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -88,7 +80,9 @@ export function RegisterPage() {
               <Label htmlFor="full_name">Họ và tên</Label>
               <Input
                 id="full_name"
+                name="full_name"
                 type="text"
+                autoComplete="name"
                 required
                 value={formData.full_name}
                 onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
@@ -100,7 +94,9 @@ export function RegisterPage() {
               <Label htmlFor="phone">Số điện thoại (không bắt buộc)</Label>
               <Input
                 id="phone"
+                name="phone"
                 type="tel"
+                autoComplete="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 placeholder="Nhập số điện thoại"
@@ -111,17 +107,25 @@ export function RegisterPage() {
               <Label htmlFor="password">Mật khẩu</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="new-password"
                 required
+                minLength={6}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Chọn mật khẩu"
+                placeholder="Chọn mật khẩu (tối thiểu 6 ký tự)"
               />
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Đang đăng ký...' : 'Đăng ký'}
             </Button>
+
+            <p className="text-xs text-slate-500">
+              Vai trò được máy chủ gán: mặc định là responder; chỉ email trong danh sách
+              <code> SOS_BOOTSTRAP_ADMIN_EMAILS </code> mới nhận quyền quản trị.
+            </p>
 
             <div className="text-center text-sm">
               <span className="text-gray-600">Đã có tài khoản? </span>

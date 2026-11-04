@@ -9,8 +9,10 @@ import {
   installAuthRoutes,
   requirePermission,
   requireSession,
+  sessionFromRequest,
   type SessionClaims,
 } from './auth';
+import { bootstrapAdmins, configuredAuthMode, demoAuthAllowed } from './identity';
 import { normalizeDispatchAssignment, assignmentResourceUnitId, requestedResourceUnitId } from './dispatch';
 import { computeAfterAction, slaBreachCount } from './after-action';
 import {
@@ -158,9 +160,11 @@ const SOS_METADATA = {
     sdk: '@synapsedx/capabilities',
   },
   auth: {
-    shell: 'hmac-demo-gated',
-    demoEnabled: process.env.ALLOW_DEMO_AUTH === 'true',
-    identityProvider: 'tier-1-iam-via-tier-2',
+    shell: 'hmac-session',
+    mode: configuredAuthMode(),
+    demoEnabled: demoAuthAllowed(),
+    identityProvider: 'tier-2-auth-capability -> tier-1-iam',
+    bootstrapAdminsConfigured: bootstrapAdmins().size > 0,
   },
   limitations: {
     sdk: 'file: workspace dependency until SynapseDX publishes @synapsedx/capabilities 0.2.0 (operator-blocked release step)',
@@ -282,8 +286,10 @@ export function requiredPermissionFor(path: string, method: string): string | nu
 function client(req: Request): CapabilitiesClient {
   const factory = app.locals.createClient as ((request: Request) => CapabilitiesClient) | undefined;
   if (factory) return factory(req);
-  const authorization = req.header('authorization');
-  const token = authorization?.replace(/^Bearer\s+/i, '').trim() || process.env.SYNAPSEDX_TOKEN;
+  // Only the user-scoped Tier-2 credential verified at login is forwarded
+  // upstream. The SOS session token itself (and any arbitrary client-supplied
+  // bearer value) must never reach Tier-2.
+  const token = sessionFromRequest(req)?.tier2_token || process.env.SYNAPSEDX_TOKEN;
   return new CapabilitiesClient({
     baseUrl: PUBLIC_TIER2_URL,
     token: token || undefined,
@@ -702,7 +708,7 @@ app.get('/metrics', (_req, res) => {
 app.get('/v1/sos', (_req, res) => res.json(SOS_METADATA));
 
 app.use('/v1/auth', rateLimiters.auth.middleware);
-installAuthRoutes(app);
+installAuthRoutes(app, { clientForRequest: client });
 
 app.use('/v1', (req, res, next) => {
   if (!isForeignNamespace(req.originalUrl)) return next();

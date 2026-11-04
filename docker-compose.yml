@@ -13,8 +13,14 @@ services:
       SYNAPSEDX_BASE_URL: https://synapsedx.sbs
       ALLOW_LOCAL_DEPENDENCIES: "false"
       AUTH_SECRET: ${AUTH_SECRET:-}
+      # Identity is verified by the Tier-2 auth capability (Tier-1 IAM backed).
+      # `demo` is refused when NODE_ENV=production.
+      SOS_AUTH_MODE: ${SOS_AUTH_MODE:-tier2}
+      SOS_BOOTSTRAP_ADMIN_EMAILS: ${SOS_BOOTSTRAP_ADMIN_EMAILS:-}
+      SOS_AUTH_DEFAULT_ROLE: ${SOS_AUTH_DEFAULT_ROLE:-responder}
+      SOS_AUTH_EXCHANGE: ${SOS_AUTH_EXCHANGE:-false}
       # Production refuses ALLOW_DEMO_AUTH=true at startup. Keep it false in a
-      # production stack and delegate identity to the Tier-1 IAM gateway.
+      # production stack.
       ALLOW_DEMO_AUTH: ${ALLOW_DEMO_AUTH:-false}
       RATE_LIMIT_AUTH_MAX: ${RATE_LIMIT_AUTH_MAX:-60}
       RATE_LIMIT_STREAM_MAX: ${RATE_LIMIT_STREAM_MAX:-30}

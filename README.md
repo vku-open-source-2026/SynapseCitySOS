@@ -84,12 +84,29 @@ SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
 generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
 value in production so sessions survive a restart.
 
-The login/register shell is **disabled by default**. A demo session exists only
-when `ALLOW_DEMO_AUTH=true` is explicitly set for a non-production deployment;
-`NODE_ENV=production` refuses to start with demo auth enabled. Demo login is
-always a `responder` session, registration is read-only (`volunteer`), and a
-client-supplied `role` is ignored. Demo sessions never grant `admin`. Production
-identity must be delegated to the Tier-1 IAM gateway through Tier 2.
+Identity is verified by the Tier-2 auth capability by default
+(`SOS_AUTH_MODE=tier2`, Tier-1 IAM backed). Operators log in with the email and
+password of their Tier-2 account; the Tier-2 access/refresh token is kept inside
+the signed SOS session and is never returned to the browser. A verified identity
+is a `responder`, unless its email is listed in `SOS_BOOTSTRAP_ADMIN_EMAILS`
+(comma-separated, lower-cased), which grants `admin`. A client-supplied `role`
+is always ignored.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SOS_AUTH_MODE` | `tier2` | `tier2` = Tier-2 auth capability; `demo` = development-only shell |
+| `SOS_BOOTSTRAP_ADMIN_EMAILS` | empty | Comma-separated emails that receive `admin` after a verified login/registration |
+| `SOS_AUTH_DEFAULT_ROLE` | `responder` | Fallback role; never `admin` |
+| `SOS_AUTH_EXCHANGE` | `false` | Opt-in delegated token exchange with the `synapsecity-sos` audience |
+| `ALLOW_DEMO_AUTH` | `false` | Enables the demo shell only with `SOS_AUTH_MODE=demo` and `NODE_ENV != production` |
+| `AUTH_SECRET` | empty | HMAC secret for the SOS session; an ephemeral secret is used when empty |
+
+The demo login/register shell is **disabled by default** and needs
+`SOS_AUTH_MODE=demo` **and** `ALLOW_DEMO_AUTH=true` outside production;
+`NODE_ENV=production` refuses to start with either demo switch enabled. Demo
+login is always a `responder` session, registration is read-only (`volunteer`),
+and demo sessions never grant `admin`. In `tier2` mode a login with a
+non-email identifier is rejected with `400 email_required`.
 
 Console development:
 
@@ -125,10 +142,20 @@ GET  /v1/sos
 ```
 
 `/v1/auth/*` is a stateless HMAC-SHA256 session shell for the console:
-login/register/refresh/logout/change-password/me/verify. It stores no password
-and creates no SOS user dataset or City user record; production identity must be
-delegated to the Tier-1 IAM gateway. The shell is demo-gated (see Run) and
-tokens are accepted only from the `Authorization` header, never a query string.
+login/register/refresh/logout/change-password/me/verify. Credentials are
+verified by the Tier-2 auth capability (`auth.login`, `auth.register`,
+`auth.refresh`, `auth.logout`, `auth.me`, `auth.changePassword`, optional
+`auth.exchange`); SOS stores no password and creates no SOS user dataset or City
+user record. The Tier-1/Tier-2 token stays inside the signed SOS session and is
+forwarded only to Tier-2 — it is never returned as a response field. Tokens are
+accepted only from the `Authorization` header, never a query string. Demo mode
+is an explicit development shell (see Run).
+
+Roles are always server-assigned: `SOS_BOOTSTRAP_ADMIN_EMAILS` grants `admin`,
+everything else gets `SOS_AUTH_DEFAULT_ROLE` (`responder`). Registration through
+Tier-2 creates a responder account (or `admin` for a bootstrap email). Password
+changes are delegated to Tier-2 when the session carries a Tier-2 token and
+return `503 identity_not_configured` otherwise.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: reads need `emergency:read`, event/SITREP writes need
@@ -144,6 +171,11 @@ The role→permission matrix is:
 | operator | `emergency:read`, `emergency:write`, `emergency:dispatch` |
 | manager | operator permissions + `emergency:eop` |
 | admin | manager permissions + `emergency:admin` (wildcard) |
+
+In `tier2` mode a normal account is a `responder`; only
+`SOS_BOOTSTRAP_ADMIN_EMAILS` grants `admin`. `manager`/`operator` are reachable
+only through an explicit `SOS_AUTH_DEFAULT_ROLE` configuration or the bootstrap
+allow-list — never through the login/register payload.
 
 
 Hazard reads (`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,

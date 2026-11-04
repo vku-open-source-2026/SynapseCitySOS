@@ -3,17 +3,22 @@
 import { httpClient } from '../lib/httpClient';
 import type { AuthUser } from '../types/auth';
 
+/**
+ * Tier-2 identity is keyed by email address. The service also accepts a legacy
+ * `username` field, but only when its value is an email address.
+ */
 export interface LoginRequest {
-  username: string;
+  email: string;
   password: string;
 }
 
 export interface RegisterRequest {
-  username: string;
   email: string;
   password: string;
   full_name: string;
   phone?: string;
+  /** Legacy demo-shell field; Tier-2 registration ignores it. */
+  username?: string;
 }
 
 export interface AuthResponse {

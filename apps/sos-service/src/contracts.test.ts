@@ -266,6 +266,9 @@ let server: Server;
 let baseUrl: string;
 
 before(async () => {
+  // This file exercises the explicit development-only demo shell; Tier-2
+  // identity has its own suite in identity.test.ts.
+  process.env.SOS_AUTH_MODE = 'demo';
   process.env.ALLOW_DEMO_AUTH = 'true';
   app.locals.createClient = () => fake.asClient();
   server = app.listen(0);

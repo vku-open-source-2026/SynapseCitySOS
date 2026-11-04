@@ -14,7 +14,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: '',
   });
   const [error, setError] = useState('');
@@ -26,15 +26,22 @@ export function LoginPage() {
     setLoading(true);
 
     try {
+      // The service verifies this email/password through the Tier-2 identity
+      // capability; the browser only receives the signed SOS session.
       const response = await authApi.login(formData);
       login(response.access_token, response.refresh_token, response.user);
       navigate({ to: '/admin' });
     } catch (err: unknown) {
       if (isAxiosError<{ detail?: string; error?: string }>(err)) {
-        if (err.response?.data?.error === 'demo_auth_disabled') {
+        const code = err.response?.data?.error;
+        if (code === 'demo_auth_disabled') {
           setError(
-            'Đăng nhập demo đang tắt. Quản trị viên cần bật ALLOW_DEMO_AUTH cho môi trường demo hoặc cấu hình Tier-1 IAM.'
+            'Đăng nhập demo đang tắt. Quản trị viên cần cấu hình SOS_AUTH_MODE=tier2/ALLOW_DEMO_AUTH cho môi trường demo.'
           );
+        } else if (code === 'identity_not_configured' || code === 'identity_unavailable') {
+          setError('Dịch vụ danh tính Tier-2 hiện không khả dụng. Vui lòng thử lại sau.');
+        } else if (code === 'invalid_credentials') {
+          setError('Email hoặc mật khẩu không đúng.');
         } else {
           setError(err.response?.data?.detail || 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin.');
         }
@@ -51,7 +58,7 @@ export function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Đăng nhập tài khoản</CardTitle>
-          <CardDescription>Nhập thông tin để truy cập hệ thống</CardDescription>
+          <CardDescription>Nhập email và mật khẩu để truy cập hệ thống</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -62,14 +69,16 @@ export function LoginPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="username">Tên đăng nhập</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="username"
-                type="text"
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
                 required
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                placeholder="Nhập tên đăng nhập"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Nhập email"
               />
             </div>
 
@@ -77,7 +86,9 @@ export function LoginPage() {
               <Label htmlFor="password">Mật khẩu</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -90,8 +101,9 @@ export function LoginPage() {
             </Button>
 
             <p className="text-xs text-slate-500">
-              Phiên demo chỉ mở khi quản trị viên bật <code>ALLOW_DEMO_AUTH</code>. Danh tính sản xuất
-              do Tier-1 IAM cấp qua Tier-2; sinh trắc học không được hỗ trợ cục bộ.
+              Danh tính do dịch vụ xác thực Tier-2 (Tier-1 IAM) xác minh. SOS chỉ giữ phiên đăng nhập
+              đã ký; mật khẩu và token Tier-2 không được trả về trình duyệt. Sinh trắc học không được
+              hỗ trợ cục bộ.
             </p>
 
             <div className="text-center text-sm">

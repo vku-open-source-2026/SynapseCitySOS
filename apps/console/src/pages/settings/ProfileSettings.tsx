@@ -31,6 +31,7 @@ const ProfileSettings: React.FC = () => {
         confirm_password: "",
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [notice, setNotice] = useState<string>("");
 
     const getApiErrorDetail = (error: unknown): string | undefined => {
         return (error as { response?: { data?: { detail?: string } } })
@@ -56,6 +57,9 @@ const ProfileSettings: React.FC = () => {
                 confirm_password: "",
             });
             setErrors({});
+            setNotice(
+                "Yêu cầu đổi mật khẩu đã được gửi tới dịch vụ danh tính Tier-2. Các phiên khác có thể đã bị thu hồi."
+            );
         },
         onError: (error: unknown) => {
             const detail = getApiErrorDetail(error);
@@ -68,6 +72,7 @@ const ProfileSettings: React.FC = () => {
     const handlePasswordSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setErrors({});
+        setNotice("");
 
         if (!passwordData.current_password) {
             setErrors({ password: "Mật khẩu hiện tại là bắt buộc" });
@@ -116,19 +121,10 @@ const ProfileSettings: React.FC = () => {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField>
-                        <FormLabel>Tên đăng nhập</FormLabel>
-                        <Input
-                            value={user?.username || ""}
-                            disabled
-                            className="bg-slate-50"
-                        />
-                    </FormField>
-
-                    <FormField>
-                        <FormLabel>Email</FormLabel>
+                        <FormLabel>Email đăng nhập</FormLabel>
                         <Input
                             type="email"
-                            value={user?.email || ""}
+                            value={user?.email || user?.username || ""}
                             disabled
                             className="bg-slate-50"
                         />
@@ -146,15 +142,25 @@ const ProfileSettings: React.FC = () => {
                     <FormField>
                         <FormLabel>Vai trò</FormLabel>
                         <Input
-                            value={user?.role || "operator"}
+                            value={user?.role || "responder"}
                             disabled
                             className="bg-slate-50 capitalize"
                         />
                     </FormField>
+
+                    <FormField>
+                        <FormLabel>Quyền hạn</FormLabel>
+                        <Input
+                            value={(user?.permissions || []).join(", ")}
+                            disabled
+                            className="bg-slate-50"
+                        />
+                    </FormField>
                 </div>
                 <p className="mt-4 text-xs text-slate-500">
-                    Thông tin danh tính do dịch vụ xác thực quản lý. Việc quản trị
-                    người dùng và phân quyền đô thị thuộc sản phẩm SynapseCity.
+                    Danh tính do dịch vụ xác thực Tier-2 (Tier-1 IAM) quản lý; SOS chỉ
+                    giữ phiên đã ký và không trả token Tier-2 về trình duyệt. Vai trò do
+                    máy chủ gán (responder mặc định, admin theo danh sách bootstrap).
                 </p>
             </div>
 
@@ -210,6 +216,12 @@ const ProfileSettings: React.FC = () => {
 
                     {errors.password && (
                         <FormError>{errors.password}</FormError>
+                    )}
+
+                    {notice && (
+                        <p className="mt-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+                            {notice}
+                        </p>
                     )}
 
                     <div className="flex gap-4 mt-6">
