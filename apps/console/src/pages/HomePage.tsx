@@ -27,7 +27,7 @@ const capabilities = [
         icon: Waves,
         title: "Cảnh báo thiên tai",
         description:
-            "Theo dõi lũ, bão, sạt lở và dữ liệu VNDMS trực tiếp trên bản đồ nguy cơ công khai.",
+            "Theo dõi lũ, bão, sạt lở và dữ liệu VNDMS đã nhập trên bản đồ nguy cơ công khai.",
         to: "/map" as const,
         cta: "Mở bản đồ nguy cơ",
     },
@@ -43,7 +43,7 @@ const capabilities = [
         icon: ClipboardList,
         title: "Kế hoạch ứng phó (EOP)",
         description:
-            "Tạo bản nháp EOP bằng AI, duyệt, xuất bản và sinh nhiệm vụ điều phối tự động.",
+            "Tạo bản nháp EOP từ mẫu nghiệp vụ, duyệt, xuất bản và sinh nhiệm vụ điều phối.",
         to: "/admin/emergency-center/before" as const,
         cta: "Bảng trước thiên tai",
     },
@@ -57,7 +57,7 @@ const capabilities = [
     },
     {
         icon: Radio,
-        title: "SITREP thời gian thực",
+        title: "SITREP trong sự kiện",
         description:
             "Cập nhật tình hình hiện trường, delta báo cáo và tín hiệu vận hành trong suốt sự kiện.",
         to: "/admin/emergency-center/during" as const,
@@ -67,7 +67,7 @@ const capabilities = [
         icon: FileCheck2,
         title: "Báo cáo sau sự kiện (AAR)",
         description:
-            "Tổng hợp KPI, bài học kinh nghiệm và xuất bản after-action report sau mỗi chiến dịch.",
+            "Tổng hợp KPI từ sự kiện/điều phối/SITREP, bài học kinh nghiệm và xuất bản after-action report.",
         to: "/admin/emergency-center/after" as const,
         cta: "Bảng sau thiên tai",
     },
@@ -188,8 +188,8 @@ const HomePage = () => {
                                         Tình hình vận hành
                                     </span>
                                     <span className="flex items-center gap-1.5 text-xs font-medium text-red-100">
-                                        <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                                        LIVE
+                                        <span className="w-2 h-2 rounded-full bg-red-400" />
+                                        CẬP NHẬT
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-1 gap-3">
@@ -265,13 +265,12 @@ const HomePage = () => {
                             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
                                 Bản đồ cảnh báo thiên tai{" "}
                                 <span className="bg-gradient-to-r from-amber-500 to-orange-500 bg-clip-text text-transparent">
-                                    theo thời gian thực
+                                    công khai
                                 </span>
                             </h2>
                             <p className="text-lg text-slate-600 leading-relaxed">
-                                Theo dõi mưa, gió, lũ và mực nước từ dữ liệu VNDMS
-                                chính thức, xem các chiến dịch cứu hộ đang diễn ra
-                                và tìm nơi trú ẩn gần nhất.
+                                Theo dõi mưa, gió, lũ và mực nước từ dữ liệu VNDMS đã nhập,
+                                xem các chiến dịch cứu hộ đang diễn ra và tìm nơi trú ẩn gần nhất.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-4">
                                 <Link

@@ -73,7 +73,7 @@ const DeployEopModal: React.FC<Props> = ({ deployData, onClose, onSubmitted }) =
           <div>
             <h2 className="font-bold text-slate-900 text-lg">Kế hoạch ứng phó (EOP)</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Sửa markdown bên dưới → Lưu nháp hoặc Submit để sinh task tự động
+              Sửa markdown bên dưới → Lưu nháp hoặc Submit để sinh nhiệm vụ điều phối
             </p>
             <p className="text-xs text-slate-400 mt-0.5">
               Event: {deployData.event_id} · EOP: {deployData.eop_plan_id}

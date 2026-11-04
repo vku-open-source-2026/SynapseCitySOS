@@ -5,13 +5,12 @@ import { Link } from '@tanstack/react-router';
 
 import { afterActionApi } from '@/api/after-action-reports';
 import { dispatchApi } from '@/api/dispatch';
-import { emergencyApi, type SosTimelineItem } from '@/api/emergency';
+import { emergencyApi, type DependencyHealthResponse, type SosTimelineItem } from '@/api/emergency';
 import { eopApi } from '@/api/eop';
 import { hazardsApi, type DeployHazardResponse } from '@/api/hazards';
 import { resourcesApi } from '@/api/resources';
 import { sitrepApi } from '@/api/sitrep';
 import { asList } from '@/lib/httpClient';
-import { useAuthStore } from '@/stores';
 import HazardLiveMap from '@/components/emergency/HazardLiveMap';
 import DeployEopModal from '@/components/emergency/DeployEopModal';
 import type { AfterActionReport } from '@/types/after-action-report';
@@ -60,30 +59,18 @@ const HAZARD_STREAM_PATH = '/v1/emergency/stream/hazards';
 const HAZARD_POLL_INTERVAL_MS = 30000;
 
 function getHazardStreamUrl(): string {
-  const accessToken = useAuthStore.getState().accessToken;
-
   if (typeof window === 'undefined') {
     return HAZARD_STREAM_PATH;
   }
-
-  const buildUrl = (origin: string) => {
-    const url = new URL(HAZARD_STREAM_PATH, origin);
-    if (accessToken) {
-      url.searchParams.set('access_token', accessToken);
-    }
-    return url.toString();
-  };
-
   const configuredBaseUrl = import.meta.env.VITE_BASE_API_URL as string | undefined;
   if (!configuredBaseUrl) {
-    return buildUrl(window.location.origin);
+    return new URL(HAZARD_STREAM_PATH, window.location.origin).toString();
   }
-
   try {
     const parsedBaseUrl = new URL(configuredBaseUrl, window.location.origin);
-    return buildUrl(parsedBaseUrl.origin);
+    return new URL(HAZARD_STREAM_PATH, parsedBaseUrl.origin).toString();
   } catch {
-    return buildUrl(window.location.origin);
+    return new URL(HAZARD_STREAM_PATH, window.location.origin).toString();
   }
 }
 
@@ -94,6 +81,9 @@ const EmergencyCenter: React.FC = () => {
   const [info, setInfo] = React.useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = React.useState<string>('');
   const [lastHazardRefresh, setLastHazardRefresh] = React.useState<Date | null>(null);
+  const [degradedSources, setDegradedSources] = React.useState<string[]>([]);
+  const [hazardStreamError, setHazardStreamError] = React.useState<string | null>(null);
+  const [dependency, setDependency] = React.useState<DependencyHealthResponse | null>(null);
 
   const [events, setEvents] = React.useState<EmergencyEvent[]>([]);
   const [eopPlans, setEopPlans] = React.useState<EOPPlan[]>([]);
@@ -110,60 +100,81 @@ const EmergencyCenter: React.FC = () => {
   const [deployingHazardId, setDeployingHazardId] = React.useState<string | null>(null);
 
   const refreshHazards = React.useCallback(async () => {
-    const [hazardData, recentItems] = await Promise.all([
-      hazardsApi.list({ limit: 200, is_active: true }),
-      hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
-    ]);
-    setHazards(asList<Hazard>(hazardData));
-    setRecentHazardItems(asList<RecentHazardItem>(recentItems));
-    setLastHazardRefresh(new Date());
+    try {
+      const [hazardData, recentItems] = await Promise.all([
+        hazardsApi.list({ limit: 200, is_active: true }),
+        hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
+      ]);
+      setHazards(asList<Hazard>(hazardData));
+      setRecentHazardItems(asList<RecentHazardItem>(recentItems));
+      setLastHazardRefresh(new Date());
+      setHazardStreamError(null);
+      setDegradedSources((previous) => previous.filter((source) => source !== 'hazards'));
+    } catch (err) {
+      // Preserve the last good hazard list; never clear it on a dependency
+      // failure, because an empty list looks like an all-clear (issue #10).
+      console.error(err);
+      setHazardStreamError('Không thể tải dữ liệu cảnh báo.');
+      setDegradedSources((previous) => (previous.includes('hazards') ? previous : [...previous, 'hazards']));
+    }
   }, []);
 
   const loadData = React.useCallback(
     async (withLoading = true) => {
-      if (withLoading) {
-        setLoading(true);
-      }
+      if (withLoading) setLoading(true);
       setError(null);
 
-      try {
-        const [eventData, eopData, dispatchData, resourceData, sitrepData, hazardData, aarData, timelineData, recentHazardData] =
-          await Promise.all([
-            emergencyApi.list({ limit: 80 }),
-            eopApi.list({ limit: 80 }),
-            dispatchApi.list({ limit: 100 }),
-            resourcesApi.list({ limit: 120 }),
-            sitrepApi.list({ limit: 80 }),
-            hazardsApi.list({ limit: 200, is_active: true }),
-            afterActionApi.list({ limit: 60 }),
-            emergencyApi.getSosTimeline({ limit: 30 }),
-            hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
-          ]);
+      const [eventR, eopR, dispatchR, resourceR, sitrepR, hazardR, aarR, timelineR, recentR, healthR] = await Promise.allSettled([
+        emergencyApi.list({ limit: 80 }),
+        eopApi.list({ limit: 80 }),
+        dispatchApi.list({ limit: 100 }),
+        resourcesApi.list({ limit: 120 }),
+        sitrepApi.list({ limit: 80 }),
+        hazardsApi.list({ limit: 200, is_active: true }),
+        afterActionApi.list({ limit: 60 }),
+        emergencyApi.getSosTimeline({ limit: 30 }),
+        hazardsApi.listRecentItems({ hours: 24, limit: 200 }),
+        emergencyApi.getDependencyHealth(),
+      ]);
 
-        setEvents(asList<EmergencyEvent>(eventData));
-        setEopPlans(asList<EOPPlan>(eopData));
-        setDispatchOrders(asList<DispatchOrder>(dispatchData));
-        setResources(asList<ResourceUnit>(resourceData));
-        setSitreps(asList<Sitrep>(sitrepData));
-        setHazards(asList<Hazard>(hazardData));
-        setAfterActionReports(asList<AfterActionReport>(aarData));
-        setSosTimeline(asList<SosTimelineItem>(timelineData));
-        setRecentHazardItems(asList<RecentHazardItem>(recentHazardData));
+      const failures: string[] = [];
+      const apply = <T,>(result: PromiseSettledResult<T>, label: string, setter: (value: T) => void) => {
+        if (result.status === 'fulfilled') setter(result.value);
+        else {
+          console.error(`${label} failed`, result.reason);
+          failures.push(label);
+        }
+      };
+
+      apply(eventR, 'Sự kiện', (value) => setEvents(asList<EmergencyEvent>(value)));
+      apply(eopR, 'EOP', (value) => setEopPlans(asList<EOPPlan>(value)));
+      apply(dispatchR, 'Điều phối', (value) => setDispatchOrders(asList<DispatchOrder>(value)));
+      apply(resourceR, 'Nguồn lực', (value) => setResources(asList<ResourceUnit>(value)));
+      apply(sitrepR, 'SITREP', (value) => setSitreps(asList<Sitrep>(value)));
+      apply(aarR, 'AAR', (value) => setAfterActionReports(asList<AfterActionReport>(value)));
+      apply(timelineR, 'Timeline', (value) => setSosTimeline(asList<SosTimelineItem>(value)));
+      if (hazardR.status === 'fulfilled') {
+        setHazards(asList<Hazard>(hazardR.value));
         setLastHazardRefresh(new Date());
-
-        const safeEvents = asList<EmergencyEvent>(eventData);
-        if (!selectedEventId && safeEvents.length > 0) {
-          const firstActiveEvent = safeEvents.find((event) => event.status === 'active') || safeEvents[0];
-          setSelectedEventId(firstActiveEvent.id);
-        }
-      } catch (err) {
-        console.error(err);
-        setError('Không thể tải dữ liệu trung tâm điều hành.');
-      } finally {
-        if (withLoading) {
-          setLoading(false);
-        }
+      } else {
+        console.error('Hazards failed', hazardR.reason);
+        failures.push('Cảnh báo');
       }
+      if (recentR.status === 'fulfilled') setRecentHazardItems(asList<RecentHazardItem>(recentR.value));
+      else failures.push('Cảnh báo gần đây');
+      if (healthR.status === 'fulfilled') setDependency(healthR.value);
+
+      setDegradedSources(failures);
+      if (failures.length > 0) {
+        setError('Một số nguồn dữ liệu SOS không khả dụng. Số liệu còn lại được giữ nguyên và sẽ tự cập nhật.');
+      }
+
+      const safeEvents = eventR.status === 'fulfilled' ? asList<EmergencyEvent>(eventR.value) : [];
+      if (!selectedEventId && safeEvents.length > 0) {
+        const firstActiveEvent = safeEvents.find((event) => event.status === 'active') || safeEvents[0];
+        setSelectedEventId(firstActiveEvent.id);
+      }
+      if (withLoading) setLoading(false);
     },
     [selectedEventId]
   );
@@ -185,88 +196,81 @@ const EmergencyCenter: React.FC = () => {
     };
 
     const startPolling = () => {
-      if (pollingIntervalId !== null) {
-        return;
-      }
-
-      void refreshHazards().catch((err) => {
-        console.error(err);
-      });
-
-      pollingIntervalId = window.setInterval(() => {
-        void refreshHazards().catch((err) => {
-          console.error(err);
-        });
-      }, HAZARD_POLL_INTERVAL_MS);
+      if (pollingIntervalId !== null) return;
+      void refreshHazards();
+      pollingIntervalId = window.setInterval(() => { void refreshHazards(); }, HAZARD_POLL_INTERVAL_MS);
     };
 
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
       startPolling();
-      return () => {
-        stopPolling();
-      };
+      return () => { stopPolling(); };
     }
 
     try {
+      // The stream is a public projection: no token is sent in the URL.
       hazardStream = new EventSource(getHazardStreamUrl());
     } catch (err) {
       console.error('Hazard SSE init failed, fallback to polling.', err);
       startPolling();
-      return () => {
-        stopPolling();
-      };
+      return () => { stopPolling(); };
     }
 
     hazardStream.onopen = () => {
+      setHazardStreamError(null);
       stopPolling();
     };
 
     const handleHazardStreamEvent = (event: MessageEvent<string>) => {
       const payload = parseHazardStreamPayload(event.data);
-      if (!payload) {
+      if (!payload) return;
+      if (payload.degraded) {
+        setHazardStreamError(payload.error || 'Dữ liệu cảnh báo tạm thời không khả dụng.');
         return;
       }
-
+      if (payload.snapshot !== undefined) {
+        setHazards(payload.snapshot.filter((hazard) => hazard.is_active));
+        setLastHazardRefresh(new Date());
+        setHazardStreamError(null);
+        return;
+      }
+      if (!payload.delta) return;
+      const nextHazard = payload.delta;
       setHazards((previousHazards) => {
-        if (payload.snapshot !== undefined) {
-          return payload.snapshot.filter((hazard) => hazard.is_active);
-        }
-
-        if (!payload.delta) {
-          return previousHazards;
-        }
-
-        const nextHazard = payload.delta;
         const hazardsWithoutCurrent = previousHazards.filter((item) => item.id !== nextHazard.id);
-
-        if (!nextHazard.is_active) {
-          return hazardsWithoutCurrent;
-        }
-
+        if (!nextHazard.is_active) return hazardsWithoutCurrent;
         return [nextHazard, ...hazardsWithoutCurrent];
       });
       setLastHazardRefresh(new Date());
+      setHazardStreamError(null);
     };
 
     hazardStream.onmessage = handleHazardStreamEvent;
-
     const namedHazardEventListener: EventListener = (event) => {
       handleHazardStreamEvent(event as MessageEvent<string>);
     };
-    hazardStream.addEventListener('hazards', namedHazardEventListener);
-
-    hazardStream.onerror = (event) => {
-      console.error('Hazard SSE unavailable, fallback to polling.', event);
-      if (hazardStream) {
-        hazardStream.close();
-        hazardStream = null;
+    const namedErrorListener: EventListener = (event) => {
+      const messageEvent = event as MessageEvent<string>;
+      try {
+        const payload = JSON.parse(messageEvent.data) as { message?: string; error?: string };
+        setHazardStreamError(payload.message || payload.error || 'Dữ liệu cảnh báo tạm thời không khả dụng.');
+      } catch {
+        setHazardStreamError('Dữ liệu cảnh báo tạm thời không khả dụng.');
       }
-      startPolling();
+    };
+    hazardStream.addEventListener('hazards', namedHazardEventListener);
+    hazardStream.addEventListener('error', namedErrorListener);
+
+    hazardStream.onerror = () => {
+      // EventSource reconnects automatically. Keep the last good snapshot and
+      // show a degraded banner; do not close the stream or permanently switch
+      // to polling on a transient blip (issue #10).
+      setHazardStreamError('Mất kết nối luồng cảnh báo; đang thử kết nối lại...');
     };
 
     return () => {
       if (hazardStream) {
         hazardStream.removeEventListener('hazards', namedHazardEventListener);
+        hazardStream.removeEventListener('error', namedErrorListener);
         hazardStream.close();
       }
       stopPolling();
@@ -282,20 +286,10 @@ const EmergencyCenter: React.FC = () => {
     const activeEvents = events.filter((event) => event.status === 'active').length;
     const criticalHazards = hazards.filter((hazard) => hazard.severity === 'critical').length;
     const draftEops = eopPlans.filter((plan) => plan.status === 'draft').length;
-    const openDispatch = dispatchOrders.filter(
-      (order) => !['completed', 'canceled'].includes(order.status)
-    ).length;
+    const openDispatch = dispatchOrders.filter((order) => !['completed', 'canceled'].includes(order.status)).length;
     const availableResources = resources.filter((resource) => resource.status === 'available').length;
     const publishedAfterAction = afterActionReports.filter((report) => report.status === 'published').length;
-
-    return {
-      activeEvents,
-      criticalHazards,
-      draftEops,
-      openDispatch,
-      availableResources,
-      publishedAfterAction,
-    };
+    return { activeEvents, criticalHazards, draftEops, openDispatch, availableResources, publishedAfterAction };
   }, [afterActionReports, dispatchOrders, eopPlans, events, hazards, resources]);
 
   const runAction = async (action: () => Promise<void>) => {
@@ -318,7 +312,6 @@ const EmergencyCenter: React.FC = () => {
     try {
       const result = await hazardsApi.deploy(hazardId);
       setDeployModalData(result);
-      // Refresh recent hazards to reflect linked_event_id
       void hazardsApi.listRecentItems({ hours: 24, limit: 200 }).then((items) => {
         setRecentHazardItems(asList<RecentHazardItem>(items));
       });
@@ -336,23 +329,20 @@ const EmergencyCenter: React.FC = () => {
       return;
     }
     await runAction(async () => {
-      await eopApi.generateDraft({
-        emergency_event_id: selectedEventId,
-        force_new_version: true,
-      });
-      setInfo('Đã tạo EOP draft bằng AI + fallback an toàn.');
+      const draft = await eopApi.generateDraft({ emergency_event_id: selectedEventId, force_new_version: true });
+      const generatedBy = draft.generated_by ?? 'tier2-ai';
+      setInfo(generatedBy === 'deterministic-fallback'
+        ? 'Đã tạo EOP draft bằng mẫu nghiệp vụ dự phòng (AI Tier-2 không khả dụng).'
+        : 'Đã tạo EOP draft bằng AI Tier-2.');
       await loadData(false);
     });
   };
 
   const handleOptimizeDispatch = async () => {
     await runAction(async () => {
-      const result = await dispatchApi.optimize({
-        max_orders: 250,
-        force_reestimate_eta: true,
-      });
+      const result = await dispatchApi.optimize({ max_orders: 250, force_reestimate_eta: true });
       setInfo(
-        `Optimizer v2: optimized ${result.optimized}, auto_assigned ${result.auto_assigned}, stale ${result.stale_flagged}`
+        `Điều phối: đã phân công ${result.auto_assigned}, ETA cập nhật ${result.eta_reestimated}, quá hạn ${result.stale_flagged}, không thể phân công ${result.unassignable ?? 0}.`
       );
       await loadData(false);
     });
@@ -360,8 +350,10 @@ const EmergencyCenter: React.FC = () => {
 
   const handleResolveEvent = async (eventId: string) => {
     await runAction(async () => {
-      await emergencyApi.resolve(eventId, 'Resolved from command center board');
-      setInfo('Đã resolve sự kiện. AAR sẽ tự động được tạo ở backend nếu chưa có.');
+      const resolved = await emergencyApi.resolve(eventId, 'Resolved from command center board');
+      setInfo(resolved.after_action_report_id
+        ? `Đã resolve sự kiện và tạo AAR nháp ${resolved.after_action_report_id}.`
+        : 'Đã resolve sự kiện.');
       await loadData(false);
     });
   };
@@ -369,7 +361,7 @@ const EmergencyCenter: React.FC = () => {
   const handleGenerateAfterAction = async (eventId: string) => {
     await runAction(async () => {
       await afterActionApi.generate({ emergency_event_id: eventId, force_regenerate: true });
-      setInfo('Đã tạo mới After-Action report.');
+      setInfo('Đã tạo mới After-Action report từ dữ liệu sự kiện/điều phối/SITREP.');
       await loadData(false);
     });
   };
@@ -397,6 +389,8 @@ const EmergencyCenter: React.FC = () => {
     [events]
   );
 
+  const dependencyDegraded = dependency?.dependencies?.some((item) => !item.reachable || item.status !== 'ok') ?? false;
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <header className="rounded-xl bg-gradient-to-r from-slate-900 via-red-900 to-orange-700 p-5 text-white shadow-lg">
@@ -418,35 +412,36 @@ const EmergencyCenter: React.FC = () => {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            to="/admin/emergency-center/before"
-            className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-          >
+          <Link to="/admin/emergency-center/before" className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20">
             Bảng trước thiên tai
           </Link>
-          <Link
-            to="/admin/emergency-center/during"
-            className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-          >
+          <Link to="/admin/emergency-center/during" className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20">
             Bảng trong thiên tai
           </Link>
-          <Link
-            to="/admin/emergency-center/after"
-            className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-          >
+          <Link to="/admin/emergency-center/after" className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20">
             Bảng sau thiên tai
           </Link>
         </div>
       </header>
+
+      {(hazardStreamError || dependencyDegraded || degradedSources.length > 0) ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Dữ liệu cảnh báo không khả dụng hoặc đang suy giảm.</p>
+          <p className="mt-1">
+            {hazardStreamError ? `${hazardStreamError} ` : ''}
+            {dependencyDegraded ? 'Tier-2 đang báo suy giảm. ' : ''}
+            {degradedSources.length > 0 ? `Nguồn lỗi: ${degradedSources.join(', ')}. ` : ''}
+            Hệ thống giữ snapshot tốt nhất gần nhất; không hiển thị trạng thái an toàn khi chưa xác minh.
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       ) : null}
 
       {info ? (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {info}
-        </div>
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{info}</div>
       ) : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
@@ -486,6 +481,11 @@ const EmergencyCenter: React.FC = () => {
               </span>
             </div>
             <HazardLiveMap hazards={hazards} />
+            {hazardStreamError ? (
+              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {hazardStreamError} Bản đồ đang hiển thị snapshot gần nhất, không phải trạng thái an toàn.
+              </p>
+            ) : null}
             <div className="mt-3 max-h-44 space-y-2 overflow-auto pr-1 text-sm">
               {recentHazardItems.length === 0 && !loading ? (
                 <p className="text-slate-500">Không có hazard 24h gần đây.</p>
@@ -550,9 +550,7 @@ const EmergencyCenter: React.FC = () => {
                   <article key={event.id} className="rounded-md border border-slate-200 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-medium text-slate-900">{event.title}</p>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${EVENT_STATUS_CLASS[event.status] || 'bg-slate-100 text-slate-700'}`}
-                      >
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${EVENT_STATUS_CLASS[event.status] || 'bg-slate-100 text-slate-700'}`}>
                         {event.status}
                       </span>
                     </div>
@@ -598,31 +596,23 @@ const EmergencyCenter: React.FC = () => {
                 <tbody>
                   {sosTimeline.map((item) => (
                     <tr key={item.event_id} className="border-b border-slate-100 align-top last:border-b-0">
-                      <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">
-                        {item.event_code || item.event_id.slice(-8)}
-                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{item.event_code || item.event_id.slice(-8)}</td>
                       <td className="px-3 py-2 text-slate-800">{item.title}</td>
                       <td className="whitespace-nowrap px-3 py-2">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            SEVERITY_CLASS[item.severity] || 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${SEVERITY_CLASS[item.severity] || 'bg-slate-100 text-slate-700'}`}>
                           {item.severity}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            EVENT_STATUS_CLASS[item.status] || 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${EVENT_STATUS_CLASS[item.status] || 'bg-slate-100 text-slate-700'}`}>
                           {item.status}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">{formatDate(item.created_at)}</td>
                       <td className="whitespace-nowrap px-3 py-2">{item.source_ref || '--'}</td>
-                      <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-900">{item.sla_breach_count}</td>
+                      <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-900" title={`Ngưỡng SLA ${item.sla_threshold_minutes ?? '--'} phút`}>
+                        {item.sla_breach_count}
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2">{formatDate(item.last_update)}</td>
                     </tr>
                   ))}
@@ -646,7 +636,7 @@ const EmergencyCenter: React.FC = () => {
                 disabled={busy || !selectedEventId}
                 className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-60"
               >
-                Tạo bản nháp AI
+                Tạo bản nháp EOP
               </button>
             </div>
 
@@ -660,9 +650,7 @@ const EmergencyCenter: React.FC = () => {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-slate-900">v{plan.version} - {plan.title}</p>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${EOP_STATUS_CLASS[plan.status] || 'bg-slate-100 text-slate-700'}`}
-                    >
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${EOP_STATUS_CLASS[plan.status] || 'bg-slate-100 text-slate-700'}`}>
                       {plan.status}
                     </span>
                   </div>
@@ -724,18 +712,12 @@ const EmergencyCenter: React.FC = () => {
                 <article key={report.id} className="rounded-md border border-slate-200 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-slate-900">{report.report_code}</p>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                        report.status === 'published'
-                          ? 'bg-indigo-100 text-indigo-700'
-                          : 'bg-amber-100 text-amber-700'
-                      }`}
-                    >
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${report.status === 'published' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
                       {report.status}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    KPI tổng thể: {report.kpi.overall_score.toFixed(2)} • {formatDate(report.updated_at)}
+                    KPI tổng thể: {Number(report.kpi?.overall_score ?? 0).toFixed(2)} • {formatDate(report.updated_at)}
                   </p>
                   {report.status === 'draft' ? (
                     <button
@@ -765,14 +747,11 @@ const EmergencyCenter: React.FC = () => {
         </div>
       </section>
 
-      {/* Deploy EOP modal */}
       {deployModalData && (
         <DeployEopModal
           deployData={deployModalData}
           onClose={() => setDeployModalData(null)}
-          onSubmitted={() => {
-            void loadData(false);
-          }}
+          onSubmitted={() => { void loadData(false); }}
         />
       )}
     </div>

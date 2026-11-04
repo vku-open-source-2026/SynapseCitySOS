@@ -173,7 +173,7 @@ const sections: EndpointSection[] = [
                 method: "POST",
                 path: "/v1/emergency/{event_id}/resolve",
                 title: "Đóng sự kiện",
-                description: "Đánh dấu sự kiện đã xử lý và kích hoạt tạo AAR nếu cần.",
+                description: "Đánh dấu sự kiện đã xử lý và tạo đúng một AAR nháp (idempotent) từ dữ liệu sự kiện/điều phối/SITREP.",
             },
             {
                 method: "GET",
@@ -195,7 +195,7 @@ const sections: EndpointSection[] = [
                 method: "GET",
                 path: "/v1/emergency/sosconn/status",
                 title: "Trạng thái SOSConn",
-                description: "Kiểm tra kết nối provider AI/Copilot của trung tâm chỉ huy.",
+                description: "Kiểm tra thật trạng thái Tier-2 và năng lực AI; AI trả về capability_unavailable cho tới khi Tier-2 phát hành.",
             },
         ],
     },
@@ -243,6 +243,25 @@ const sections: EndpointSection[] = [
             },
             {
                 method: "POST",
+                path: "/v1/hazards/geo/in-polygon",
+                title: "Cảnh báo trong đa giác",
+                description: "Lọc cảnh báo nằm trong GeoJSON Polygon/MultiPolygon; trả 400 invalid_geometry nếu sai.",
+            },
+            {
+                method: "GET",
+                path: "/v1/hazards/ingest/status",
+                title: "Trạng thái nhập VNDMS",
+                description: "Trạng thái thật từ run history: unconfigured | ready | degraded | stale | error.",
+            },
+            {
+                method: "POST",
+                path: "/v1/hazards/ingest",
+                title: "Nhập lô VNDMS",
+                description: "Chuẩn hóa, validate và upsert theo hazard_id; lịch chạy thuộc Tier-2 scheduled work.",
+                requiresAuth: true,
+            },
+            {
+                method: "POST",
                 path: "/v1/hazards/{hazard_id}/deploy",
                 title: "Triển khai cảnh báo",
                 description:
@@ -261,7 +280,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/emergency/stream/hazards",
                 title: "Live hazard SSE",
                 description:
-                    "Server-Sent Events đẩy snapshot và delta cảnh báo đang hoạt động tới trung tâm chỉ huy.",
+                    "Server-Sent Events đẩy snapshot cảnh báo công khai; khi Tier-2 lỗi phát event error và giữ snapshot tốt nhất, không phát snapshot rỗng.",
             },
         ],
     },
@@ -271,7 +290,7 @@ const sections: EndpointSection[] = [
         icon: "📋",
         title: "Kế hoạch ứng phó (EOP)",
         description:
-            "Sinh bản nháp bằng AI, duyệt, xuất bản và cập nhật nội dung markdown của kế hoạch.",
+            "Sinh bản nháp EOP từ mẫu nghiệp vụ deterministic (Tier-2 AI chưa khả dụng), duyệt, xuất bản và sinh task.",
         endpoints: [
             {
                 method: "GET",
@@ -289,7 +308,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/emergency/eop/generate-draft",
                 title: "Sinh bản nháp EOP",
                 description:
-                    "Sinh bản nháp EOP bằng AI kèm fallback an toàn từ dữ liệu sự kiện.",
+                    "Sinh bản nháp EOP bằng AI Tier-2 từ sự kiện, cảnh báo và nguồn lực; force_new_version tăng version, không tạo trùng v1. Metadata ghi generated_by=tier2-ai (model, prompt_version, usage). AI không khả dụng trả 503 ai_capability_unavailable; fallback=deterministic là lựa chọn tường minh.",
             },
             {
                 method: "PATCH",
@@ -349,7 +368,7 @@ const sections: EndpointSection[] = [
                 method: "POST",
                 path: "/v1/emergency/dispatch/optimize",
                 title: "Tối ưu điều phối",
-                description: "Tối ưu thứ tự, ETA và tự động gán nguồn lực khả dụng.",
+                description: "Gán nguồn lực available tương thích, tính ETA, đánh dấu quá hạn; số liệu trả về khớp bản ghi đã cập nhật.",
             },
             {
                 method: "GET",
@@ -391,13 +410,13 @@ const sections: EndpointSection[] = [
                 method: "POST",
                 path: "/v1/emergency/sitrep",
                 title: "Tạo SITREP",
-                description: "Ghi nhận tình hình hiện trường và số liệu thương vong/thiệt hại.",
+                description: "Bắt buộc emergency_event_id, title và reporting period; số thương vong/thiệt hại là số nguyên không âm.",
             },
             {
                 method: "POST",
                 path: "/v1/emergency/sitrep/{sitrep_id}/delta",
                 title: "Thêm delta SITREP",
-                description: "Bổ sung cập nhật chênh lệch so với báo cáo trước.",
+                description: "Delta trên báo cáo đã publish tạo revision mới (amends_sitrep_id); báo cáo gốc bất biến.",
             },
             {
                 method: "GET",
@@ -410,7 +429,7 @@ const sections: EndpointSection[] = [
                 method: "POST",
                 path: "/v1/emergency/after-action/generate",
                 title: "Tạo AAR",
-                description: "Sinh after-action report từ dữ liệu sự kiện, điều phối và SITREP.",
+                description: "Tính KPI/timeline thật từ event + dispatch + SITREP + resource; force_regenerate tạo version mới.",
             },
             {
                 method: "POST",
@@ -426,7 +445,7 @@ const sections: EndpointSection[] = [
         icon: "🗺️",
         title: "Bản đồ, geocode & AI",
         description:
-            "Cấu hình tile, geocoding và trợ lý AI phục vụ bản đồ cảnh báo công khai.",
+            "Cấu hình tile và geocoding cho bản đồ công khai. Trợ lý AI trả 503 cho tới khi Tier-2 AI capability tồn tại.",
         endpoints: [
             {
                 method: "GET",
@@ -459,7 +478,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/ai/chat",
                 title: "Trợ lý AI SOS",
                 description:
-                    "Hỏi đáp về tình hình thiên tai, EOP và điều phối trong phạm vi dữ liệu SOS.",
+                    "Trả 503 ai_capability_unavailable khi Tier-2 chưa có AI; không trả câu trả lời tĩnh giả lập.",
             },
         ],
     },
@@ -741,7 +760,7 @@ export default function ApiDocsPage() {
                         </h1>
                         <p className="text-xl text-slate-600 max-w-2xl mx-auto">
                             Cảnh báo thiên tai, sự kiện khẩn cấp, EOP, điều phối
-                            nguồn lực, SITREP và báo cáo sau sự kiện.
+                            nguồn lực, SITREP (có validate) và báo cáo sau sự kiện (KPI thật).
                         </p>
                     </div>
 

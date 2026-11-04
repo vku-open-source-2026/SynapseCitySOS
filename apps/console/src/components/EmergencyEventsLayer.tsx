@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import { emergencyStatusLabel } from '../lib/emergencyStatus';
 import type { PublicEmergencyEvent, EmergencySeverity, EmergencyEventType } from '../types/emergency';
 
 const SEVERITY_COLOR: Record<EmergencySeverity, string> = {
@@ -75,7 +76,7 @@ function makePopupContent(e: PublicEmergencyEvent): string {
         <span style="font-size:20px">🚨</span>
         <div>
           <div style="font-weight:700;font-size:14px;color:#0f172a">${e.title}</div>
-          <div style="font-size:11px;color:#64748b">${typeLabel} · Đang triển khai cứu hộ</div>
+          <div style="font-size:11px;color:#64748b">${typeLabel} · ${emergencyStatusLabel(e.status)}</div>
         </div>
       </div>
       <div style="display:inline-block;padding:2px 8px;border-radius:999px;background:${color}22;color:${color};font-size:11px;font-weight:700;margin-bottom:8px">

@@ -150,7 +150,7 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'after-action-reports',
         title: 'After-Action Report Feed',
-        description: 'Consolidate AI-assisted and manual after-action reports per event.',
+        description: 'Consolidate generated and manual after-action reports per event.',
         extensionHint: 'Recovery team can expand narrative schema without response board coupling.',
       },
       {

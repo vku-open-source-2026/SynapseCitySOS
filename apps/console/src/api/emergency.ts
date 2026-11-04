@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import { asList, httpClient } from '../lib/httpClient';
 import type {
+  DependencyHealthResponse,
   EmergencyEvent,
   EmergencyEventCreateRequest,
   EmergencyEventUpdateRequest,
@@ -36,6 +37,7 @@ export interface SosTimelineItem {
   created_at: string;
   source_ref?: string | null;
   sla_breach_count: number;
+  sla_threshold_minutes?: number;
   last_update: string;
 }
 
@@ -72,6 +74,11 @@ export const emergencyApi = {
     return response.data;
   },
 
+  getDependencyHealth: async (): Promise<DependencyHealthResponse> => {
+    const response = await httpClient.get<DependencyHealthResponse>('/emergency/health');
+    return response.data;
+  },
+
   getSosTimeline: async (params?: { limit?: number }): Promise<SosTimelineItem[]> => {
     const response = await httpClient.get<SosTimelineItem[]>('/emergency/sos/timeline', {
       params,
@@ -86,3 +93,5 @@ export const emergencyApi = {
     return asList<PublicEmergencyEvent>(response.data);
   },
 };
+
+export type { DependencyHealthResponse, DependencyStatus, DependencyDatasetStatus } from '../types/emergency';

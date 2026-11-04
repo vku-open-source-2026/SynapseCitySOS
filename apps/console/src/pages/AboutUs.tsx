@@ -56,7 +56,7 @@ const AboutUs: React.FC = () => {
                         </p>
                         <p className="text-slate-600 leading-relaxed">
                             Chúng tôi cung cấp cảnh báo lũ, bão, sạt lở và dữ liệu
-                            VNDMS theo thời gian thực, kế hoạch ứng phó (EOP), điều
+                            VNDMS đã nhập, kế hoạch ứng phó (EOP), điều
                             phối cứu hộ, SITREP và báo cáo sau sự kiện — được phát
                             triển theo các chuẩn mở để đảm bảo minh bạch và dễ tiếp
                             cận.

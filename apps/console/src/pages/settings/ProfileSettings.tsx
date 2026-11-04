@@ -13,28 +13,18 @@ import {
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { useAuthStore } from "../../stores/authStore";
-import { useBiometricAuth } from "../../hooks/useBiometricAuth";
-import { Fingerprint, ShieldCheck, ShieldOff } from "lucide-react";
 
 /**
  * Auth-shell profile settings.
  *
  * The emergency console only manages the signed-in session: reading identity
  * from the auth store, changing the password through /v1/auth and managing the
- * local biometric login. City operator administration is a SynapseCity feature.
+ * shell session. Biometric replay is disabled; production WebAuthn belongs to Tier-1 IAM.
  */
 const ProfileSettings: React.FC = () => {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
-    const { user, logout, accessToken, refreshToken } = useAuthStore();
-    const {
-        isAvailable: biometricAvailable,
-        isEnabled: biometricEnabled,
-        isLoading: biometricLoading,
-        error: biometricError,
-        registerBiometric,
-        disableBiometric,
-    } = useBiometricAuth();
+    const { user, logout } = useAuthStore();
     const [passwordData, setPasswordData] = useState({
         current_password: "",
         new_password: "",
@@ -234,69 +224,6 @@ const ProfileSettings: React.FC = () => {
                     </div>
                 </Form>
             </div>
-
-            {/* Biometric Authentication Section */}
-            {biometricAvailable && (
-                <div className="bg-white rounded-lg border border-slate-200 p-6">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Fingerprint className="w-5 h-5" />
-                        Đăng nhập bằng sinh trắc học
-                    </h2>
-                    <p className="text-sm text-slate-500 mb-4">
-                        Sử dụng vân tay hoặc nhận diện khuôn mặt để đăng nhập nhanh và an toàn
-                    </p>
-
-                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                            {biometricEnabled ? (
-                                <ShieldCheck className="w-8 h-8 text-green-600" />
-                            ) : (
-                                <ShieldOff className="w-8 h-8 text-slate-400" />
-                            )}
-                            <div>
-                                <p className="font-medium">
-                                    {biometricEnabled ? 'Sinh trắc học đã bật' : 'Sinh trắc học chưa bật'}
-                                </p>
-                                <p className="text-sm text-slate-500">
-                                    {biometricEnabled
-                                        ? 'Bạn có thể đăng nhập bằng vân tay hoặc nhận diện khuôn mặt'
-                                        : 'Bật để đăng nhập nhanh hơn lần sau'}
-                                </p>
-                            </div>
-                        </div>
-
-                        {biometricEnabled ? (
-                            <Button
-                                variant="outline"
-                                onClick={disableBiometric}
-                                disabled={biometricLoading}
-                            >
-                                Tắt
-                            </Button>
-                        ) : (
-                            <Button
-                                onClick={async () => {
-                                    if (user && accessToken && refreshToken) {
-                                        await registerBiometric(
-                                            user.username,
-                                            accessToken,
-                                            refreshToken,
-                                            user
-                                        );
-                                    }
-                                }}
-                                disabled={biometricLoading}
-                            >
-                                {biometricLoading ? 'Đang thiết lập...' : 'Bật'}
-                            </Button>
-                        )}
-                    </div>
-
-                    {biometricError && (
-                        <p className="text-sm text-red-600 mt-2">{biometricError}</p>
-                    )}
-                </div>
-            )}
 
             <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold mb-4">Hành động tài khoản</h2>

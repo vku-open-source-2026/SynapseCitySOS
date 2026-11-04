@@ -24,6 +24,23 @@ export type AuthUserRole = 'admin' | 'manager' | 'operator' | 'responder' | 'vol
 export type AuthUserStatus = 'active' | 'inactive' | 'suspended';
 export type SessionTokenType = 'access' | 'refresh';
 
+/**
+ * Demo auth is an explicitly gated shell. It is OFF by default and refuses to
+ * start in production. When enabled it never grants `admin`/`manager` from a
+ * client-supplied role: login becomes a `responder` session and registration a
+ * read-only `volunteer` session. Production identity must be delegated to the
+ * Tier-1 IAM gateway via Tier-2.
+ */
+export function demoAuthEnabled(): boolean {
+  return process.env.ALLOW_DEMO_AUTH === 'true';
+}
+
+export function assertAuthConfiguration(env: NodeJS.ProcessEnv = process.env): void {
+  if (env.NODE_ENV === 'production' && env.ALLOW_DEMO_AUTH === 'true') {
+    throw new Error('ALLOW_DEMO_AUTH=true is refused in NODE_ENV=production; delegate identity to the Tier-1 IAM gateway');
+  }
+}
+
 export interface AuthUser {
   id: string;
   username: string;
@@ -77,6 +94,28 @@ const ROLE_PERMISSIONS: Record<AuthUserRole, string[]> = {
 };
 
 const ROLES = new Set<AuthUserRole>(['admin', 'manager', 'operator', 'responder', 'volunteer', 'citizen']);
+
+/** Demo sessions are never allowed to claim an operational/admin role. */
+export function demoSessionRole(kind: 'login' | 'register'): AuthUserRole {
+  const requested = process.env.SOS_DEMO_AUTH_ROLE;
+  const safe: AuthUserRole = kind === 'register' ? 'volunteer' : 'responder';
+  if (!requested || !isAuthUserRole(requested)) return safe;
+  if (requested === 'admin' || requested === 'manager' || requested === 'operator') return safe;
+  return requested;
+}
+
+export function rolePermissions(role: AuthUserRole): string[] {
+  return [...(ROLE_PERMISSIONS[role] ?? ROLE_PERMISSIONS.citizen)];
+}
+
+export function hasPermission(session: Pick<SessionClaims, 'permissions' | 'role'> | null | undefined, permission: string): boolean {
+  if (!session) return false;
+  const permissions = Array.isArray(session.permissions) && session.permissions.length > 0
+    ? session.permissions
+    : rolePermissions(session.role);
+  return permissions.includes(permission) || permissions.includes('emergency:admin');
+}
+
 
 function loadSecret(): { secret: string; ephemeral: boolean } {
   const configured = process.env.AUTH_SECRET?.trim();
@@ -136,6 +175,14 @@ export function verifySessionToken(
   if (parts.length !== 3) return null;
   const [encodedHeader, encodedPayload, signature] = parts;
   if (!encodedHeader || !encodedPayload || !signature) return null;
+
+  // Reject algorithm confusion and unsigned tokens before any HMAC work.
+  try {
+    const parsedHeader = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8')) as { alg?: unknown; typ?: unknown };
+    if (parsedHeader.alg !== 'HS256' || (parsedHeader.typ !== undefined && parsedHeader.typ !== 'JWT')) return null;
+  } catch {
+    return null;
+  }
 
   const expected = sign(`${encodedHeader}.${encodedPayload}`, secret);
   const providedBuffer = Buffer.from(signature);
@@ -220,16 +267,27 @@ export function issueSession(user: AuthUser): AuthResponse {
   };
 }
 
+/**
+ * Build a session for an explicit role. Used by tests and by a future Tier-1
+ * identity adapter after it has verified the upstream claims. It is not routed
+ * and cannot be called by an HTTP client.
+ */
+export function issueSessionForRole(role: AuthUserRole, username = 'qa', permissions = rolePermissions(role)): AuthResponse {
+  const user = shellUser({ username, role });
+  user.permissions = permissions;
+  return issueSession(user);
+}
+
+
 function tokenFromRequest(req: Request): string | null {
   const authorization = req.header('authorization');
   if (authorization) {
     const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
     if (match) return match[1].trim();
   }
-  // EventSource cannot set an Authorization header, so the SSE client appends
-  // its access token as a query parameter.
-  const queryToken = req.query.access_token;
-  if (typeof queryToken === 'string' && queryToken.trim()) return queryToken.trim();
+  // Tokens are never accepted from a URL/query string: query tokens leak into
+  // access logs, proxy traces and browser history (issue #17). The hazard SSE
+  // stream is a public projection and needs no credential.
   return null;
 }
 
@@ -247,6 +305,28 @@ export function requireSession(req: Request, res: Response, next: NextFunction):
   next();
 }
 
+/**
+ * Deny-by-default authorization on top of a validated session. Every mutation
+ * route declares the permission it needs; a valid low-privilege session gets a
+ * stable 403 instead of being able to dispatch/approve/publish (issue #21).
+ */
+export function requirePermission(permission: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const session = (res.locals.session as SessionClaims | undefined) ?? sessionFromRequest(req);
+    if (!session) {
+      res.status(401).json({ detail: 'unauthorized', error: 'unauthorized' });
+      return;
+    }
+    if (!hasPermission(session, permission)) {
+      res.status(403).json({ error: 'forbidden', required_permission: permission, role: session.role });
+      return;
+    }
+    res.locals.session = session;
+    next();
+  };
+}
+
+
 function stringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -254,24 +334,37 @@ function stringField(value: unknown): string {
 export function installAuthRoutes(app: import('express').Express): void {
   const router = Router();
 
+  function demoGate(res: Response): boolean {
+    if (demoAuthEnabled()) return true;
+    res.status(403).json({
+      error: 'demo_auth_disabled',
+      detail: 'The SOS demo session shell is disabled. Configure ALLOW_DEMO_AUTH=true for a non-production demo or delegate identity to the Tier-1 IAM gateway.',
+    });
+    return false;
+  }
+
   router.post('/login', (req, res) => {
+    if (!demoGate(res)) return;
     const username = stringField(req.body?.username);
     const password = stringField(req.body?.password);
     if (!username || !password) {
       res.status(400).json({ detail: 'username and password are required' });
       return;
     }
+    // The client-supplied `role` is intentionally ignored. A demo session can
+    // never self-assign admin/manager/operator permissions.
     const user = shellUser({
       username,
       email: stringField(req.body?.email) || undefined,
       full_name: stringField(req.body?.full_name) || undefined,
       phone: stringField(req.body?.phone) || undefined,
-      role: req.body?.role,
+      role: demoSessionRole('login'),
     });
     res.json(issueSession(user));
   });
 
   router.post('/register', (req, res) => {
+    if (!demoGate(res)) return;
     const username = stringField(req.body?.username);
     const email = stringField(req.body?.email);
     const password = stringField(req.body?.password);
@@ -284,14 +377,15 @@ export function installAuthRoutes(app: import('express').Express): void {
       res.status(400).json({ detail: 'email is not valid' });
       return;
     }
-    // Registration is shell-only. No SOS user dataset or City user record is
-    // created; the Tier-1 identity provider owns account lifecycle.
+    // Registration is shell-only and read-only. No SOS user dataset or City
+    // user record is created; the Tier-1 identity provider owns account
+    // lifecycle and role assignment.
     const user = shellUser({
       username,
       email,
       full_name: fullName,
       phone: stringField(req.body?.phone) || undefined,
-      role: req.body?.role,
+      role: demoSessionRole('register'),
     });
     res.status(201).json(issueSession(user));
   });

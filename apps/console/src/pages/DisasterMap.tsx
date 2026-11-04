@@ -20,11 +20,13 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { fetchTileConfig } from "../lib/tileConfig";
 import VndmsHazardLayer, { VndmsLegend } from "../components/VndmsHazardLayer";
-import { useVndmsHazards, type VndmsHazard } from "../hooks/useVndmsHazards";
+import { useVndmsHazards, useVndmsStatus, type VndmsHazard } from "../hooks/useVndmsHazards";
 import HazardMarkersLayer from "../components/HazardMarkersLayer";
 import EmergencyEventsLayer from "../components/EmergencyEventsLayer";
 import { hazardsApi } from "../api/hazards";
+import { resourcesApi, type NearbyShelter } from "../api/resources";
 import { usePublicEmergencyEvents } from "../hooks/usePublicEmergencyEvents";
+import { emergencyStatusLabel, emergencyStatusTone, isOngoingEmergencyStatus } from "../lib/emergencyStatus";
 import type { Hazard } from "../types/hazard";
 import type {
     PublicEmergencyEvent,
@@ -165,8 +167,16 @@ const EventCard: React.FC<{
                         <span className="text-[10px] text-slate-500">
                             {EVENT_TYPE_LABEL[event.event_type] ?? event.event_type}
                         </span>
-                        <span className="text-[10px] text-red-600 font-semibold">
-                            • Đang triển khai
+                        <span className={`text-[10px] font-semibold ${
+                            emergencyStatusTone(event.status) === "amber"
+                                ? "text-amber-600"
+                                : emergencyStatusTone(event.status) === "blue"
+                                ? "text-blue-600"
+                                : emergencyStatusTone(event.status) === "red"
+                                ? "text-red-600"
+                                : "text-slate-500"
+                        }`}>
+                            • {emergencyStatusLabel(event.status)}
                         </span>
                     </div>
                     <h3 className="font-semibold text-slate-900 text-sm leading-snug">
@@ -348,6 +358,72 @@ const SafetyHelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
     </div>
 );
 
+const ShelterModal: React.FC<{
+    shelters: NearbyShelter[];
+    loading: boolean;
+    error: string | null;
+    onClose: () => void;
+    onRetry: () => void;
+}> = ({ shelters, loading, error, onClose, onRetry }) => (
+    <div className="fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 flex items-start justify-between bg-gradient-to-r from-emerald-50 to-sky-50">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <Home className="text-emerald-600" size={20} />
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-slate-900 text-lg">Nơi trú ẩn gần bạn</h2>
+                        <p className="text-xs text-slate-500">Đơn vị trú ẩn SOS trong bán kính 20 km</p>
+                    </div>
+                </div>
+                <button onClick={onClose} className="p-1 hover:bg-white/60 rounded transition-colors" aria-label="Đóng danh sách nơi trú ẩn">
+                    <X size={18} />
+                </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-2 text-sm">
+                {loading ? <p className="text-slate-500">Đang tìm nơi trú ẩn...</p> : null}
+                {error ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                        <p>{error}</p>
+                        <button type="button" onClick={onRetry} className="mt-2 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-medium">
+                            Thử lại
+                        </button>
+                    </div>
+                ) : null}
+                {!loading && !error && shelters.length === 0 ? (
+                    <p className="text-slate-500">Chưa có nơi trú ẩn nào được khai báo gần vị trí của bạn.</p>
+                ) : null}
+                {shelters.map((shelter) => (
+                    <div key={shelter.id} className="rounded-lg border border-slate-200 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                            <div>
+                                <p className="font-semibold text-slate-900">{shelter.name}</p>
+                                <p className="text-xs text-slate-500">
+                                    {[shelter.ward, shelter.district].filter(Boolean).join(", ") || "Chưa rõ khu vực"}
+                                </p>
+                            </div>
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                {(shelter.distance_m / 1000).toFixed(1)} km
+                            </span>
+                        </div>
+                        {shelter.capacity ? (
+                            <p className="mt-1 text-xs text-slate-600">
+                                Sức chứa: {shelter.capacity} {shelter.capacity_unit ?? "người"}
+                            </p>
+                        ) : null}
+                        {shelter.contact_phone ? (
+                            <a href={`tel:${shelter.contact_phone}`} className="mt-1 inline-block text-xs font-medium text-blue-600">
+                                Gọi {shelter.contact_phone}
+                            </a>
+                        ) : null}
+                    </div>
+                ))}
+            </div>
+        </div>
+    </div>
+);
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 const PublicHazardMap: React.FC = () => {
@@ -374,17 +450,51 @@ const PublicHazardMap: React.FC = () => {
         refetch: refetchVndms,
         isFetching: vndmsFetching,
         dataUpdatedAt: vndmsUpdatedAt,
+        isError: vndmsError,
     } = useVndmsHazards(true);
+    const { data: vndmsStatus } = useVndmsStatus(true);
 
-    const { data: storedHazards = [], refetch: refetchStored } = useQuery({
+    const {
+        data: storedHazards = [],
+        refetch: refetchStored,
+        isLoading: storedLoading,
+        isError: storedError,
+    } = useQuery({
         queryKey: ["hazards", "active-public"],
         queryFn: () => hazardsApi.list({ is_active: true, limit: 200 }),
         staleTime: 60_000,
         refetchInterval: 5 * 60_000,
     });
 
-    const { data: publicEvents = [], refetch: refetchEvents } =
-        usePublicEmergencyEvents(true, 100);
+    const {
+        data: publicEvents = [],
+        refetch: refetchEvents,
+        isLoading: eventsLoading,
+        isError: eventsError,
+    } = usePublicEmergencyEvents(true, 100);
+
+    const {
+        data: nearbyStored = [],
+        isFetching: nearbyFetching,
+        isError: nearbyError,
+        refetch: refetchNearby,
+    } = useQuery({
+        queryKey: ["hazards", "near", userLocation?.lat, userLocation?.lng],
+        queryFn: () =>
+            hazardsApi.nearby({
+                lat: userLocation!.lat,
+                lng: userLocation!.lng,
+                radius_m: NEAR_ME_RADIUS_KM * 1000,
+                limit: 200,
+            }),
+        enabled: filterChip === "near" && !!userLocation,
+        staleTime: 60_000,
+    });
+
+    const [shelters, setShelters] = useState<NearbyShelter[]>([]);
+    const [shelterOpen, setShelterOpen] = useState(false);
+    const [shelterLoading, setShelterLoading] = useState(false);
+    const [shelterError, setShelterError] = useState<string | null>(null);
 
     // Initialize the map. The container must have an explicit height (the page
     // body is a full-height flex column) or Leaflet renders a 0px canvas.
@@ -454,20 +564,18 @@ const PublicHazardMap: React.FC = () => {
     }, [vndmsHazards, filterChip, userLocation]);
 
     const filteredStored = useMemo(() => {
-        let arr = storedHazards;
+        // Use the server-side radius query when the user selects "Gần tôi";
+        // the browser no longer scans only the first page (issue #12).
+        let arr = filterChip === "near" && userLocation
+            ? nearbyStored.filter((h) => h.is_active !== false)
+            : storedHazards;
         if (filterChip === "critical") {
             arr = arr.filter(
                 (h) => h.severity === "critical" || h.severity === "high"
             );
-        } else if (filterChip === "near" && userLocation) {
-            arr = arr.filter((h) => {
-                const p = pointFromHazard(h);
-                if (!p) return false;
-                return haversineKm(userLocation, p) <= NEAR_ME_RADIUS_KM;
-            });
         }
         return arr;
-    }, [storedHazards, filterChip, userLocation]);
+    }, [storedHazards, nearbyStored, filterChip, userLocation]);
 
     const filteredEvents = useMemo(() => {
         let arr = publicEvents;
@@ -517,13 +625,51 @@ const PublicHazardMap: React.FC = () => {
 
     const totalAlerts =
         publicEvents.length + storedHazards.length + vndmsHazards.length;
-    const isFetchingAny = vndmsFetching;
+    const isFetchingAny = vndmsFetching || nearbyFetching;
+    const dataError = vndmsError || storedError || eventsError || nearbyError;
+    const dataLoading = vndmsLoading || storedLoading || eventsLoading;
+    const vndmsConfigured = vndmsStatus?.status === "ready" || vndmsStatus?.status === "degraded";
 
     const handleRefreshAll = useCallback(() => {
         refetchVndms();
         refetchStored();
         refetchEvents();
-    }, [refetchVndms, refetchStored, refetchEvents]);
+        if (filterChip === "near" && userLocation) void refetchNearby();
+    }, [refetchVndms, refetchStored, refetchEvents, refetchNearby, filterChip, userLocation]);
+
+    const handleFindShelters = useCallback(() => {
+        if (!navigator.geolocation) {
+            setShelterError("Trình duyệt không hỗ trợ định vị.");
+            setShelterOpen(true);
+            return;
+        }
+        setShelterOpen(true);
+        setShelterLoading(true);
+        setShelterError(null);
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                try {
+                    const result = await resourcesApi.nearbyShelters({
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        radius_m: 20_000,
+                        limit: 20,
+                    });
+                    setShelters(result.shelters);
+                } catch (err) {
+                    console.error(err);
+                    setShelterError("Không thể tải danh sách nơi trú ẩn.");
+                } finally {
+                    setShelterLoading(false);
+                }
+            },
+            (err) => {
+                setShelterError(err.message || "Không lấy được vị trí của bạn.");
+                setShelterLoading(false);
+            },
+            { enableHighAccuracy: true, timeout: 10_000 }
+        );
+    }, []);
 
     // ── Geolocation ──────────────────────────────────────────────────────────
     const handleLocateMe = useCallback(() => {
@@ -570,11 +716,11 @@ const PublicHazardMap: React.FC = () => {
 
     // ── Render ────────────────────────────────────────────────────────────────
     const eventsForLayer = useMemo(
-        () => publicEvents.filter((e) => !!pointFromEvent(e)),
+        () => publicEvents.filter((e) => isOngoingEmergencyStatus(e.status) && !!pointFromEvent(e)),
         [publicEvents]
     );
 
-    const hasNoAlerts = totalAlerts === 0;
+    const hasNoAlerts = totalAlerts === 0 && !dataError && !dataLoading;
 
     return (
         <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900">
@@ -594,7 +740,8 @@ const PublicHazardMap: React.FC = () => {
                             Cảnh báo thiên tai khu vực của bạn
                         </h2>
                         <p className="text-[11px] text-white/80 hidden sm:block">
-                            Cập nhật theo thời gian thực · Dành cho người dân
+                            Cập nhật công khai · Dành cho người dân
+                            {!vndmsConfigured ? " · nguồn VNDMS chưa cấu hình" : ""}
                         </p>
                     </div>
                 </div>
@@ -684,6 +831,7 @@ const PublicHazardMap: React.FC = () => {
                                         key={chip.key}
                                         onClick={() => {
                                             if (chip.key === "near" && !userLocation) {
+                                                setFilterChip("near");
                                                 handleLocateMe();
                                                 return;
                                             }
@@ -734,6 +882,16 @@ const PublicHazardMap: React.FC = () => {
                         </div>
                     </div>
 
+                    {dataError ? (
+                        <div className="mx-3 mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                            <p className="font-semibold">Dữ liệu cảnh báo không khả dụng.</p>
+                            <p className="mt-0.5">
+                                Không thể xác minh khu vực an toàn. Hãy gọi 114 nếu tính mạng bị đe dọa và
+                                thử làm mới khi có kết nối.
+                            </p>
+                        </div>
+                    ) : null}
+
                     {/* List sections */}
                     <div className="flex-1 overflow-y-auto p-3 space-y-4">
                         {/* Section 1: ongoing rescue operations */}
@@ -763,14 +921,27 @@ const PublicHazardMap: React.FC = () => {
                             <h3 className="text-[11px] uppercase font-bold tracking-wide text-amber-700 mb-2 flex items-center gap-1">
                                 ⚠️ Cảnh báo thiên tai
                             </h3>
-                            {hasNoAlerts ? (
+                            {dataError ? (
+                                <div className="text-center py-6 text-slate-400">
+                                    <ShieldAlert size={28} className="mx-auto mb-2 opacity-30" />
+                                    <p className="text-sm text-amber-800 font-semibold">
+                                        Không thể xác minh tình trạng an toàn
+                                    </p>
+                                    <p className="mt-1 text-[11px] text-slate-500">
+                                        Nguồn cảnh báo đang lỗi hoặc chưa tải xong.
+                                    </p>
+                                </div>
+                            ) : hasNoAlerts ? (
                                 <div className="text-center py-6 text-slate-400">
                                     <ShieldAlert
                                         size={28}
                                         className="mx-auto mb-2 opacity-30"
                                     />
                                     <p className="text-sm text-emerald-700 font-semibold">
-                                        Khu vực bạn hiện an toàn ✓
+                                        Không có cảnh báo đang hoạt động
+                                    </p>
+                                    <p className="mt-1 text-[11px] text-slate-500">
+                                        Dữ liệu đã được tải từ nguồn công khai.
                                     </p>
                                 </div>
                             ) : filteredStored.length + filteredVndms.length === 0 ? (
@@ -817,7 +988,7 @@ const PublicHazardMap: React.FC = () => {
                             <span className="text-sm">Hướng dẫn an toàn</span>
                         </button>
                         <button
-                            onClick={() => setShowHelp(true)}
+                            onClick={handleFindShelters}
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition-colors"
                         >
                             <Home size={16} />
@@ -828,6 +999,15 @@ const PublicHazardMap: React.FC = () => {
             </div>
 
             {showHelp && <SafetyHelpModal onClose={() => setShowHelp(false)} />}
+            {shelterOpen && (
+                <ShelterModal
+                    shelters={shelters}
+                    loading={shelterLoading}
+                    error={shelterError}
+                    onClose={() => setShelterOpen(false)}
+                    onRetry={handleFindShelters}
+                />
+            )}
         </div>
     );
 };

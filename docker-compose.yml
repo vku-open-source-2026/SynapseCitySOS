@@ -13,6 +13,17 @@ services:
       SYNAPSEDX_BASE_URL: https://synapsedx.sbs
       ALLOW_LOCAL_DEPENDENCIES: "false"
       AUTH_SECRET: ${AUTH_SECRET:-}
+      # Production refuses ALLOW_DEMO_AUTH=true at startup. Keep it false in a
+      # production stack and delegate identity to the Tier-1 IAM gateway.
+      ALLOW_DEMO_AUTH: ${ALLOW_DEMO_AUTH:-false}
+      RATE_LIMIT_AUTH_MAX: ${RATE_LIMIT_AUTH_MAX:-60}
+      RATE_LIMIT_STREAM_MAX: ${RATE_LIMIT_STREAM_MAX:-30}
+      RATE_LIMIT_GEO_MAX: ${RATE_LIMIT_GEO_MAX:-120}
+      RATE_LIMIT_AI_MAX: ${RATE_LIMIT_AI_MAX:-30}
+      VNDMS_STALE_MINUTES: ${VNDMS_STALE_MINUTES:-60}
+      SYNAPSEDX_TIMEOUT_MS: ${SYNAPSEDX_TIMEOUT_MS:-20000}
+      SYNAPSEDX_AI_TIMEOUT_MS: ${SYNAPSEDX_AI_TIMEOUT_MS:-45000}
+      SOS_STREAM_EVENT_POLL_MS: ${SOS_STREAM_EVENT_POLL_MS:-2000}
     expose: ["8084"]
     networks: [synapsecity-sos]
   gateway:
@@ -28,6 +39,8 @@ services:
       SOS_SERVICE_URL: http://sos-service:8084
       CONSOLE_URL: http://console:80
       CORS_ORIGIN: https://sos.synapsecity.sbs
+      GATEWAY_TIMEOUT_MS: ${GATEWAY_TIMEOUT_MS:-10000}
+      GATEWAY_CONSOLE_TIMEOUT_MS: ${GATEWAY_CONSOLE_TIMEOUT_MS:-15000}
     depends_on: [sos-service, console]
     ports:
       # Host 8086 is the local/public-stack gateway entry; 8084 stays the

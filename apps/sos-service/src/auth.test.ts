@@ -4,6 +4,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
+  assertAuthConfiguration,
+  demoSessionRole,
+  hasPermission,
   signSessionToken,
   verifySessionToken,
   type SessionClaims,
@@ -47,6 +50,16 @@ test('tampered signatures and malformed tokens are rejected', () => {
   assert.equal(verifySessionToken(token, 'access', 'different-secret-with-32-characters!!'), null);
 });
 
+test('algorithm confusion and unsigned tokens are rejected', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(JSON.stringify({ ...base, typ: 'access', iat: now, exp: now + 60, jti: 'x' })).toString('base64url');
+  const noneHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+  const hsHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  assert.equal(verifySessionToken(`${noneHeader}.${payload}.`, 'access', SECRET), null);
+  assert.equal(verifySessionToken(`${noneHeader}.${payload}.forged`, 'access', SECRET), null);
+  assert.equal(verifySessionToken(`${hsHeader}.${payload}.forged`, 'access', SECRET), null);
+});
+
 test('expired tokens are rejected', () => {
   const now = Math.floor(Date.now() / 1000);
   const expired = signSessionToken(
@@ -61,4 +74,33 @@ test('claims expose a token id so refreshes rotate', () => {
   const second = verifySessionToken(signSessionToken({ ...base, typ: 'refresh' }, SECRET), 'refresh', SECRET);
   assert.ok(first && second);
   assert.notEqual((first as SessionClaims).jti, (second as SessionClaims).jti);
+});
+
+test('demo sessions never claim admin and ignore an operator env role', () => {
+  const previous = process.env.SOS_DEMO_AUTH_ROLE;
+  try {
+    process.env.SOS_DEMO_AUTH_ROLE = 'admin';
+    assert.equal(demoSessionRole('login'), 'responder');
+    assert.equal(demoSessionRole('register'), 'volunteer');
+    process.env.SOS_DEMO_AUTH_ROLE = 'operator';
+    assert.equal(demoSessionRole('login'), 'responder');
+    process.env.SOS_DEMO_AUTH_ROLE = 'volunteer';
+    assert.equal(demoSessionRole('login'), 'volunteer');
+  } finally {
+    if (previous === undefined) delete process.env.SOS_DEMO_AUTH_ROLE;
+    else process.env.SOS_DEMO_AUTH_ROLE = previous;
+  }
+});
+
+test('production refuses demo auth at startup', () => {
+  assert.throws(() => assertAuthConfiguration({ NODE_ENV: 'production', ALLOW_DEMO_AUTH: 'true' } as NodeJS.ProcessEnv), /refused in NODE_ENV=production/);
+  assert.doesNotThrow(() => assertAuthConfiguration({ NODE_ENV: 'test', ALLOW_DEMO_AUTH: 'true' } as NodeJS.ProcessEnv));
+  assert.doesNotThrow(() => assertAuthConfiguration({ NODE_ENV: 'production', ALLOW_DEMO_AUTH: 'false' } as NodeJS.ProcessEnv));
+});
+
+test('permissions follow the role matrix and admin is a wildcard', () => {
+  assert.equal(hasPermission({ role: 'citizen', permissions: ['emergency:read'] }, 'emergency:dispatch'), false);
+  assert.equal(hasPermission({ role: 'operator', permissions: ['emergency:read', 'emergency:dispatch'] }, 'emergency:dispatch'), true);
+  assert.equal(hasPermission({ role: 'responder', permissions: ['emergency:read', 'emergency:write'] }, 'emergency:eop'), false);
+  assert.equal(hasPermission({ role: 'admin', permissions: ['emergency:admin'] }, 'emergency:eop'), true);
 });

@@ -8,6 +8,20 @@ import type {
   ResourceUnitUpdateRequest,
 } from '../types/resource-unit';
 
+export interface NearbyShelter {
+  id: string;
+  name: string;
+  resource_code: string | null;
+  district: string | null;
+  ward: string | null;
+  capacity: number | null;
+  capacity_unit: string | null;
+  status: string | null;
+  contact_phone: string | null;
+  current_location: { type: string; coordinates: number[] } | null;
+  distance_m: number;
+}
+
 export interface ResourceListParams {
   skip?: number;
   limit?: number;
@@ -34,6 +48,19 @@ export const resourcesApi = {
 
   update: async (id: string, data: ResourceUnitUpdateRequest): Promise<ResourceUnit> => {
     const response = await httpClient.put<ResourceUnit>(`/emergency/resources/${id}`, data);
+    return response.data;
+  },
+
+  nearbyShelters: async (params: {
+    lat: number;
+    lng: number;
+    radius_m?: number;
+    limit?: number;
+  }): Promise<{ shelters: NearbyShelter[]; radius_m: number; total: number }> => {
+    const response = await httpClient.get<{ shelters: NearbyShelter[]; radius_m: number; total: number }>(
+      '/emergency/resources/shelters/near',
+      { params },
+    );
     return response.data;
   },
 

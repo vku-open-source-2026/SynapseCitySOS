@@ -40,6 +40,11 @@ export interface EOPPlan {
   fallback_plan: string[];
   communications_plan: string[];
   status: EOPPlanStatus;
+  /** `tier2-ai` or `deterministic-fallback`; returned by generate-draft. */
+  generated_by?: string;
+  generated?: boolean;
+  source?: string;
+  warning?: string;
   /** Free-form markdown body edited by coordinators */
   markdown_body?: string | null;
   review_notes?: string;

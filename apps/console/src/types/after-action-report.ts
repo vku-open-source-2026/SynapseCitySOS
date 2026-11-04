@@ -11,6 +11,14 @@ export interface AfterActionTimelineEntry {
 
 export interface AfterActionKPI {
   response_time_minutes?: number;
+  response_sla_minutes?: number;
+  dispatch_total?: number;
+  dispatch_completed?: number;
+  dispatch_canceled?: number;
+  sitrep_published?: number;
+  sitrep_expected?: number;
+  resources_assigned?: number;
+  resources_available?: number;
   response_speed_score: number;
   dispatch_completion_rate: number;
   sitrep_coverage_rate: number;
@@ -25,6 +33,7 @@ export interface AfterActionReport {
   title: string;
   summary: string;
   status: AfterActionStatus;
+  version?: number;
   timeline: AfterActionTimelineEntry[];
   kpi: AfterActionKPI;
   lessons_learned: string[];

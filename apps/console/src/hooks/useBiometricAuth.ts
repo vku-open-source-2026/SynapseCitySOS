@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 /**
- * WebAuthn Biometric Authentication Hook
- * Supports fingerprint, face recognition on supported devices
+ * Biometric login is disabled.
+ *
+ * The previous implementation cached the access/refresh tokens and the whole
+ * user object in localStorage and "authenticated" by replaying them after a
+ * local WebAuthn assertion that no server ever verified. That is a token-replay
+ * shortcut, not authentication (issue #17). Server-side WebAuthn verification
+ * belongs to the Tier-1 IAM gateway; until it exists the feature is removed
+ * rather than faked.
+ *
+ * The hook keeps its public shape so the login page can keep rendering without
+ * branching on a missing hook, but it always reports unavailable.
  */
+import { useEffect, useState } from 'react';
 
-import { useState, useCallback, useEffect } from 'react';
-import { useAuthStore } from '../stores/authStore';
-import type { AuthUser } from '../types/auth';
-
-// Storage keys
-const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
-const BIOMETRIC_CREDENTIAL_KEY = 'biometric_credential_id';
-const BIOMETRIC_USER_KEY = 'biometric_user_data';
+const LEGACY_KEYS = ['biometric_enabled', 'biometric_credential_id', 'biometric_user_data'];
 
 interface BiometricState {
   isAvailable: boolean;
@@ -21,35 +24,7 @@ interface BiometricState {
   error: string | null;
 }
 
-interface StoredCredential {
-  credentialId: string;
-  username: string;
-  accessToken: string;
-  refreshToken: string;
-  user: AuthUser;
-}
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return fallback;
-};
-
-const getErrorName = (error: unknown): string | null => {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    typeof (error as { name?: unknown }).name === 'string'
-  ) {
-    return (error as { name: string }).name;
-  }
-  return null;
-};
-
 export function useBiometricAuth() {
-  const { login } = useAuthStore();
   const [state, setState] = useState<BiometricState>({
     isAvailable: false,
     isEnabled: false,
@@ -57,226 +32,29 @@ export function useBiometricAuth() {
     error: null,
   });
 
-  // Check if WebAuthn is available
   useEffect(() => {
-    const checkAvailability = async () => {
-      try {
-        const available = 
-          window.PublicKeyCredential !== undefined &&
-          typeof window.PublicKeyCredential === 'function';
-        
-        if (available) {
-          // Check if platform authenticator (fingerprint/face) is available
-          const platformAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-          const enabled = localStorage.getItem(BIOMETRIC_ENABLED_KEY) === 'true';
-          
-          setState(prev => ({
-            ...prev,
-            isAvailable: platformAvailable,
-            isEnabled: enabled && platformAvailable,
-          }));
-        }
-      } catch (error) {
-        console.error('Error checking biometric availability:', error);
-      }
-    };
-
-    checkAvailability();
-  }, []);
-
-  // Generate random challenge
-  const generateChallenge = useCallback((): ArrayBuffer => {
-    const challenge = new Uint8Array(32);
-    crypto.getRandomValues(challenge);
-    return challenge.buffer as ArrayBuffer;
-  }, []);
-
-  // Convert ArrayBuffer to Base64
-  const bufferToBase64 = useCallback((buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-  }, []);
-
-  // Convert Base64 to ArrayBuffer
-  const base64ToBuffer = useCallback((base64: string): ArrayBuffer => {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes.buffer;
-  }, []);
-
-  // Register biometric credential after successful login
-  const registerBiometric = useCallback(async (
-    username: string,
-    accessToken: string,
-    refreshToken: string,
-    user: AuthUser
-  ): Promise<boolean> => {
-    if (!state.isAvailable) {
-      setState(prev => ({ ...prev, error: 'Biometric not available on this device' }));
-      return false;
-    }
-
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-
+    // Remove any token cache left by an older build.
     try {
-      const challenge = generateChallenge();
-      const userId = new TextEncoder().encode(username);
-
-      const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
-        challenge,
-        rp: {
-          name: 'SynapseCity SOS',
-          id: window.location.hostname,
-        },
-        user: {
-          id: userId,
-          name: username,
-          displayName: user.full_name || username,
-        },
-        pubKeyCredParams: [
-          { alg: -7, type: 'public-key' },   // ES256
-          { alg: -257, type: 'public-key' }, // RS256
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: 'platform', // Use device biometric
-          userVerification: 'required',
-          residentKey: 'preferred',
-        },
-        timeout: 60000,
-        attestation: 'none',
-      };
-
-      const credential = await navigator.credentials.create({
-        publicKey: publicKeyCredentialCreationOptions,
-      }) as PublicKeyCredential;
-
-      if (!credential) {
-        throw new Error('Failed to create credential');
-      }
-
-      // Store credential info locally (for demo - in production, send to server)
-      const storedCredential: StoredCredential = {
-        credentialId: bufferToBase64(credential.rawId),
-        username,
-        accessToken,
-        refreshToken,
-        user,
-      };
-
-      localStorage.setItem(BIOMETRIC_CREDENTIAL_KEY, storedCredential.credentialId);
-      localStorage.setItem(BIOMETRIC_USER_KEY, JSON.stringify(storedCredential));
-      localStorage.setItem(BIOMETRIC_ENABLED_KEY, 'true');
-
-      setState(prev => ({ ...prev, isLoading: false, isEnabled: true }));
-      return true;
-    } catch (error: unknown) {
-      console.error('Biometric registration error:', error);
-      setState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: getErrorMessage(error, 'Failed to register biometric'),
-      }));
-      return false;
-    }
-  }, [state.isAvailable, generateChallenge, bufferToBase64]);
-
-  // Authenticate using biometric
-  const authenticateWithBiometric = useCallback(async (): Promise<boolean> => {
-    if (!state.isEnabled) {
-      setState(prev => ({ ...prev, error: 'Biometric not enabled' }));
-      return false;
-    }
-
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-
-    try {
-      const storedData = localStorage.getItem(BIOMETRIC_USER_KEY);
-      if (!storedData) {
-        throw new Error('No stored credentials found');
-      }
-
-      const stored: StoredCredential = JSON.parse(storedData);
-      const challenge = generateChallenge();
-
-      const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
-        challenge,
-        rpId: window.location.hostname,
-        allowCredentials: [
-          {
-            id: base64ToBuffer(stored.credentialId),
-            type: 'public-key',
-            transports: ['internal'],
-          },
-        ],
-        userVerification: 'required',
-        timeout: 60000,
-      };
-
-      const assertion = await navigator.credentials.get({
-        publicKey: publicKeyCredentialRequestOptions,
-      }) as PublicKeyCredential;
-
-      if (!assertion) {
-        throw new Error('Authentication failed');
-      }
-
-      // Biometric verified - login with stored credentials
-      login(stored.accessToken, stored.refreshToken, stored.user);
-      
-      setState(prev => ({ ...prev, isLoading: false }));
-      return true;
-    } catch (error: unknown) {
-      console.error('Biometric authentication error:', error);
-      
-      // Handle user cancellation
-      if (getErrorName(error) === 'NotAllowedError') {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Authentication cancelled',
-        }));
-      } else {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: getErrorMessage(error, 'Biometric authentication failed'),
-        }));
-      }
-      return false;
-    }
-  }, [state.isEnabled, generateChallenge, base64ToBuffer, login]);
-
-  // Disable biometric
-  const disableBiometric = useCallback(() => {
-    localStorage.removeItem(BIOMETRIC_ENABLED_KEY);
-    localStorage.removeItem(BIOMETRIC_CREDENTIAL_KEY);
-    localStorage.removeItem(BIOMETRIC_USER_KEY);
-    setState(prev => ({ ...prev, isEnabled: false }));
-  }, []);
-
-  // Update stored tokens (after token refresh)
-  const updateStoredTokens = useCallback((accessToken: string, refreshToken: string) => {
-    const storedData = localStorage.getItem(BIOMETRIC_USER_KEY);
-    if (storedData) {
-      const stored: StoredCredential = JSON.parse(storedData);
-      stored.accessToken = accessToken;
-      stored.refreshToken = refreshToken;
-      localStorage.setItem(BIOMETRIC_USER_KEY, JSON.stringify(stored));
+      for (const key of LEGACY_KEYS) localStorage.removeItem(key);
+    } catch {
+      // Storage may be disabled; nothing to clean up.
     }
   }, []);
 
   return {
     ...state,
-    registerBiometric,
-    authenticateWithBiometric,
-    disableBiometric,
-    updateStoredTokens,
+    registerBiometric: async (): Promise<boolean> => false,
+    authenticateWithBiometric: async (): Promise<boolean> => false,
+    disableBiometric: (): void => {
+      try {
+        for (const key of LEGACY_KEYS) localStorage.removeItem(key);
+      } catch {
+        // ignore
+      }
+      setState((previous) => ({ ...previous, isEnabled: false }));
+    },
+    updateStoredTokens: (): void => {
+      // Deliberately a no-op: no tokens are cached for biometric replay.
+    },
   };
 }

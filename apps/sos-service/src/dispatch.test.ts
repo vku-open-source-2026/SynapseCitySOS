@@ -65,9 +65,9 @@ test('approval accepts the legacy user_id alias and does not duplicate rows', ()
   assert.ok(assignments.some((item) => item.resource_unit_id === 'old'));
 });
 
-test('an approval without an id still updates status without inventing an assignee', () => {
+test('an approval without an id does not invent an assigned status or assignee', () => {
   const patch = normalizeDispatchAssignment({ notes: 'no id' }, [], { status: 'assigned' });
-  assert.equal(patch.status, 'assigned');
+  assert.equal(patch.status, undefined);
   assert.equal(patch.assigned_resource_unit_id, undefined);
   assert.equal(patch.assigned_user_id, undefined);
   assert.equal(patch.assignments, undefined);

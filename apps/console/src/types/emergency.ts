@@ -52,6 +52,7 @@ export interface EmergencyEvent {
   created_by?: string;
   updated_by?: string;
   metadata: Record<string, unknown>;
+  after_action_report_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -108,4 +109,29 @@ export interface PublicEmergencyEvent {
   } | null;
   started_at?: string | null;
   created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface DependencyDatasetStatus {
+  id: string;
+  reachable: boolean;
+  status: string;
+  public?: boolean;
+  checked_at: string;
+}
+
+export interface DependencyStatus {
+  name: string;
+  reachable: boolean;
+  status: string;
+  checked_at: string;
+  latency_ms?: number;
+  detail?: string;
+  datasets?: DependencyDatasetStatus[];
+}
+
+export interface DependencyHealthResponse {
+  service: string;
+  checked_at: string;
+  dependencies: DependencyStatus[];
 }

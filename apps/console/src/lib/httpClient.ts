@@ -57,17 +57,18 @@ const responseErrorInterceptor = (error: AxiosError) => {
 
         switch (status) {
             case 401:
-                // Unauthorized - clear auth and redirect to login
+                // Unauthorized - clear auth and redirect to login, not the
+                // public landing page (issue #17).
                 useAuthStore.getState().logout();
 
-                // Only redirect if not already on a public page
-                if (window.location.pathname.includes("/admin")) {
-                    window.location.href = "/";
+                if (typeof window !== 'undefined' && window.location.pathname.includes("/admin")) {
+                    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+                    window.location.href = `/login?next=${next}`;
                 }
                 break;
 
             case 403:
-                console.error("Access forbidden");
+                console.error("Access forbidden: the session lacks the required emergency permission");
                 break;
 
             case 404:

@@ -13,6 +13,21 @@ export interface DeployHazardRequest {
   additional_context?: string;
 }
 
+export interface HazardIngestStatus {
+  status: 'unconfigured' | 'ready' | 'degraded' | 'stale' | 'error';
+  configured: boolean;
+  source: string;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  records_ingested: number;
+  records_rejected: number;
+  error: string | null;
+  stale: boolean;
+  feed_version: string | null;
+  checked_at: string;
+  stale_after_minutes: number;
+}
+
 export interface DeployHazardResponse {
   hazard_id: string;
   event_id: string;
@@ -66,8 +81,21 @@ export const hazardsApi = {
     return asList<Hazard>(response.data);
   },
 
-  expireStale: async (): Promise<{ updated: number }> => {
-    const response = await httpClient.post<{ updated: number }>('/hazards/expire-stale');
+  inPolygon: async (polygon: unknown, params?: { limit?: number; skip?: number }): Promise<Hazard[]> => {
+    const response = await httpClient.post<{ items: Hazard[]; total: number }>('/hazards/geo/in-polygon', {
+      polygon,
+      ...params,
+    });
+    return asList<Hazard>(response.data.items);
+  },
+
+  ingestStatus: async (): Promise<HazardIngestStatus> => {
+    const response = await httpClient.get<HazardIngestStatus>('/hazards/ingest/status');
+    return response.data;
+  },
+
+  expireStale: async (): Promise<{ updated: number; scanned?: number; truncated?: boolean }> => {
+    const response = await httpClient.post<{ updated: number; scanned?: number; truncated?: boolean }>('/hazards/expire-stale');
     return response.data;
   },
 

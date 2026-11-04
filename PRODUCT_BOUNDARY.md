@@ -33,7 +33,7 @@ SynapseCitySOS -> @synapsedx/capabilities -> @synapseone/sdk -> SynapseOne
 
 ## Owned capabilities
 
-- Flood, storm, landslide and other hazard feeds, including VNDMS live data.
+- Flood, storm, landslide and other hazard feeds, including VNDMS ingestion.
 - Emergency events and public emergency projection.
 - Emergency operations plans (EOP).
 - Dispatch orders and responder assignment.
@@ -97,16 +97,23 @@ password change are acknowledgements only. If `AUTH_SECRET` is unset, the
 service generates an ephemeral secret at start-up and logs a warning.
 
 Production identity (password verification, MFA, account lifecycle, revocation)
-must be delegated to the Tier-1 IAM/API gateway. Until then any non-empty
-username/password opens a shell session, which is suitable only for the demo and
-internal console.
+must be delegated to the Tier-1 IAM/API gateway. The shell is disabled by
+default; it opens only when `ALLOW_DEMO_AUTH=true` is explicitly set for a
+non-production demo, and `NODE_ENV=production` refuses to start with demo auth
+enabled. A demo login is always `responder`, registration is read-only, and a
+client-supplied `role` is ignored; demo sessions never grant `admin`/`manager`.
+Tokens are accepted only from the `Authorization` header, never a URL query.
 
-Internal emergency routes require `Authorization: Bearer <access_token>`, as do
-hazard mutations (create/update/deploy/expire-stale). The unauthenticated public
-surface is limited to `/v1/emergency/public`, `/v1/emergency/stream/hazards`,
+Internal emergency routes require `Authorization: Bearer <access_token>` and an
+explicit permission: `emergency:read`, `emergency:write`,
+`emergency:dispatch`, or `emergency:eop`. The unauthenticated public surface is
+limited to `/v1/emergency/public`, `/v1/emergency/public/status`,
+`/v1/emergency/stream/hazards`, `/v1/emergency/resources/shelters/near`,
 `/v1/hazards` reads (`/v1/hazards`, `/v1/hazards/recent`,
-`/v1/hazards/vndms-live`, `/v1/hazards/geo/*`), `/v1/map/*`, `/v1/geo/*`,
-`/v1/ai/*`, `/v1/sos`, `/health` and `/ready`.
+`/v1/hazards/vndms-live`, `/v1/hazards/ingest/status`,
+`/v1/hazards/geo/*`), `/v1/map/*`, `/v1/geo/*`, `/v1/ai/*`, `/v1/sos`,
+`/health` and `/ready`. `POST /v1/hazards/ingest` is an authenticated feed sink;
+the scheduled pull belongs to Tier 2.
 
 ## API namespace ownership
 
@@ -154,7 +161,7 @@ does not use the SOS prefix.
 sos-emergency-events        sos-eop-plans
 sos-dispatch-orders         sos-resource-units
 sos-sitreps                 sos-hazard-layers
-sos-after-action-reports
+sos-after-action-reports    sos-hazard-ingest-runs
 ```
 
 ## Console route ownership

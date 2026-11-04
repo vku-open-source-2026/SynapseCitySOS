@@ -5,6 +5,8 @@ import type { Hazard } from '@/types/hazard';
 export type HazardStreamPayload = {
   snapshot?: Hazard[];
   delta?: Hazard;
+  degraded?: boolean;
+  error?: string;
 };
 
 export function normalizeHazardRecord(value: unknown): Hazard | null {
@@ -70,14 +72,24 @@ export function parseHazardStreamPayload(raw: string): HazardStreamPayload | nul
   }
 
   const envelope = parsed as Record<string, unknown>;
+  if (envelope.degraded === true || envelope.error === 'hazard_stream_degraded') {
+    return {
+      degraded: true,
+      error: typeof envelope.message === 'string'
+        ? envelope.message
+        : typeof envelope.error === 'string' ? envelope.error : 'hazard_stream_degraded',
+    };
+  }
+
   const envelopeSnapshot =
+    getSnapshot(envelope.snapshot) ??
     getSnapshot(envelope.items) ??
     getSnapshot(envelope.hazards) ??
     getSnapshot(envelope.data) ??
     getSnapshot(envelope.payload);
 
   if (envelopeSnapshot !== null) {
-    return { snapshot: envelopeSnapshot };
+    return { snapshot: envelopeSnapshot, ...(envelope.degraded === true ? { degraded: true } : {}) };
   }
 
   const envelopeDelta =

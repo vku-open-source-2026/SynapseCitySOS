@@ -2,7 +2,7 @@
 
 SynapseCitySOS is the emergency operations product of the Synapse platform. It
 owns emergency preparedness, response and recovery: hazard feeds including
-VNDMS live data, emergency events, emergency operations plans (EOP), dispatch
+VNDMS ingestion, emergency events, emergency operations plans (EOP), dispatch
 and responder assignment, emergency resource units, SITREP, AAR, the live
 hazard SSE stream, the emergency command centre and the public
 hazard/emergency map.
@@ -50,7 +50,7 @@ projections are read through Tier-2 SynapseLDS publication. `/v1/geo`,
 
 ## Features
 
-- flood, storm, landslide and other hazard feeds, including VNDMS live data;
+- flood, storm, landslide and other hazard feeds, including VNDMS ingestion;
 - emergency events and public emergency projection;
 - emergency operations plans (EOP);
 - dispatch orders and responder assignment;
@@ -70,8 +70,8 @@ reporting. Those are SynapseCity features.
 
 ## Run
 
-Build the Tier-2 SDK first; the workspace-local dependency is intentional for
-development:
+Build the Tier-2 SDK first; the workspace-local dependency is intentional until
+the workspace `@synapsedx/capabilities` package is published to the npm registry:
 
 ```bash
 cd ../SynapseDX/sdks/capabilities-js && npm install && npm run build
@@ -84,15 +84,24 @@ SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
 generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
 value in production so sessions survive a restart.
 
+The login/register shell is **disabled by default**. A demo session exists only
+when `ALLOW_DEMO_AUTH=true` is explicitly set for a non-production deployment;
+`NODE_ENV=production` refuses to start with demo auth enabled. Demo login is
+always a `responder` session, registration is read-only (`volunteer`), and a
+client-supplied `role` is ignored. Demo sessions never grant `admin`. Production
+identity must be delegated to the Tier-1 IAM gateway through Tier 2.
+
 Console development:
 
 ```bash
 npm run dev --workspace=@synapsecity/sos-console
 ```
 
-The production stack is reproducible with `docker compose up -d --build`. For a
-registry release, replace the `file:` dependency with the published
-`@synapsedx/capabilities` version after the package has been released.
+The production stack is reproducible with `docker compose up -d --build`. The
+release step still requires publishing the workspace `@synapsedx/capabilities`
+package and replacing the `file:` dependency with the published semver range;
+the build is reproducible today because `prebuild` builds the local SDK from the
+`../SynapseDX` checkout.
 
 ## API
 
@@ -118,13 +127,33 @@ GET  /v1/sos
 `/v1/auth/*` is a stateless HMAC-SHA256 session shell for the console:
 login/register/refresh/logout/change-password/me/verify. It stores no password
 and creates no SOS user dataset or City user record; production identity must be
-delegated to the Tier-1 IAM gateway. Internal emergency routes require
-`Authorization: Bearer <access_token>`, as do hazard mutations; hazard reads
-(`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
-`/v1/hazards/geo/*`) and the public projections (`/v1/emergency/public`,
-`/v1/emergency/stream/hazards`, `/v1/map/*`, `/v1/geo/*`, `/v1/ai/*`,
-`/v1/sos`) remain open. Dispatch approval uses `assigned_resource_unit_id`,
-mirrored to the legacy `assigned_user_id` field for older clients.
+delegated to the Tier-1 IAM gateway. The shell is demo-gated (see Run) and
+tokens are accepted only from the `Authorization` header, never a query string.
+
+Internal emergency routes require `Authorization: Bearer <access_token>` and an
+explicit permission: reads need `emergency:read`, event/SITREP writes need
+`emergency:write`, dispatch/resource/hazard mutations need
+`emergency:dispatch`, and EOP approval/publication needs `emergency:eop`.
+A valid but low-privilege session receives `403` with a stable `error` code.
+The role→permission matrix is:
+
+| Role | Permissions |
+| --- | --- |
+| citizen, volunteer | `emergency:read` |
+| responder | `emergency:read`, `emergency:write` |
+| operator | `emergency:read`, `emergency:write`, `emergency:dispatch` |
+| manager | operator permissions + `emergency:eop` |
+| admin | manager permissions + `emergency:admin` (wildcard) |
+
+
+Hazard reads (`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
+`/v1/hazards/geo/*`, `/v1/hazards/ingest/status`), the public projection
+(`/v1/emergency/public`, `/v1/emergency/public/status`,
+`/v1/emergency/stream/hazards`), nearby shelters
+(`/v1/emergency/resources/shelters/near`) and `/v1/map/*`, `/v1/geo/*`,
+`/v1/ai/*`, `/v1/sos` remain open. Dispatch approval uses
+`assigned_resource_unit_id`, mirrored to the legacy `assigned_user_id` field for
+older clients.
 
 `GET /v1/sos` advertises the owned feature list and the not-owned city feature
 list. Foreign namespaces under `/v1/assets`, `/v1/incidents`, `/v1/maintenance`,
@@ -137,6 +166,99 @@ Map tiles, autocomplete, forward geocoding and reverse geocoding are proxied
 through the SOS backend. Set `VIETMAP_API_KEY` and optionally
 `VIETMAP_TILE_STYLE=tm|lm|dm|hm|st` in the server `.env`; the key is never sent
 to the browser.
+
+## Operational logic
+
+- **Hazard filters** interpret `active_only`/`is_active` as booleans against
+  `is_active` (not a generic string match). `hours` on `/v1/hazards/recent`
+  filters by the most recent hazard timestamp and excludes expired records.
+- **Spatial queries** validate `lat`/`lng`/`radius_m` and GeoJSON
+  Polygon/MultiPolygon input, then evaluate haversine distance or
+  point-in-polygon. Invalid geometry is `400`; a far-away origin returns `[]`.
+- **VNDMS** ingestion is push-based: a Tier-2 scheduled connector posts batches
+  to `POST /v1/hazards/ingest`; SOS normalises, validates and upserts by stable
+  `hazard_id`, then records the run in `sos-hazard-ingest-runs`.
+  `GET /v1/hazards/ingest/status` combines that push history with the Tier-2
+  scheduled job (`GET /v1/capabilities/jobs` and
+  `/v1/capabilities/jobs/:id/runs`) and reports
+  `unconfigured | ready | degraded | stale | error` plus a `connector` block
+  (job id, schedule, last run, last success, rejected count). An unavailable
+  jobs API is reported as `connector.available: false` with a precise error,
+  never as `ready`. SOS never runs a local cron/poller.
+- **EOP drafts** are generated by the Tier-2 AI capability
+  (`POST /v1/capabilities/ai/chat`) from the event, its linked hazards, the
+  resource inventory and the operator's additional context. `metadata` records
+  `generated_by: "tier2-ai"`, `model`, `prompt_version`, `usage`, `generated_at`
+  and `source_refs`. If the AI capability is unavailable the endpoint returns a
+  typed `503 ai_capability_unavailable` and persists nothing; passing
+  `{"fallback":"deterministic"}` explicitly opts into the event-specific
+  doctrine draft, labelled `generated_by: "deterministic-fallback"` with the
+  `ai_error`. `force_new_version=false` is idempotent per event; `true`
+  increments the version, and version selection is serialised per event so two
+  concurrent requests can never create two v1 plans. `POST /eop/:id/submit`
+  creates one pending dispatch order per plan action with deterministic ids, so
+  re-submit returns the same orders.
+- **Dispatch optimizer** only auto-assigns `available` units with a compatible
+  `resource_type`, never `offline`/`maintenance`, computes a straight-line ETA,
+  and persists the assignment. Its counts equal the records it changed.
+- **AAR KPI** is computed from event, dispatch, SITREP and resource records:
+  `response_time_minutes` (first assignment − event start), severity SLA band,
+  `dispatch_completion_rate`, `sitrep_coverage_rate` (published / expected
+  6-hour windows), `resource_efficiency_score`, and
+  `overall_score = 0.3·response + 0.3·dispatch + 0.2·sitrep + 0.2·resource`.
+  `POST /v1/emergency/:id/resolve` creates exactly one draft AAR (idempotent).
+- **SITREP** requires a real event, title, reporting period, author/source and
+  non-negative integer counters. Published SITREPs are immutable; a delta
+  creates a new revision with `amends_sitrep_id`.
+- **Concurrency** uses the Tier-2 record version: single-record reads return
+  `ETag: "<version>"` and `x-record-version`, and updates send `If-Match`
+  (body `if_version` is also accepted) so a stale writer receives
+  `409 record_version_conflict` instead of silently losing an update. Deploy,
+  approval and submit are idempotent, and only a `409` create conflict is
+  retried as an update — a `400` validation failure is never persisted.
+- **SSE** consumes the Tier-2 event feed (`GET /v1/capabilities/events`,
+  filtered to `sos-hazard-layers`) and resumes from the client's
+  `Last-Event-ID` cursor. A hazard `record.*` event refreshes the public
+  snapshot within the 2-second poll window; only when the feed itself is
+  unavailable does it degrade to a 30-second snapshot poll (counted in
+  `/metrics`). It never converts a Tier-2 failure into an empty snapshot: it
+  emits a named `error` event, keeps the last good snapshot, heartbeats every
+  15 s. The public map shows a degraded banner and never claims an area is safe
+  while data is unavailable.
+- **Health** (`/health`, `/ready`, `/v1/emergency/health`) reports Tier-2
+  reachability and per-dataset state; `/ready` returns `503` when Tier-2 is
+  unreachable or a dataset is missing. `/v1/ai/status` and
+  `/v1/emergency/sosconn/status` report the real Tier-2 AI provider/model
+  readiness.
+- **Metrics** at `/metrics` expose request rate/errors/latency, Tier-2 call
+  results and latency, record-version conflicts, EOP draft source and hazard
+  stream transport; request logs are structured JSON with the correlation id.
+
+## Known lower-tier dependencies
+
+Tier 2 now provides everything this product needs at runtime: the AI capability
+(`/v1/capabilities/ai/*`), the event feed (`/v1/capabilities/events`), record
+versions with `If-Match` (`/v1/capabilities/datasets/:id/records/:recordId`),
+and scheduled jobs with run history (`/v1/capabilities/jobs`). SOS uses them
+directly and returns explicit degraded/unavailable states when a call fails.
+
+Remaining blockers are release/operator steps, not SOS work:
+
+1. **SDK publication.** The workspace `@synapsedx/capabilities` package
+   (currently 0.3.0 locally) is not in the npm registry yet
+   (`npm view @synapsedx/capabilities` → 404), so `apps/sos-service/package.json`
+   keeps the workspace `file:` dependency and the `prebuild` step builds
+   `../SynapseDX/sdks/capabilities-js`. Publishing the package and replacing
+   `file:` with the published semver range is a SynapseDX/operator release step
+   (issue #19 tracks only this step).
+2. **Spatial query.** Tier 2 has no spatial predicate yet, so SOS pages records
+   and filters geo predicates in memory with a bounded scan
+   (`x-sos-scan-truncated` is returned when the bound is hit).
+3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
+   `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
+   a Tier-2 service credential (`SYNAPSEDX_API_KEY`/`SYNAPSEDX_TOKEN`) to read
+   the job/run status and the event feed. Until it exists, ingest status is
+   `unconfigured` (never a fake `ready`).
 
 ## Console
 

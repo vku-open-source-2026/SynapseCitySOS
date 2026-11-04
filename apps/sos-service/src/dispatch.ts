@@ -52,6 +52,11 @@ export function requestedResourceUnitId(input: DispatchData): string | null {
  * Build the patch for `POST /v1/emergency/dispatch/:id/{approve,assign}`.
  * The same opaque SOS resource-unit id is stored in every assignment field so
  * old and new console builds both read a value.
+ *
+ * Crucially, the status is only advanced to `assigned` when an actual resource
+ * unit id is present. An approval without an assignee must be rejected by the
+ * route (400 `assigned_resource_unit_id_required`), never persisted as an
+ * unassigned "assigned" order (issue #20).
  */
 export function normalizeDispatchAssignment(
   input: DispatchData,
@@ -63,11 +68,14 @@ export function normalizeDispatchAssignment(
     resource_unit_id: _resourceUnitId,
     assigned_user_id: _assignedUserId,
     user_id: _userId,
+    if_version: _ifVersion,
+    ifVersion: _ifVersionCamel,
     ...rest
   } = input;
-  const patch: DispatchData = { ...rest, status: options.status ?? 'assigned' };
+  const patch: DispatchData = { ...rest };
   const resourceUnitId = requestedResourceUnitId(input);
   if (!resourceUnitId) return patch;
+  patch.status = options.status ?? 'assigned';
 
   const timestamp = options.now ?? new Date().toISOString();
   const existing = Array.isArray(currentAssignments)

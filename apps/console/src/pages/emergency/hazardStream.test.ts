@@ -128,6 +128,28 @@ describe('parseHazardStreamPayload', () => {
     });
   });
 
+  it('parses the server snapshot envelope', () => {
+    const payload = parseHazardStreamPayload(
+      JSON.stringify({ snapshot: [buildHazard({ id: 'haz-server', hazard_id: 'HZ-SERVER' })], degraded: false })
+    );
+
+    expect(payload).toEqual({
+      snapshot: [expect.objectContaining({ id: 'haz-server', hazard_id: 'HZ-SERVER' })],
+    });
+  });
+
+  it('marks a degraded error frame without inventing an empty snapshot', () => {
+    const payload = parseHazardStreamPayload(
+      JSON.stringify({ error: 'hazard_stream_degraded', message: 'Hazard data is temporarily unavailable.', degraded: true })
+    );
+
+    expect(payload).toEqual({
+      degraded: true,
+      error: 'Hazard data is temporarily unavailable.',
+    });
+    expect(payload?.snapshot).toBeUndefined();
+  });
+
   it('ignores invalid payload', () => {
     const invalidMissingFields = parseHazardStreamPayload(JSON.stringify({ hazard_id: 'HZ-004' }));
     const invalidJson = parseHazardStreamPayload('{bad json');

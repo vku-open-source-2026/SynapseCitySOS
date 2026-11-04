@@ -192,3 +192,150 @@ test('CORS advertises PUT and DELETE for the SOS API', async () => {
   assert.match(methods, /\bPUT\b/);
   assert.match(methods, /\bDELETE\b/);
 });
+
+test('an upstream that exceeds the timeout returns 504 instead of hanging', async () => {
+  const slowUpstream = createServer((_req, res) => {
+    setTimeout(() => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+    }, 500);
+  });
+  await new Promise<void>((resolve) => slowUpstream.listen(0, '0.0.0.0', resolve));
+  const upstreamPort = (slowUpstream.address() as AddressInfo).port;
+  const fakeConsole = createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end('<!doctype html><html><body>console</body></html>');
+  });
+  await new Promise<void>((resolve) => fakeConsole.listen(0, '0.0.0.0', resolve));
+  const consolePort = (fakeConsole.address() as AddressInfo).port;
+
+  const slowApp = createApp({
+    upstream: `http://0.0.0.0:${upstreamPort}`,
+    consoleUpstream: `http://0.0.0.0:${consolePort}`,
+    timeoutMs: 50,
+    consoleTimeoutMs: 50,
+  });
+  const slowServer = slowApp.listen(0);
+  await new Promise<void>((resolve, reject) => {
+    slowServer.once('listening', resolve);
+    slowServer.once('error', reject);
+  });
+  const slowBase = `http://127.0.0.1:${(slowServer.address() as AddressInfo).port}`;
+
+  try {
+    const response = await fetch(`${slowBase}/v1/emergency`);
+    assert.equal(response.status, 504);
+    const body = await response.json() as { error: string };
+    assert.equal(body.error, 'upstream_timeout');
+
+    const health = await fetch(`${slowBase}/health`);
+    assert.equal(health.status, 504);
+  } finally {
+    await new Promise<void>((resolve) => slowServer.close(() => resolve()));
+    await new Promise<void>((resolve) => slowUpstream.close(() => resolve()));
+    await new Promise<void>((resolve) => fakeConsole.close(() => resolve()));
+  }
+});
+
+test('the console proxy preserves binary bytes and handles HEAD without a body', async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0x00, 0x80]);
+  const fakeConsole = createServer((req, res) => {
+    if (req.url === '/icons/icon-192x192.png') {
+      res.setHeader('content-type', 'image/png');
+      res.end(Buffer.from(png));
+      return;
+    }
+    res.setHeader('content-type', 'text/html');
+    res.end('<!doctype html><html><body>console</body></html>');
+  });
+  await new Promise<void>((resolve) => fakeConsole.listen(0, '0.0.0.0', resolve));
+  const consolePort = (fakeConsole.address() as AddressInfo).port;
+  const fakeUpstream = createServer((_req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true }));
+  });
+  await new Promise<void>((resolve) => fakeUpstream.listen(0, '0.0.0.0', resolve));
+  const upstreamPort = (fakeUpstream.address() as AddressInfo).port;
+
+  const app = createApp({
+    upstream: `http://0.0.0.0:${upstreamPort}`,
+    consoleUpstream: `http://0.0.0.0:${consolePort}`,
+  });
+  const server = app.listen(0);
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+  try {
+    const image = await fetch(`${base}/icons/icon-192x192.png`);
+    assert.equal(image.status, 200);
+    assert.match(image.headers.get('content-type') || '', /image\/png/);
+    assert.deepEqual([...new Uint8Array(await image.arrayBuffer())], [...png]);
+
+    const head = await fetch(`${base}/icons/icon-192x192.png`, { method: 'HEAD' });
+    assert.equal(head.status, 200);
+    assert.equal(await head.text(), '');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => fakeConsole.close(() => resolve()));
+    await new Promise<void>((resolve) => fakeUpstream.close(() => resolve()));
+  }
+});
+
+test('conditional-write, record-version and stream-resume headers survive the edge (issue #20)', async () => {
+  const seen: Record<string, string | string[] | undefined> = {};
+  const fakeUpstream = createServer((req, res) => {
+    seen['if-match'] = req.headers['if-match'];
+    seen['if-none-match'] = req.headers['if-none-match'];
+    seen['last-event-id'] = req.headers['last-event-id'];
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('etag', '"7"');
+    res.setHeader('x-record-version', '7');
+    res.end(JSON.stringify({ id: 'plan-1', record_version: 7 }));
+  });
+  await new Promise<void>((resolve) => fakeUpstream.listen(0, '0.0.0.0', resolve));
+  const upstreamPort = (fakeUpstream.address() as AddressInfo).port;
+  const fakeConsole = createServer((_req, res) => {
+    res.setHeader('content-type', 'text/html');
+    res.end('<!doctype html><html><body>console</body></html>');
+  });
+  await new Promise<void>((resolve) => fakeConsole.listen(0, '0.0.0.0', resolve));
+  const consolePort = (fakeConsole.address() as AddressInfo).port;
+
+  const app = createApp({
+    upstream: `http://0.0.0.0:${upstreamPort}`,
+    consoleUpstream: `http://0.0.0.0:${consolePort}`,
+  });
+  const server = app.listen(0);
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+  try {
+    const updated = await fetch(`${base}/v1/emergency/eop/plan-1/markdown`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'if-match': '"7"', 'if-none-match': '"6"' },
+      body: JSON.stringify({ markdown_body: '# x' }),
+    });
+    assert.equal(updated.status, 200);
+    assert.equal(seen['if-match'], '"7"', 'If-Match must reach sos-service');
+    assert.equal(seen['if-none-match'], '"6"');
+    assert.equal(updated.headers.get('etag'), '"7"', 'the record ETag must reach the client');
+    assert.equal(updated.headers.get('x-record-version'), '7');
+
+    const stream = await fetch(`${base}/v1/emergency/stream/hazards`, {
+      headers: { 'last-event-id': 'cursor-42' },
+    });
+    assert.equal(stream.status, 200);
+    assert.equal(seen['last-event-id'], 'cursor-42', 'Last-Event-ID must reach the SSE stream');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => fakeUpstream.close(() => resolve()));
+    await new Promise<void>((resolve) => fakeConsole.close(() => resolve()));
+  }
+});

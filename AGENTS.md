@@ -16,10 +16,17 @@ The repository is split into product parts:
 
 - Import the Tier-2 `@synapsedx/capabilities` client from
   `../SynapseDX/sdks/capabilities-js` during this workspace build; releases must
-  resolve the same package from the npm registry.
+  resolve the same package from the npm registry (the package is not published
+  yet, so the `file:` dependency and the `prebuild` SDK build stay until the
+  operator publishes it).
 - Default Tier-2 URL is `https://synapsedx.sbs`. Set `SYNAPSEDX_BASE_URL` only
   to another public HTTPS endpoint. Do not call SynapseOne, a private service
   port, localhost or a database from this repository.
+- Use Tier-2 capabilities instead of local implementations: `ai/chat` for EOP
+  drafts (a typed `503` when unavailable, an explicit opt-in deterministic
+  fallback only), `events` for the hazard stream, `jobs`/`jobs/:id/runs` for the
+  VNDMS connector status, and record versions/`If-Match` for conditional
+  updates. Never add a local scheduler, poller, model client or event store.
 - Persist SOS records through the Tier-2 records API. Read public projections
   through the Tier-2 publication/entity API. Queueing and persistence remain
   owned by Tiers 1 and 2.
@@ -29,7 +36,7 @@ The repository is split into product parts:
 
 ## Feature ownership
 
-Owned: hazard feeds including flood, storm, landslide and VNDMS live data;
+Owned: hazard feeds including flood, storm, landslide and VNDMS ingestion;
 emergency events and public emergency projection; EOP; dispatch and responder
 assignment; emergency resource units; SITREP and deltas; AAR; live hazard SSE;
 emergency command centre, phase boards and rescue operations; public
@@ -54,14 +61,27 @@ operator IDs. Dispatch assignment references an SOS resource unit under
 `assigned_resource_unit_id`; `assigned_user_id` is a deprecated mirror.
 
 `/v1/auth/*` is a stateless HMAC session shell for the console. It stores no
-passwords and creates no user dataset. Production identity must be delegated to
-the Tier-1 IAM/API gateway; `AUTH_SECRET` is optional and falls back to an
-ephemeral start-up secret with a warning. Internal emergency routes and hazard
-mutations require `Authorization: Bearer <access_token>`; keep hazard reads and
-the public projection list (`/v1/emergency/public`,
-`/v1/emergency/stream/hazards`, `/v1/hazards`, `/v1/hazards/recent`,
-`/v1/hazards/vndms-live`, `/v1/hazards/geo/*`, `/v1/map/*`, `/v1/geo/*`,
-`/v1/ai/*`, `/v1/sos`) unauthenticated.
+passwords and creates no user dataset. The shell is disabled by default and
+only opens when `ALLOW_DEMO_AUTH=true` is explicitly set for a non-production
+demo; `NODE_ENV=production` refuses to start with demo auth enabled. A
+client-supplied `role` is ignored: demo login is `responder`, registration is
+read-only `volunteer`, and demo sessions never grant `admin`/`manager`.
+Production identity must be delegated to the Tier-1 IAM/API gateway;
+`AUTH_SECRET` is optional and falls back to an ephemeral start-up secret with a
+warning. Tokens are accepted only from `Authorization: Bearer`, never a query
+string.
+
+Internal emergency routes require a session **and** a permission:
+`emergency:read` for reads, `emergency:write` for event/SITREP writes,
+`emergency:dispatch` for dispatch/resource/hazard mutations, and
+`emergency:eop` for EOP approve/publish. Missing or insufficient permission is
+`403` with a stable `error` code. Keep hazard reads and the public projection
+list (`/v1/emergency/public`, `/v1/emergency/public/status`,
+`/v1/emergency/stream/hazards`, `/v1/emergency/resources/shelters/near`,
+`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
+`/v1/hazards/ingest/status`, `/v1/hazards/geo/*`, `/v1/map/*`, `/v1/geo/*`,
+`/v1/ai/*`, `/v1/sos`) unauthenticated. `POST /v1/hazards/ingest` is an
+authenticated feed sink; scheduling belongs to Tier-2, not SOS.
 
 ## API namespace ownership
 
@@ -98,7 +118,7 @@ Use only `sos-*` datasets:
 sos-emergency-events        sos-eop-plans
 sos-dispatch-orders         sos-resource-units
 sos-sitreps                 sos-hazard-layers
-sos-after-action-reports
+sos-after-action-reports    sos-hazard-ingest-runs
 ```
 
 Never read or write a `city-*` dataset. Keep the start-up prefix guard and its
@@ -126,6 +146,10 @@ npm run start --workspace=@synapsecity/sos-service   # SOS service
 npm run dev --workspace=@synapsecity/sos-console     # console dev server
 docker compose up -d --build                         # production stack
 ```
+
+The public map and command centre must never render an outage as "safe" or an
+empty snapshot. SSE emits a named `error` event and keeps the last good
+snapshot; `/health` and `/ready` report per-dependency state.
 
 Before release, verify:
 

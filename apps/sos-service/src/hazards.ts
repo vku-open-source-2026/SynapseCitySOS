@@ -41,6 +41,22 @@ export function isHazardStale(hazard: HazardData, nowMs: number, ttlHours = DEFA
 }
 
 /** Wire format for one SSE frame. Real LF bytes, never an escaped `\\n`. */
-export function sseHazardsFrame(payload: unknown): string {
-  return `event: hazards\ndata: ${JSON.stringify(payload)}\n\n`;
+export function sseHazardsFrame(payload: unknown, id?: number | string): string {
+  const prefix = id === undefined ? '' : `id: ${id}\n`;
+  return `${prefix}event: hazards\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/**
+ * Error frame for a degraded dependency. It is a named `error` event so the
+ * client can show "data unavailable" without replacing its last good snapshot
+ * with a synthetic empty list (issue #10).
+ */
+export function sseErrorFrame(payload: unknown, id?: number | string): string {
+  const prefix = id === undefined ? '' : `id: ${id}\n`;
+  return `${prefix}event: error\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** Heartbeat/comment frame keeps proxies from idling the connection. */
+export function sseHeartbeatFrame(at = new Date().toISOString()): string {
+  return `: heartbeat ${at}\n\n`;
 }

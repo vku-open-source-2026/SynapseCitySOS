@@ -418,7 +418,7 @@ const RescueOperationPage: React.FC = () => {
                 <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-400">
                   <p className="text-sm">Chưa có task nào được tạo.</p>
                   <p className="text-xs mt-1">
-                    Submit EOP để AI sinh task tự động.
+                    Submit EOP để sinh nhiệm vụ điều phối từ các hành động đã duyệt.
                   </p>
                 </div>
               )}

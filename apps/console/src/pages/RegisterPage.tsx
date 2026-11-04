@@ -48,7 +48,9 @@ export function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Tạo tài khoản</CardTitle>
-          <CardDescription>Đăng ký để truy cập hệ thống</CardDescription>
+          <CardDescription>
+            Đăng ký shell demo (chỉ đọc). Danh tính và vai trò sản xuất do Tier-1 IAM cấp qua Tier-2.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

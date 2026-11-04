@@ -92,6 +92,8 @@ export interface DispatchOptimizeResult {
   auto_assigned: number;
   stale_flagged: number;
   eta_reestimated: number;
+  unassignable?: number;
+  candidates?: number;
   algorithm: string;
   triggered_by: string;
   optimized_at: string;

@@ -40,6 +40,8 @@ export interface Hazard {
   issued_at?: string;
   expires_at?: string;
   last_seen_at?: string;
+  /** Distance in metres when returned by /v1/hazards/geo/near. */
+  distance_m?: number;
   created_at: string;
   updated_at: string;
 }
