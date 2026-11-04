@@ -17,9 +17,12 @@ budgets, operational reports, city users, geofences, data ingestion, the public
 asset map or public incident reporting. A link to City is a public HTTPS
 navigation link only; there is no SOS-to-City API call.
 
-SOS responders are represented as SOS resource units in `sos-resource-units`,
-never as City user records. This repository does not expose `/v1/users` and
-never reads or writes `city-users`.
+Emergency resource units are rescue logistics (teams, vehicles, medical
+supplies, rescue equipment, shelters), not infrastructure assets. SOS has no
+asset registry, asset lifecycle, GIS asset map, maintenance work order, IoT
+sensor management or infrastructure budget. SOS responders are represented as
+SOS resource units in `sos-resource-units`, never as City user records. This
+repository does not expose `/v1/users` and never reads or writes `city-users`.
 
 The authoritative matrix is the workspace `FEATURE_BOUNDARY.md` at the workspace
 root. The repo-local summary is [`PRODUCT_BOUNDARY.md`](PRODUCT_BOUNDARY.md).

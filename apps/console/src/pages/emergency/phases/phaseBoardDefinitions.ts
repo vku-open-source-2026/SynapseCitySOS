@@ -156,7 +156,7 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
       {
         id: 'damage-assessment-surveys',
         title: 'Damage Assessment Surveys',
-        description: 'Collect field assessments for infrastructure, utilities, and social impact.',
+        description: 'Collect field assessments for housing, livelihoods, and social impact.',
         extensionHint: 'Survey collectors remain encapsulated in after-phase domain.',
       },
       {

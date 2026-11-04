@@ -13,7 +13,6 @@ export type HazardEventType =
   | 'drought'
   | 'traffic'
   | 'epidemic'
-  | 'infrastructure_failure'
   | 'other';
 
 export type HazardSource = 'nchmf' | 'vndms' | 'manual' | 'iot' | 'other';

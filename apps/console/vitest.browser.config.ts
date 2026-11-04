@@ -15,9 +15,6 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
-  optimizeDeps: {
-    include: ['leaflet-draw'],
-  },
   test: {
     setupFiles: ['./e2e/setup.ts'],
     include: ['e2e/**/*.spec.ts'],

@@ -45,7 +45,7 @@ const sections: EndpointSection[] = [
         icon: "🔐",
         title: "Auth shell",
         description:
-            "Phiên đăng nhập dùng token HMAC-SHA256. Đây là shell phiên làm việc, không lưu mật khẩu và không tạo người dùng City; production phải uỷ quyền danh tính cho Tier-1 IAM.",
+            "Phiên đăng nhập dùng token HMAC-SHA256. Đây là shell phiên làm việc, không lưu mật khẩu và không tạo bản ghi người dùng; production phải uỷ quyền danh tính cho Tier-1 IAM.",
         endpoints: [
             {
                 method: "POST",
@@ -790,10 +790,8 @@ export default function ApiDocsPage() {
                                 <code className="font-mono">/v1/geo</code>,{" "}
                                 <code className="font-mono">/v1/map</code> và{" "}
                                 <code className="font-mono">/v1/ai</code>. Các API
-                                hạ tầng đô thị (tài sản, sự cố hạ tầng, IoT, bảo
-                                trì, ngân sách, báo cáo vận hành, cảnh báo hạ
-                                tầng, người dùng, ingest) thuộc sản phẩm
-                                SynapseCity và sẽ trả về 404 tại boundary này.
+                                của SynapseCity trả về 404 tại boundary này;
+                                tài liệu đầy đủ nằm ở sản phẩm SynapseCity.
                                 Các endpoint có nhãn <strong>Bearer</strong> yêu
                                 cầu phiên đăng nhập qua <code className="font-mono">/v1/auth/login</code>.
                             </p>

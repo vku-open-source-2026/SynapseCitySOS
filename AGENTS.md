@@ -35,6 +35,12 @@ assignment; emergency resource units; SITREP and deltas; AAR; live hazard SSE;
 emergency command centre, phase boards and rescue operations; public
 hazard/emergency map; map/geocode/AI for this product.
 
+Emergency resource units are rescue logistics (teams, vehicles, medical
+supplies, rescue equipment, shelters), not infrastructure assets. SOS must not
+grow an asset registry, asset lifecycle, GIS asset map, maintenance work order,
+IoT sensor management or infrastructure budget. A City asset may appear only as
+an opaque `affected_asset_ids` reference on an emergency event.
+
 Not owned: city assets, city incidents, IoT, maintenance, technician portal,
 infrastructure alerts, budgets, operational reports, city users, geofences,
 data ingest, public asset map and public incident reporting. Never add these

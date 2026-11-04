@@ -204,7 +204,7 @@ const EmergencyCommandCenter: React.FC = () => {
                 <option value="storm">Bão</option>
                 <option value="landslide">Sạt lở</option>
                 <option value="fire">Hỏa hoạn</option>
-                <option value="outage">Mất điện/hạ tầng</option>
+                <option value="outage">Mất điện</option>
                 <option value="pollution">Ô nhiễm</option>
                 <option value="other">Khác</option>
               </select>

@@ -37,8 +37,8 @@ SynapseCitySOS -> @synapsedx/capabilities -> @synapseone/sdk -> SynapseOne
 - Emergency events and public emergency projection.
 - Emergency operations plans (EOP).
 - Dispatch orders and responder assignment.
-- Emergency resource units: personnel, vehicles, medical supplies, equipment
-  and shelters.
+- Emergency resource units: rescue personnel, vehicles, medical supplies,
+  rescue equipment and shelters (emergency logistics only).
 - SITREP and deltas.
 - AAR.
 - Live hazard SSE stream.
@@ -68,6 +68,13 @@ or embedded data source. An emergency event may store opaque
 `affected_asset_ids`; SOS does not resolve or copy those assets.
 
 ## Responders are resource units
+
+Emergency resource units are **rescue logistics**, not infrastructure assets.
+A resource unit is a team, vehicle, medical supply, rescue equipment or shelter
+that can be dispatched to an emergency. SOS does not own an asset registry,
+asset lifecycle, GIS asset map, maintenance work order, IoT sensor management
+or infrastructure budget. If an emergency event needs to reference a City
+asset, it stores an opaque `affected_asset_ids` value only.
 
 SOS responders are represented as records in `sos-resource-units`, exposed
 through `/v1/emergency/resources`. They are **not** City user records:

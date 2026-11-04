@@ -37,7 +37,7 @@ SOS responders are resource units, not City user records.
 - Zustand 5.0 for auth and app state
 - Axios 1.13 through `src/lib/httpClient.ts`
 - Tailwind CSS 4.1, shadcn/ui primitives, Lucide and Font Awesome icons
-- Leaflet 1.9 / React Leaflet 5.0, Leaflet Draw and Leaflet Heat
+- Leaflet 1.9 for the SOS hazard map only
 
 ## Routes
 

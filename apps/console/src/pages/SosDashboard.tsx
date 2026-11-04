@@ -38,6 +38,14 @@ const STATUS_CLASS: Record<string, string> = {
     canceled: "bg-zinc-100 text-zinc-700",
 };
 
+const RESOURCE_STATUS_LABEL: Record<string, string> = {
+    available: "Sẵn sàng",
+    standby: "Chờ điều động",
+    deployed: "Đã triển khai",
+    offline: "Ngoại tuyến",
+    maintenance: "Đang bảo dưỡng",
+};
+
 function formatDateTime(value?: string): string {
     if (!value) {
         return "--";
@@ -340,7 +348,7 @@ const SosDashboard: React.FC = () => {
                                         key={status}
                                         className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2"
                                     >
-                                        <span className="capitalize">{status}</span>
+                                        <span>{RESOURCE_STATUS_LABEL[status] ?? status}</span>
                                         <span className="font-semibold text-slate-900">
                                             {
                                                 resources.filter(

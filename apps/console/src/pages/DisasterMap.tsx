@@ -342,19 +342,7 @@ const SafetyHelpModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
                         và giấy tờ tùy thân.
                     </li>
                 </ul>
-                <p className="text-xs text-slate-500">
-                    Báo cáo hư hỏng hạ tầng đô thị (đường, điện, nước) thuộc hệ
-                    thống SynapseCity:{" "}
-                    <a
-                        href="https://synapsecity.sbs"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-red-600 hover:underline font-medium"
-                    >
-                        synapsecity.sbs
-                    </a>
-                    .
-                </p>
+
             </div>
         </div>
     </div>

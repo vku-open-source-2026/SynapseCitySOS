@@ -24,7 +24,6 @@ const EVENT_EMOJI: Record<HazardEventType, string> = {
   drought: '🌵',
   traffic: '🚧',
   epidemic: '🦠',
-  infrastructure_failure: '🏗️',
   other: '⚠️',
 };
 
@@ -39,7 +38,6 @@ const EVENT_LABEL: Record<HazardEventType, string> = {
   drought: 'Hạn hán',
   traffic: 'Tắc nghẽn',
   epidemic: 'Dịch bệnh',
-  infrastructure_failure: 'Sự cố hạ tầng',
   other: 'Khác',
 };
 
@@ -90,7 +88,10 @@ function makePopupContent(h: Hazard): string {
   const color = SEVERITY_COLOR[h.severity] ?? '#ef4444';
   const emoji = EVENT_EMOJI[h.event_type] ?? '⚠️';
   const severityLabel = SEVERITY_LABEL[h.severity] ?? h.severity;
-  const typeLabel = EVENT_LABEL[h.event_type] ?? h.event_type;
+  // Legacy hazard records may still carry infrastructure_failure; treat it as
+  // a generic emergency hazard instead of exposing City infrastructure wording.
+  const rawType = String(h.event_type);
+  const typeLabel = EVENT_LABEL[h.event_type] ?? (rawType === 'infrastructure_failure' ? 'Khác' : rawType);
   const expiresAt = h.expires_at ? new Date(h.expires_at).toLocaleString('vi-VN') : 'Không xác định';
   return `
     <div style="min-width:200px; font-family:sans-serif">
