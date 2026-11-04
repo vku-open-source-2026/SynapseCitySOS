@@ -329,6 +329,15 @@ Use the public GitHub Issues tab for bugs and feature requests. See
 [`CHANGELOG.md`](CHANGELOG.md) for version history. The repository is
 Apache-2.0 licensed.
 
+## DX-OS 2026
+
+SOS is a Tier-3 domain application in the OLP 2026 DX-OS model: it owns
+emergency events, hazards, dispatch, resources, EOP and AAR rules, and consumes
+reusable H-P-D-I capabilities from SynapseDX over the public API. It never
+imports the Tier-1 SDK, calls a Tier-1 service, or calls SynapseCity. The tier
+matrix, HITL contract and OLP evidence checklist are in
+[`SynapseDX/docs/DX_OS_TIER_MODEL_2026-11-04.md`](https://github.com/vku-open-source-2026/SynapseDX/blob/main/docs/DX_OS_TIER_MODEL_2026-11-04.md).
+
 ## PoF project checklist
 
 - License: Apache-2.0 (`LICENSE`) with per-source SPDX headers and attribution in `NOTICE`.

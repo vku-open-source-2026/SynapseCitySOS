@@ -5,6 +5,12 @@ Keep a Changelog format and version tags use Semantic Versioning.
 
 ## [Unreleased] — Tier-2 AI, event feed and ETag integration
 
+### Added
+
+- CI hardening: CodeQL, dependency review on pull requests, actionlint,
+  CycloneDX SBOM artifact, npm audit gate, Dependabot, PR template and
+  concurrency controls. Tier-2 HITL adoption is tracked in issue #24.
+
 ### Fixed
 
 - **Live admin login.** Production returned `403 demo_auth_disabled` because SOS
