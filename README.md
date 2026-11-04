@@ -1,5 +1,8 @@
 # SynapseCitySOS — emergency operations (Tier 3)
 
+![CI](https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/release.yml/badge.svg)
+
 SynapseCitySOS is the emergency operations product of the Synapse platform. It
 owns emergency preparedness, response and recovery: hazard feeds including
 VNDMS ingestion, emergency events, emergency operations plans (EOP), dispatch
@@ -176,7 +179,6 @@ In `tier2` mode a normal account is a `responder`; only
 `SOS_BOOTSTRAP_ADMIN_EMAILS` grants `admin`. `manager`/`operator` are reachable
 only through an explicit `SOS_AUTH_DEFAULT_ROLE` configuration or the bootstrap
 allow-list — never through the login/register payload.
-
 
 Hazard reads (`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
 `/v1/hazards/geo/*`, `/v1/hazards/ingest/status`), the public projection
