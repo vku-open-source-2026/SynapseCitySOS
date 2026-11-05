@@ -14,11 +14,9 @@ The repository is split into product parts:
 
 ## Dependency contract
 
-- Import the Tier-2 `@synapsedx/capabilities` client from
-  `../SynapseDX/sdks/capabilities-js` during this workspace build; releases must
-  resolve the same package from the npm registry (the package is not published
-  yet, so the `file:` dependency and the `prebuild` SDK build stay until the
-  operator publishes it).
+- Import the Tier-2 `@synapsedx/capabilities` client from the public npm
+  registry (`^0.3.0` or later). Do not use a `file:` sibling checkout or a
+  vendored tarball.
 - Default Tier-2 URL is `https://synapsedx.sbs`. Set `SYNAPSEDX_BASE_URL` only
   to another public HTTPS endpoint. Do not call SynapseOne, a private service
   port, localhost or a database from this repository.

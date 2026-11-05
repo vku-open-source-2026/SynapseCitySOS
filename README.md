@@ -123,10 +123,8 @@ npm run dev --workspace=@synapsecity/sos-console
 ```
 
 The production stack is reproducible with `docker compose up -d --build`. The
-release step still requires publishing the workspace `@synapsedx/capabilities`
-package and replacing the `file:` dependency with the published semver range;
-the build is reproducible today because `prebuild` builds the local SDK from the
-`../SynapseDX` checkout.
+Tier-2 client is installed from the public npm registry as
+`@synapsedx/capabilities@^0.3.0`; no sibling checkout or prebuild is required.
 
 ## API
 
@@ -283,14 +281,7 @@ directly and returns explicit degraded/unavailable states when a call fails.
 
 Remaining blockers are release/operator steps, not SOS work:
 
-1. **SDK publication.** The workspace `@synapsedx/capabilities` package
-   (currently 0.3.0 locally) is not in the npm registry yet
-   (`npm view @synapsedx/capabilities` → 404), so `apps/sos-service/package.json`
-   keeps the workspace `file:` dependency and the `prebuild` step builds
-   `../SynapseDX/sdks/capabilities-js`. Publishing the package and replacing
-   `file:` with the published semver range is a SynapseDX/operator release step
-   (issue #19 tracks only this step).
-2. **Spatial query.** Tier 2 has no spatial predicate yet, so SOS pages records
+1. **Spatial query.** Tier 2 has no spatial predicate yet, so SOS pages records
    and filters geo predicates in memory with a bounded scan
    (`x-sos-scan-truncated` is returned when the bound is hit).
 3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to

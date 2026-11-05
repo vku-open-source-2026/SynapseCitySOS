@@ -171,7 +171,7 @@ const SOS_METADATA = {
     bootstrapAdminsConfigured: bootstrapAdmins().size > 0,
   },
   limitations: {
-    sdk: 'file: workspace dependency until SynapseDX publishes @synapsedx/capabilities 0.2.0 (operator-blocked release step)',
+    sdk: '@synapsedx/capabilities@^0.3.0 from the public npm registry',
     events: 'hazard SSE consumes the Tier-2 event feed with Last-Event-ID resume and falls back to snapshot polling only when the feed is unavailable',
     ai: 'EOP drafts use the Tier-2 AI capability; an unavailable AI returns a typed 503 unless the caller opts into the labelled deterministic fallback',
     scheduled_ingest: 'VNDMS ingestion is scheduled by the Tier-2 jobs API; SOS validates pushes and reports connector run history, it never runs a local poller',
