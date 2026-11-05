@@ -284,7 +284,7 @@ Remaining blockers are release/operator steps, not SOS work:
 1. **Spatial query.** Tier 2 has no spatial predicate yet, so SOS pages records
    and filters geo predicates in memory with a bounded scan
    (`x-sos-scan-truncated` is returned when the bound is hit).
-3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
+2. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
    `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
    a Tier-2 service credential (`SYNAPSEDX_API_KEY`/`SYNAPSEDX_TOKEN`) to read
    the job/run status and the event feed. Until it exists, ingest status is
