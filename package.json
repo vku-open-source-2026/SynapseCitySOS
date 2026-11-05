@@ -4,12 +4,16 @@
   "private": true,
   "license": "Apache-2.0",
   "description": "SynapseCity emergency operations product",
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "build:service": "npm run build --workspace=@synapsecity/sos-service",
     "start:service": "npm run start --workspace=@synapsecity/sos-service",
-    "start:gateway": "npm run start --workspace=@synapsecity/sos-gateway"
+    "start:gateway": "npm run start --workspace=@synapsecity/sos-gateway",
+    "demo:seed": "node scripts/demo-seed.mjs",
+    "demo:reset": "node scripts/demo-reset.mjs"
   }
 }

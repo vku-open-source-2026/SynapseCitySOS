@@ -1,5 +1,10 @@
 # SynapseCitySOS — emergency operations (Tier 3)
 
+## OLP 2026 demo
+
+A reproducible 15-minute emergency-operations story lives in [`docs/DEMO_PACK.md`](docs/DEMO_PACK.md). Seed/reset with `npm run demo:seed` and `npm run demo:reset` (requires `SOS_DEMO_TOKEN`).
+
+
 ![CI](https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/ci.yml/badge.svg)
 ![Release](https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/release.yml/badge.svg)
 
