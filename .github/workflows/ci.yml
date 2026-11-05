@@ -29,8 +29,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Verify pinned Tier-2 SDK
-        run: sha256sum -c vendor/synapsedx-capabilities-0.3.0.tgz.sha256
+      - name: Verify registry Tier-2 SDK
+        run: node -e "const d=require('./apps/sos-service/package.json').dependencies['@synapsedx/capabilities']; if(!/^[~^]?\d+\.\d+\.\d+/.test(d)) { console.error('expected registry semver, got '+d); process.exit(1); } console.log('@synapsedx/capabilities '+d);"
 
       - name: Build
         run: npm run build

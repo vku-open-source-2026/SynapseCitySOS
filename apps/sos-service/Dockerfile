@@ -3,7 +3,6 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /workspace
 COPY SynapseCitySOS/package*.json ./SynapseCitySOS/
-COPY SynapseCitySOS/vendor ./SynapseCitySOS/vendor
 COPY SynapseCitySOS/apps/sos-service/package*.json SynapseCitySOS/apps/sos-service/tsconfig.json ./SynapseCitySOS/apps/sos-service/
 COPY SynapseCitySOS/apps/sos-service/src ./SynapseCitySOS/apps/sos-service/src
 RUN cd SynapseCitySOS && npm ci && npm run build --workspace=@synapsecity/sos-service
