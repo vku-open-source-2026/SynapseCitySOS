@@ -741,7 +741,7 @@ const PublicHazardMap: React.FC = () => {
                         </h2>
                         <p className="text-[11px] text-white/80 hidden sm:block">
                             Cập nhật công khai · Dành cho người dân
-                            {!vndmsConfigured ? " · nguồn VNDMS chưa cấu hình" : ""}
+                            {!vndmsConfigured ? " · nguồn KTTV chưa cấu hình" : " · nguồn KTTV đã kết nối"}
                         </p>
                     </div>
                 </div>
@@ -919,8 +919,14 @@ const PublicHazardMap: React.FC = () => {
                         {/* Section 2: hazards 24h */}
                         <section>
                             <h3 className="text-[11px] uppercase font-bold tracking-wide text-amber-700 mb-2 flex items-center gap-1">
-                                ⚠️ Cảnh báo thiên tai
+                                ⚠️ Cảnh báo thiên tai hôm nay
                             </h3>
+                            <p className="text-[10px] text-slate-500 mb-2">
+                                Nguồn NCHMF/VNDMS ·{" "}
+                                {vndmsStatus?.last_success_at
+                                    ? new Date(vndmsStatus.last_success_at).toLocaleString("vi-VN")
+                                    : "đang cập nhật"}
+                            </p>
                             {dataError ? (
                                 <div className="text-center py-6 text-slate-400">
                                     <ShieldAlert size={28} className="mx-auto mb-2 opacity-30" />

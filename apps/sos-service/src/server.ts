@@ -70,6 +70,7 @@ import {
   type IngestConnectorStatus,
 } from './vndms';
 import { proxyVietMapTile, vietMapAutocomplete, vietMapConfigured, vietMapGeocode, vietMapPlace, vietMapReverse, vietMapTileStyle } from './vietmap';
+import { fetchTier2HazardStatus, fetchTier2Hazards, mergeHazardFeed } from './tier2-hazards';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8084);
@@ -578,6 +579,30 @@ async function dependencyHealth(c: CapabilitiesClient) {
  */
 async function vndmsConnectorStatus(c: CapabilitiesClient): Promise<IngestConnectorStatus> {
   const checkedAt = now();
+  // Tier-2 owns the KTTV crawler. When the capabilities SDK exposes its status,
+  // project that directly instead of guessing from the generic jobs API.
+  const feedStatus = await fetchTier2HazardStatus(c);
+  if (feedStatus && feedStatus.configured !== false) {
+    const lastSuccess = feedStatus.last_success_at || null;
+    const failed = feedStatus.status === 'error';
+    return {
+      source: 'tier-2-scheduled-job',
+      available: true,
+      configured: true,
+      job_id: 'kttv-crawler',
+      job_name: 'Tier-2 KTTV crawler (NCHMF/VNDMS)',
+      job_kind: 'interval',
+      enabled: true,
+      schedule: { cron: null, every_seconds: 1800 },
+      last_run_at: feedStatus.last_run_at || lastSuccess,
+      last_run_status: failed ? 'failed' : lastSuccess ? 'succeeded' : null,
+      last_run_error: feedStatus.error || null,
+      last_success_at: lastSuccess,
+      runs_considered: 1,
+      error: failed ? (feedStatus.error || 'tier2_crawler_failed') : null,
+      checked_at: checkedAt,
+    };
+  }
   const jobs = (c as unknown as {
     jobs?: {
       list?: (query?: { limit?: number; offset?: number }) => Promise<{ items?: unknown[] }>;
@@ -1731,11 +1756,29 @@ async function allHazards(c: CapabilitiesClient) {
   return listAllRows(c, DATASETS.hazards);
 }
 
+/** Stored SOS hazards plus the live Tier-2 KTTV feed, keyed by hazard_id. */
+async function allHazardsWithFeed(c: CapabilitiesClient, hours = 72) {
+  const [stored, feed] = await Promise.all([
+    allHazards(c),
+    fetchTier2Hazards(c, hours),
+  ]);
+  return { ...stored, items: mergeHazardFeed(stored.items, feed) };
+}
+
+/** Public hazard projection with the live Tier-2 feed merged in. */
+async function publicHazardsWithFeed(c: CapabilitiesClient, hours = 72) {
+  const [stored, feed] = await Promise.all([
+    listAllPublic(c, DATASETS.hazards),
+    fetchTier2Hazards(c, hours),
+  ]);
+  return { ...stored, items: mergeHazardFeed(stored.items, feed) };
+}
+
 app.get('/v1/hazards/recent', async (req, res, next) => {
   try {
     const hours = parseNumber(req.query.hours, { min: 1, max: 24 * 365, fallback: 24 }) ?? 24;
     const cutoff = Date.now() - hours * 60 * 60 * 1000;
-    const { items } = await listAllPublic(client(req), DATASETS.hazards);
+    const { items } = await publicHazardsWithFeed(client(req), hours);
     const hazards = items
       .filter((hazard) => hazard.is_active !== false && hazard.status !== 'expired')
       .filter((hazard) => {
@@ -1755,7 +1798,7 @@ app.get('/v1/hazards/recent', async (req, res, next) => {
 app.get('/v1/hazards/geo/near', async (req, res, next) => {
   try {
     const query = parseNearQuery(req.query as Data);
-    const { items } = await allHazards(client(req));
+    const { items } = await allHazardsWithFeed(client(req));
     res.json(nearHazards(items, query));
   } catch (error) { next(error); }
 });
@@ -1766,7 +1809,7 @@ app.post('/v1/hazards/geo/in-polygon', async (req, res, next) => {
     const area = validatePolygon(input.polygon ?? input.geometry ?? input);
     const limit = Math.min(Math.max(Math.floor(Number(input.limit) || 200), 1), 500);
     const offset = Math.max(Math.floor(Number(input.skip ?? input.offset) || 0), 0);
-    const { items } = await allHazards(client(req));
+    const { items } = await allHazardsWithFeed(client(req));
     res.json(inPolygonHazards(items, area, { limit, offset }));
   } catch (error) { next(error); }
 });
@@ -1840,7 +1883,7 @@ app.post('/v1/hazards/ingest', async (req, res, next) => {
 
 app.get('/v1/hazards/vndms-live', async (req, res, next) => {
   try {
-    const { items } = await listAllPublic(client(req), DATASETS.hazards);
+    const { items } = await publicHazardsWithFeed(client(req));
     const hazards = items
       .filter((hazard) => isVndmsRecord(hazard) && hazard.is_active !== false && hazard.status !== 'expired')
       .map(toVndmsHazard)
@@ -1867,9 +1910,10 @@ app.post('/v1/hazards/expire-stale', async (req, res, next) => {
 
 app.get('/v1/hazards', async (req, res, next) => {
   try {
-    const { items, truncated, scanned } = await allHazards(client(req));
+    const { items, truncated, scanned } = await allHazardsWithFeed(client(req));
     if (truncated) res.setHeader('x-sos-scan-truncated', 'true');
     res.setHeader('x-sos-records-scanned', String(scanned));
+    res.setHeader('cache-control', 'public, max-age=30');
     res.json(filterRows(items, req.query as Data).slice(offsetOf(req), offsetOf(req) + limitOf(req)));
   } catch (error) { next(error); }
 });
