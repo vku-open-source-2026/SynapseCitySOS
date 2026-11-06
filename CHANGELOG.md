@@ -4,6 +4,15 @@ All notable changes to SynapseCitySOS are documented here. Entries follow the
 Keep a Changelog format and version tags use Semantic Versioning.
 
 ## [Unreleased] — Tier-2 AI, event feed and ETag integration
+### Added
+- **Live KTTV hazard feed**: the public map reads
+  `@synapsedx/capabilities@0.4.0` `hazards.today` through a 30-second
+  read-through cache and merges it into `/v1/hazards`, `/v1/hazards/recent`
+  and the geo queries. Crawler status is projected into
+  `/v1/hazards/ingest/status`.
+- The map panel now shows **"Cảnh báo thiên tai hôm nay"** with the
+  NCHMF/VNDMS source and the last successful update time.
+
 ### Security
 - `AUTH_SECRET` must be set in production: the service fails fast instead of
   silently generating an ephemeral session secret.
