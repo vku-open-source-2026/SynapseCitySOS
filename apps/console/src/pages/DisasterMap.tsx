@@ -15,6 +15,8 @@ import {
     Home,
     LifeBuoy,
     Siren,
+    Sparkles,
+    Send,
 } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -24,6 +26,7 @@ import { useVndmsHazards, useVndmsStatus, type VndmsHazard } from "../hooks/useV
 import HazardMarkersLayer from "../components/HazardMarkersLayer";
 import EmergencyEventsLayer from "../components/EmergencyEventsLayer";
 import { hazardsApi } from "../api/hazards";
+import { aiApi, type AiAnswer } from "../api/ai";
 import { resourcesApi, type NearbyShelter } from "../api/resources";
 import { usePublicEmergencyEvents } from "../hooks/usePublicEmergencyEvents";
 import { emergencyStatusLabel, emergencyStatusTone, isOngoingEmergencyStatus } from "../lib/emergencyStatus";
@@ -443,6 +446,11 @@ const PublicHazardMap: React.FC = () => {
     const [focusedHazardId, setFocusedHazardId] = useState<string | null>(null);
     const [focusHazardNonce, setFocusHazardNonce] = useState(0);
     const [showHelp, setShowHelp] = useState(false);
+    const [aiQuestion, setAiQuestion] = useState("");
+    const [aiAnswer, setAiAnswer] = useState<AiAnswer | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
+    const [aiAsking, setAiAsking] = useState(false);
+    const [aiBriefExpanded, setAiBriefExpanded] = useState(false);
 
     const {
         data: vndmsHazards = [],
@@ -464,6 +472,20 @@ const PublicHazardMap: React.FC = () => {
         queryFn: () => hazardsApi.list({ is_active: true, limit: 200 }),
         staleTime: 60_000,
         refetchInterval: 5 * 60_000,
+    });
+
+    const {
+        data: aiBrief,
+        isLoading: aiBriefLoading,
+        isError: aiBriefError,
+        isFetching: aiBriefFetching,
+        refetch: refetchAiBrief,
+    } = useQuery({
+        queryKey: ["ai", "brief"],
+        queryFn: () => aiApi.brief({ hours: 24, limit: 8 }),
+        staleTime: 5 * 60_000,
+        refetchInterval: (query) => (query.state.data?.fallback ? 30_000 : 5 * 60_000),
+        retry: 1,
     });
 
     const {
@@ -636,6 +658,21 @@ const PublicHazardMap: React.FC = () => {
         refetchEvents();
         if (filterChip === "near" && userLocation) void refetchNearby();
     }, [refetchVndms, refetchStored, refetchEvents, refetchNearby, filterChip, userLocation]);
+
+    const handleAskAi = useCallback(async () => {
+        const question = aiQuestion.trim();
+        if (!question || aiAsking) return;
+        setAiAsking(true);
+        setAiError(null);
+        try {
+            setAiAnswer(await aiApi.ask(question, 5));
+        } catch (error) {
+            console.error("AI ask failed", error);
+            setAiError("AI tạm thời không trả lời được. Vui lòng thử lại sau.");
+        } finally {
+            setAiAsking(false);
+        }
+    }, [aiQuestion, aiAsking]);
 
     const handleFindShelters = useCallback(() => {
         if (!navigator.geolocation) {
@@ -894,6 +931,143 @@ const PublicHazardMap: React.FC = () => {
 
                     {/* List sections */}
                     <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                        {/* Section 0: grounded AI situation brief */}
+                        <section>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-[11px] uppercase font-bold tracking-wide text-violet-700 flex items-center gap-1">
+                                    <Sparkles size={12} /> AI nhận định tình hình
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => void refetchAiBrief()}
+                                    disabled={aiBriefFetching}
+                                    className="p-1.5 rounded-lg text-violet-600 hover:bg-violet-50 disabled:opacity-40"
+                                    title="Làm mới nhận định AI"
+                                >
+                                    <RefreshCw size={12} className={aiBriefFetching ? "animate-spin" : ""} />
+                                </button>
+                            </div>
+                            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+                                {aiBriefLoading ? (
+                                    <p className="text-[11px] text-slate-500">Đang tổng hợp tình hình…</p>
+                                ) : aiBriefError ? (
+                                    <div className="text-[11px] text-slate-600">
+                                        <p className="font-semibold text-violet-800">AI tạm thời không khả dụng.</p>
+                                        <p className="mt-0.5">Bản đồ và cảnh báo chính thức vẫn hoạt động bình thường.</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => void refetchAiBrief()}
+                                            className="mt-2 text-[11px] font-bold text-violet-700 underline"
+                                        >
+                                            Thử lại
+                                        </button>
+                                    </div>
+                                ) : aiBrief ? (
+                                    <>
+                                        <p
+                                            className="text-xs text-slate-700 whitespace-pre-line leading-relaxed"
+                                            style={aiBriefExpanded ? undefined : {
+                                                display: "-webkit-box",
+                                                WebkitLineClamp: 6,
+                                                WebkitBoxOrient: "vertical",
+                                                overflow: "hidden",
+                                            }}
+                                        >
+                                            {aiBrief.brief}
+                                        </p>
+                                        {aiBrief.brief.length > 360 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setAiBriefExpanded((value) => !value)}
+                                                className="mt-1 text-[10px] font-bold text-violet-700 underline"
+                                            >
+                                                {aiBriefExpanded ? "Thu gọn" : "Xem thêm"}
+                                            </button>
+                                        )}
+                                        {aiBrief.hazards.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {aiBrief.hazards.slice(0, 5).map((hazard) => (
+                                                    <a
+                                                        key={hazard.id}
+                                                        href={hazard.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        title={hazard.title}
+                                                        className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-violet-200 text-violet-700 hover:bg-violet-100"
+                                                    >
+                                                        {hazard.title.slice(0, 28)}
+                                                        {hazard.title.length > 28 ? "…" : ""}
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <p className="mt-2 text-[10px] text-slate-500">
+                                            {aiBrief.fallback
+                                                ? "Tóm tắt tất định từ feed cảnh báo"
+                                                : `AI · ${aiBrief.model ?? "Tier-2 model"}`}
+                                            {" · "}
+                                            {new Date(aiBrief.generated_at).toLocaleString("vi-VN")}
+                                        </p>
+                                    </>
+                                ) : null}
+
+                                <div className="mt-3 flex gap-1.5">
+                                    <input
+                                        value={aiQuestion}
+                                        onChange={(e) => setAiQuestion(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                void handleAskAi();
+                                            }
+                                        }}
+                                        placeholder="Hỏi AI về tình hình…"
+                                        className="flex-1 min-w-0 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-[11px] text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleAskAi()}
+                                        disabled={aiAsking || !aiQuestion.trim()}
+                                        className="px-2.5 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40"
+                                        title="Hỏi AI"
+                                    >
+                                        <Send size={13} />
+                                    </button>
+                                </div>
+                                {aiError && <p className="mt-2 text-[10px] text-red-600">{aiError}</p>}
+                                {aiAnswer && (
+                                    <div className="mt-2 rounded-lg border border-violet-100 bg-white p-2.5">
+                                        <p className="text-[11px] text-slate-700 whitespace-pre-line leading-relaxed">
+                                            {aiAnswer.answer}
+                                        </p>
+                                        {aiAnswer.citations.length > 0 && (
+                                            <div className="mt-1.5 flex flex-wrap gap-1">
+                                                {aiAnswer.citations.slice(0, 4).map((citation) =>
+                                                    citation.url ? (
+                                                        <a
+                                                            key={`${citation.documentId}-${citation.index}`}
+                                                            href={citation.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            title={citation.title}
+                                                            className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 hover:bg-violet-100"
+                                                        >
+                                                            [{citation.index}] {citation.title.slice(0, 24)}
+                                                            {citation.title.length > 24 ? "…" : ""}
+                                                        </a>
+                                                    ) : (
+                                                        <span key={`${citation.documentId}-${citation.index}`} className="text-[10px] text-slate-500">
+                                                            [{citation.index}] {citation.title.slice(0, 24)}
+                                                        </span>
+                                                    ),
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
                         {/* Section 1: ongoing rescue operations */}
                         <section>
                             <h3 className="text-[11px] uppercase font-bold tracking-wide text-red-600 mb-2 flex items-center gap-1">

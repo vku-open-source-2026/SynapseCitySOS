@@ -3,7 +3,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { CapabilitiesClient, CapabilitiesError } from '@synapsedx/capabilities';
-import { aiChat, aiStatus, jsonObjectFrom, aiUnavailable } from './ai';
+import { aiChat, aiStatus, hazardBrief, jsonObjectFrom, knowledgeAsk, aiUnavailable } from './ai';
 import {
   assertAuthConfiguration,
   installAuthRoutes,
@@ -2238,6 +2238,42 @@ app.post('/v1/ai/chat', async (req, res, next) => {
       correlationId: res.getHeader('x-correlation-id')?.toString(),
     });
     res.json({ provider: result.provider, model: result.model, content: result.content, usage: result.usage });
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/ai/brief', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const result = await hazardBrief(client(req), {
+      hours: Number(input.hours ?? 24),
+      limit: Number(input.limit ?? 8),
+      ...(typeof input.focus === 'string' ? { focus: input.focus } : {}),
+    });
+    res.setHeader('cache-control', 'public, max-age=60');
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/ai/ask', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const question = typeof input.question === 'string' ? input.question : typeof input.q === 'string' ? input.q : '';
+    const c = client(req);
+    let liveContext = '';
+    try {
+      const sdk = c as unknown as { hazards?: { today?: (query: { hours: number; limit: number }) => Promise<{ hazards?: Array<Record<string, unknown>> }> } };
+      const feed = await sdk.hazards?.today?.({ hours: 24, limit: 6 });
+      const hazards = Array.isArray(feed?.hazards) ? feed.hazards : [];
+      liveContext = hazards.map((hazard) => {
+        const provinces = Array.isArray(hazard.provinces) ? hazard.provinces.join(', ') : '';
+        return `- [${String(hazard.severity ?? 'medium')}] ${String(hazard.title ?? '')} (${provinces || 'không xác định'}) lúc ${String(hazard.published_at ?? '')}`;
+      }).join('\n');
+    } catch {
+      // The RAG answer can proceed without the live feed; it remains grounded.
+    }
+    const result = await knowledgeAsk(c, question, Number(input.topK ?? input.top_k ?? 5), liveContext);
+    res.setHeader('cache-control', 'no-store');
+    res.json(result);
   } catch (error) { next(error); }
 });
 

@@ -10,7 +10,8 @@
  * fabricating a local answer (issue #14).
  */
 import { CapabilitiesError, type CapabilitiesClient } from '@synapsedx/capabilities';
-import { badGateway, serviceUnavailable } from './errors';
+import { badGateway, badRequest, serviceUnavailable } from './errors';
+import { HttpError } from './errors';
 
 export type AiRole = 'system' | 'user' | 'assistant';
 
@@ -248,4 +249,162 @@ export async function aiStatus(client: CapabilitiesClient, baseUrl?: string): Pr
   }
   statusCache = { at: Date.now(), value: status };
   return status;
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge-backed LLM features (Tier-2 hazard brief + RAG answer)
+// ---------------------------------------------------------------------------
+
+export interface HazardBriefCitation {
+  id: string;
+  hazard_id: string;
+  title: string;
+  event_type: string;
+  severity: string;
+  provinces: string[];
+  published_at: string;
+  url: string;
+}
+
+export interface HazardBriefResult {
+  brief: string;
+  hazards: HazardBriefCitation[];
+  model: string | null;
+  fallback: boolean;
+  generated_at: string;
+  hours: number;
+  provider: 'synapsedx';
+}
+
+export interface KnowledgeCitation {
+  index: number;
+  title: string;
+  documentId: string;
+  url?: string;
+  publishedAt?: string;
+}
+
+export interface KnowledgeAnswerResult {
+  answer: string;
+  citations: KnowledgeCitation[];
+  entities: string[];
+  noAnswer: boolean;
+  model: string | null;
+  provider: 'synapsedx';
+}
+
+interface BriefCacheEntry {
+  at: number;
+  key: string;
+  value: HazardBriefResult;
+}
+
+const BRIEF_TTL_MS = 60_000;
+let briefCache: BriefCacheEntry | null = null;
+
+/** Test hook: forget the short hazard-brief cache. */
+export function resetHazardBriefCache(): void {
+  briefCache = null;
+}
+
+function knowledgeSdk(client: CapabilitiesClient): {
+  hazards?: { brief?: (input: { hours?: number; limit?: number; focus?: string }, opts?: Record<string, unknown>) => Promise<unknown> };
+  knowledge?: { query?: (input: { question: string; topK?: number }, opts?: Record<string, unknown>) => Promise<unknown> };
+} {
+  return client as unknown as {
+    hazards?: { brief?: (input: { hours?: number; limit?: number; focus?: string }, opts?: Record<string, unknown>) => Promise<unknown> };
+    knowledge?: { query?: (input: { question: string; topK?: number }, opts?: Record<string, unknown>) => Promise<unknown> };
+  };
+}
+
+function asBrief(value: unknown): HazardBriefResult | null {
+  if (!value || typeof value !== 'object') return null;
+  const body = value as Record<string, unknown>;
+  if (typeof body.brief !== 'string' || !body.brief.trim()) return null;
+  const hazards = Array.isArray(body.hazards) ? body.hazards as HazardBriefCitation[] : [];
+  return {
+    brief: body.brief,
+    hazards,
+    model: typeof body.model === 'string' ? body.model : null,
+    fallback: body.fallback === true,
+    generated_at: typeof body.generated_at === 'string' ? body.generated_at : new Date().toISOString(),
+    hours: Number.isFinite(Number(body.hours)) ? Number(body.hours) : 24,
+    provider: 'synapsedx',
+  };
+}
+
+function asAnswer(value: unknown): KnowledgeAnswerResult | null {
+  if (!value || typeof value !== 'object') return null;
+  const body = value as Record<string, unknown>;
+  if (typeof body.answer !== 'string' || !body.answer.trim()) return null;
+  const citations = Array.isArray(body.citations) ? body.citations as KnowledgeCitation[] : [];
+  const entities = Array.isArray(body.entities) ? body.entities.map(String) : [];
+  return {
+    answer: body.answer,
+    citations,
+    entities,
+    noAnswer: body.noAnswer === true,
+    model: typeof body.model === 'string' ? body.model : null,
+    provider: 'synapsedx',
+  };
+}
+
+/**
+ * Generate a grounded situation brief from the Tier-2 hazard feed. The brief
+ * itself is produced by Tier-2 (knowledge + LLM); SOS only caches it briefly.
+ */
+export async function hazardBrief(
+  client: CapabilitiesClient,
+  options: { hours?: number; limit?: number; focus?: string } = {},
+  nowMs = Date.now(),
+): Promise<HazardBriefResult> {
+  const hours = Math.min(Math.max(Math.trunc(options.hours ?? 24), 1), 168);
+  const limit = Math.min(Math.max(Math.trunc(options.limit ?? 8), 1), 40);
+  const focus = String(options.focus ?? '').trim().slice(0, 500);
+  const key = `${hours}:${limit}:${focus}`;
+  const ttl = briefCache?.value.fallback ? 15_000 : BRIEF_TTL_MS;
+  if (briefCache && briefCache.key === key && nowMs - briefCache.at < ttl) return briefCache.value;
+
+  const sdk = knowledgeSdk(client);
+  if (!sdk.hazards?.brief) throw aiUnavailable('The Tier-2 API does not expose the hazard brief capability yet.', null);
+  try {
+    const raw = await sdk.hazards.brief({ hours, limit, ...(focus ? { focus } : {}) }, { timeoutMs: aiTimeoutMs() });
+    const result = asBrief(raw);
+    if (!result) throw aiUnavailable('The Tier-2 hazard brief capability returned an empty brief.', null);
+    briefCache = { at: nowMs, key, value: result };
+    return result;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw aiUnavailable('The Tier-2 hazard brief capability did not return a response.', error);
+  }
+}
+
+/** Grounded RAG answer using the Tier-2 knowledge base (vector + graph). */
+export async function knowledgeAsk(
+  client: CapabilitiesClient,
+  question: string,
+  topK = 5,
+  context?: string,
+): Promise<KnowledgeAnswerResult> {
+  const text = String(question ?? '').trim();
+  if (!text) throw badRequest('question_required', 'question is required');
+  const live = String(context ?? '').trim().slice(0, 4000);
+  const sdk = knowledgeSdk(client);
+  if (!sdk.knowledge?.query) throw aiUnavailable('The Tier-2 API does not expose the knowledge query capability yet.', null);
+  try {
+    const raw = await sdk.knowledge.query(
+      {
+        question: text.slice(0, 2000),
+        topK: Math.min(Math.max(Math.trunc(topK), 1), 12),
+        ...(live ? { context: live } : {}),
+      },
+      { timeoutMs: aiTimeoutMs() },
+    );
+    const result = asAnswer(raw);
+    if (!result) throw aiUnavailable('The Tier-2 knowledge capability returned an empty answer.', null);
+    return result;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw aiUnavailable('The Tier-2 knowledge capability did not return a response.', error);
+  }
 }
