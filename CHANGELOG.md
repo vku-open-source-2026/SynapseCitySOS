@@ -5,6 +5,10 @@ Keep a Changelog format and version tags use Semantic Versioning.
 
 ## [Unreleased] — Tier-2 AI, event feed and ETag integration
 ### Added
+- **AI situation panel**: the public map calls `POST /v1/ai/brief` for a
+  grounded 24-hour brief with source citations and `POST /v1/ai/ask` for
+  knowledge-base RAG answers. Both use the published Tier-2 SDK
+  (`@synapsedx/capabilities@^0.5.1`); no Tier-1/model key exists in SOS.
 - **Live KTTV hazard feed**: the public map reads
   `@synapsedx/capabilities@0.4.0` `hazards.today` through a 30-second
   read-through cache and merges it into `/v1/hazards`, `/v1/hazards/recent`
