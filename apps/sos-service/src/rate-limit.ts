@@ -30,8 +30,11 @@ export interface RateLimiter {
 
 function clientKey(req: Request): string {
   const forwarded = req.header('x-forwarded-for');
-  const ip = forwarded?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress || 'unknown';
-  return ip;
+  // Trust the LAST hop (appended by the edge); the first entry is spoofable.
+  const ip = forwarded
+    ? forwarded.split(',').map((part) => part.trim()).filter(Boolean).pop()
+    : req.ip || req.socket?.remoteAddress;
+  return ip || 'unknown';
 }
 
 export function createRateLimiter(options: RateLimitOptions = {}): RateLimiter {

@@ -51,7 +51,8 @@ services:
     ports:
       # Host 8086 is the local/public-stack gateway entry; 8084 stays the
       # private sos-service port so the two can never be confused.
-      - "${GATEWAY_HOST_PORT:-8086}:8080"
+      # Loopback only: the public edge is synapseone-nginx (80/443).
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-8086}:8080"
     networks:
       synapsecity-sos:
         aliases: [synapsecity-sos-gateway]
