@@ -4,6 +4,16 @@ All notable changes to SynapseCitySOS are documented here. Entries follow the
 Keep a Changelog format and version tags use Semantic Versioning.
 
 ## [Unreleased] — Tier-2 AI, event feed and ETag integration
+### Security
+- `AUTH_SECRET` must be set in production: the service fails fast instead of
+  silently generating an ephemeral session secret.
+- Rate limiting trusts the last `X-Forwarded-For` hop appended by the edge.
+- The console CSP now matches the app: Google Fonts and the pre-paint boot
+  script are allowed (previously blocked, breaking fonts/splash), while
+  external script origins stay `'self'`.
+- Public gateway ports are bound to 127.0.0.1; the gateway sanitizes echoed
+  correlation IDs.
+
 
 ### Added
 
