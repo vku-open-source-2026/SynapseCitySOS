@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { Code, Database, Key, ExternalLink, Copy, Check, Play, Loader2 } from "lucide-react";
+import { Code, Database, Copy, Check, Play, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 const API_BASE_URL = "https://sos.synapsecity.sbs";
@@ -45,7 +45,7 @@ const sections: EndpointSection[] = [
         icon: "🔐",
         title: "Auth shell",
         description:
-            "Phiên đăng nhập dùng token HMAC-SHA256. Đây là shell phiên làm việc, không lưu mật khẩu và không tạo bản ghi người dùng; production phải uỷ quyền danh tính cho Tier-1 IAM.",
+            "Phiên đăng nhập dùng token HMAC-SHA256. Đây là shell phiên làm việc, không lưu mật khẩu và không tạo bản ghi người dùng; production phải uỷ quyền danh tính cho dịch vụ định danh.",
         endpoints: [
             {
                 method: "POST",
@@ -78,7 +78,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/auth/change-password",
                 title: "Đổi mật khẩu",
                 description:
-                    "Yêu cầu Bearer. Identity provider sở hữu mật khẩu; endpoint này chỉ xác nhận yêu cầu.",
+                    "Yêu cầu Bearer. Endpoint này xác nhận yêu cầu đổi mật khẩu của phiên hiện tại.",
                 requiresAuth: true,
             },
             {
@@ -103,7 +103,7 @@ const sections: EndpointSection[] = [
         icon: "🛰️",
         title: "Thông tin dịch vụ",
         description:
-            "Kiểm tra sức khỏe dịch vụ và danh sách năng lực SynapseCity SOS sở hữu.",
+            "Kiểm tra sức khỏe dịch vụ và các năng lực đang hoạt động.",
         endpoints: [
             {
                 method: "GET",
@@ -116,7 +116,7 @@ const sections: EndpointSection[] = [
                 method: "GET",
                 path: "/ready",
                 title: "Readiness check",
-                description: "Sẵn sàng nhận lưu lượng sau khi kiểm tra phụ thuộc Tier-2.",
+                description: "Sẵn sàng nhận lưu lượng sau khi kiểm tra phụ thuộc dịch vụ nền.",
                 testPath: "/ready",
             },
             {
@@ -124,7 +124,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/sos",
                 title: "Năng lực sản phẩm SOS",
                 description:
-                    "Liệt kê các năng lực SOS sở hữu (thiên tai, sự kiện, EOP, điều phối, nguồn lực, SITREP, AAR) và các năng lực không sở hữu.",
+                    "Liệt kê các năng lực đang hoạt động (thiên tai, sự kiện, EOP, điều phối, nguồn lực, SITREP, AAR).",
                 testPath: "/v1/sos",
             },
         ],
@@ -195,7 +195,7 @@ const sections: EndpointSection[] = [
                 method: "GET",
                 path: "/v1/emergency/sosconn/status",
                 title: "Trạng thái SOSConn",
-                description: "Kiểm tra thật trạng thái Tier-2 và năng lực AI; AI trả về capability_unavailable cho tới khi Tier-2 phát hành.",
+                description: "Kiểm tra thật trạng thái dịch vụ nền và năng lực AI; AI trả về capability_unavailable cho tới khi dịch vụ nền phát hành.",
             },
         ],
     },
@@ -257,7 +257,7 @@ const sections: EndpointSection[] = [
                 method: "POST",
                 path: "/v1/hazards/ingest",
                 title: "Nhập lô VNDMS",
-                description: "Chuẩn hóa, validate và upsert theo hazard_id; lịch chạy thuộc Tier-2 scheduled work.",
+                description: "Chuẩn hóa, validate và upsert theo hazard_id; lịch chạy thuộc dịch vụ nền scheduled work.",
                 requiresAuth: true,
             },
             {
@@ -280,7 +280,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/emergency/stream/hazards",
                 title: "Live hazard SSE",
                 description:
-                    "Server-Sent Events đẩy snapshot cảnh báo công khai; khi Tier-2 lỗi phát event error và giữ snapshot tốt nhất, không phát snapshot rỗng.",
+                    "Server-Sent Events đẩy snapshot cảnh báo công khai; khi dịch vụ nền lỗi phát event error và giữ snapshot tốt nhất, không phát snapshot rỗng.",
             },
         ],
     },
@@ -290,7 +290,7 @@ const sections: EndpointSection[] = [
         icon: "📋",
         title: "Kế hoạch ứng phó (EOP)",
         description:
-            "Sinh bản nháp EOP từ mẫu nghiệp vụ deterministic (Tier-2 AI chưa khả dụng), duyệt, xuất bản và sinh task.",
+            "Sinh bản nháp EOP từ mẫu nghiệp vụ deterministic (dịch vụ nền AI chưa khả dụng), duyệt, xuất bản và sinh task.",
         endpoints: [
             {
                 method: "GET",
@@ -308,7 +308,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/emergency/eop/generate-draft",
                 title: "Sinh bản nháp EOP",
                 description:
-                    "Sinh bản nháp EOP bằng AI Tier-2 từ sự kiện, cảnh báo và nguồn lực; force_new_version tăng version, không tạo trùng v1. Metadata ghi generated_by=tier2-ai (model, prompt_version, usage). AI không khả dụng trả 503 ai_capability_unavailable; fallback=deterministic là lựa chọn tường minh.",
+                    "Sinh bản nháp EOP bằng AI dịch vụ nền từ sự kiện, cảnh báo và nguồn lực; force_new_version tăng version, không tạo trùng v1. Metadata ghi generated_by=ai (model, prompt_version, usage). AI không khả dụng trả 503 ai_capability_unavailable; fallback=deterministic là lựa chọn tường minh.",
             },
             {
                 method: "PATCH",
@@ -445,7 +445,7 @@ const sections: EndpointSection[] = [
         icon: "🗺️",
         title: "Bản đồ, geocode & AI",
         description:
-            "Cấu hình tile và geocoding cho bản đồ công khai. Trợ lý AI trả 503 cho tới khi Tier-2 AI capability tồn tại.",
+            "Cấu hình tile và geocoding cho bản đồ công khai. Trợ lý AI trả 503 cho tới khi dịch vụ nền AI capability tồn tại.",
         endpoints: [
             {
                 method: "GET",
@@ -478,7 +478,7 @@ const sections: EndpointSection[] = [
                 path: "/v1/ai/chat",
                 title: "Trợ lý AI SOS",
                 description:
-                    "Trả 503 ai_capability_unavailable khi Tier-2 chưa có AI; không trả câu trả lời tĩnh giả lập.",
+                    "Trả 503 ai_capability_unavailable khi dịch vụ nền chưa có AI; không trả câu trả lời tĩnh giả lập.",
             },
         ],
     },
@@ -788,41 +788,6 @@ export default function ApiDocsPage() {
                             <p className="mt-1 text-sm text-slate-800">
                                 JSON, GeoJSON, SSE
                             </p>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Boundary notice */}
-                <section className="max-w-6xl mx-auto px-4 mb-14">
-                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
-                        <Key className="text-amber-600 shrink-0 mt-0.5" size={22} />
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-900 mb-1">
-                                Phạm vi sản phẩm
-                            </h2>
-                            <p className="text-slate-700 text-sm">
-                                SynapseCity SOS chỉ sở hữu các namespace{" "}
-                                <code className="font-mono">/v1/sos</code>,{" "}
-                                <code className="font-mono">/v1/auth</code>,{" "}
-                                <code className="font-mono">/v1/emergency*</code>,{" "}
-                                <code className="font-mono">/v1/hazards*</code>,{" "}
-                                <code className="font-mono">/v1/geo</code>,{" "}
-                                <code className="font-mono">/v1/map</code> và{" "}
-                                <code className="font-mono">/v1/ai</code>. Các API
-                                của SynapseCity trả về 404 tại boundary này;
-                                tài liệu đầy đủ nằm ở sản phẩm SynapseCity.
-                                Các endpoint có nhãn <strong>Bearer</strong> yêu
-                                cầu phiên đăng nhập qua <code className="font-mono">/v1/auth/login</code>.
-                            </p>
-                            <a
-                                href="https://synapsecity.sbs"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
-                            >
-                                Tài liệu SynapseCity
-                                <ExternalLink size={13} />
-                            </a>
                         </div>
                     </div>
                 </section>

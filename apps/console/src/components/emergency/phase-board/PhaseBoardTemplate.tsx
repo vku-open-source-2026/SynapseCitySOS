@@ -115,16 +115,15 @@ const PhaseBoardTemplate: React.FC<PhaseBoardTemplateProps> = ({ board }) => {
             <p className="mt-2 text-sm text-white/90 md:text-base">{board.subtitle}</p>
           </div>
           <span className="rounded-md border border-white/40 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">
-            SOS live board
+            Bảng trực SOS
           </span>
         </div>
-        <p className="mt-3 text-sm text-white/90">{board.teamBoundary}</p>
       </header>
 
       <nav className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <Link to="/admin/emergency-center" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100">
-            Board landing
+            Danh sách bảng
           </Link>
           {orderedPhaseBoards.map((phaseBoard) => (
             <Link
@@ -388,7 +387,7 @@ const PhaseBoardTemplate: React.FC<PhaseBoardTemplateProps> = ({ board }) => {
                           })}
                           className="mt-2 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
                         >
-                          Publish
+                          Xuất bản
                         </button>
                       ) : null}
                     </article>
@@ -418,7 +417,7 @@ const PhaseBoardTemplate: React.FC<PhaseBoardTemplateProps> = ({ board }) => {
 
           <section className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-900">After-action reports</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Báo cáo sau sự kiện</h2>
               <p className="mt-1 text-sm text-slate-600">KPI tính từ event + dispatch + SITREP + resource, không phải số 0 mặc định.</p>
               <div className="mt-3 space-y-3 text-sm">
                 {aars.slice(0, 8).map((report: AfterActionReport) => (

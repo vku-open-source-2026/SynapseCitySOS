@@ -51,7 +51,7 @@ export function RegisterPage() {
         <CardHeader>
           <CardTitle>Tạo tài khoản</CardTitle>
           <CardDescription>
-            Tài khoản ứng phó được tạo trên dịch vụ danh tính Tier-2 (Tier-1 IAM) với vai trò responder.
+            Tạo tài khoản ứng phó để truy cập trung tâm chỉ huy.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -123,8 +123,7 @@ export function RegisterPage() {
             </Button>
 
             <p className="text-xs text-slate-500">
-              Vai trò được máy chủ gán: mặc định là responder; chỉ email trong danh sách
-              <code> SOS_BOOTSTRAP_ADMIN_EMAILS </code> mới nhận quyền quản trị.
+              Vai trò được máy chủ gán theo chính sách của đơn vị vận hành.
             </p>
 
             <div className="text-center text-sm">

@@ -92,6 +92,15 @@ function timeAgo(ms: number): string {
     return `${Math.floor(h / 24)} ngày trước`;
 }
 
+/** Model output is plain text in the panel; strip Markdown markers safely. */
+function formatAiText(text: string): string {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/^\s*[-*]\s+/gm, "• ");
+}
+
 function haversineKm(
     a: { lat: number; lng: number },
     b: { lat: number; lng: number }
@@ -860,7 +869,7 @@ const PublicHazardMap: React.FC = () => {
                                     { key: "near", label: "Gần tôi" },
                                 ] as const
                             ).map((chip) => {
-                                const disabled =
+                                const needsLocation =
                                     chip.key === "near" && !userLocation;
                                 const active = filterChip === chip.key;
                                 return (
@@ -874,9 +883,8 @@ const PublicHazardMap: React.FC = () => {
                                             }
                                             setFilterChip(chip.key);
                                         }}
-                                        disabled={disabled && filterChip !== chip.key}
                                         title={
-                                            disabled
+                                            needsLocation
                                                 ? "Cho phép định vị để dùng bộ lọc này"
                                                 : undefined
                                         }
@@ -884,10 +892,6 @@ const PublicHazardMap: React.FC = () => {
                                             active
                                                 ? "bg-red-600 text-white border-red-600"
                                                 : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                                        } ${
-                                            disabled && !active
-                                                ? "opacity-60 cursor-not-allowed"
-                                                : ""
                                         }`}
                                     >
                                         {chip.label}
@@ -973,7 +977,7 @@ const PublicHazardMap: React.FC = () => {
                                                 overflow: "hidden",
                                             }}
                                         >
-                                            {aiBrief.brief}
+                                            {formatAiText(aiBrief.brief)}
                                         </p>
                                         {aiBrief.brief.length > 360 && (
                                             <button
@@ -1004,7 +1008,7 @@ const PublicHazardMap: React.FC = () => {
                                         <p className="mt-2 text-[10px] text-slate-500">
                                             {aiBrief.fallback
                                                 ? "Tóm tắt tất định từ feed cảnh báo"
-                                                : `AI · ${aiBrief.model ?? "Tier-2 model"}`}
+                                                : `AI · ${aiBrief.model ?? "trợ lý"}`}
                                             {" · "}
                                             {new Date(aiBrief.generated_at).toLocaleString("vi-VN")}
                                         </p>
@@ -1038,7 +1042,7 @@ const PublicHazardMap: React.FC = () => {
                                 {aiAnswer && (
                                     <div className="mt-2 rounded-lg border border-violet-100 bg-white p-2.5">
                                         <p className="text-[11px] text-slate-700 whitespace-pre-line leading-relaxed">
-                                            {aiAnswer.answer}
+                                            {formatAiText(aiAnswer.answer)}
                                         </p>
                                         {aiAnswer.citations.length > 0 && (
                                             <div className="mt-1.5 flex flex-wrap gap-1">
