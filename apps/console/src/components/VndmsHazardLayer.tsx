@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import { escapeHtml } from '../lib/escapeHtml';
 import type { VndmsHazard } from '../hooks/useVndmsHazards';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -39,11 +40,11 @@ function getRadius(h: VndmsHazard): number {
 function buildPopup(h: VndmsHazard): string {
   return `
     <div style="font-size:13px;line-height:1.6;min-width:200px">
-      <div style="font-weight:700;margin-bottom:4px">${h.label || '(Không có tên)'}</div>
-      <div><b>Loại:</b> ${TYPE_LABEL_VI[h.warning_type] ?? h.warning_type}</div>
-      ${h.value ? `<div><b>Giá trị:</b> ${h.value}</div>` : ''}
-      <div><b>Mức độ:</b> ${SEVERITY_LABEL_VI[h.severity] ?? h.severity}</div>
-      ${h.popupInfo ? `<div style="margin-top:4px;color:#555;font-size:11px">${h.popupInfo}</div>` : ''}
+      <div style="font-weight:700;margin-bottom:4px">${escapeHtml(h.label || '(Không có tên)')}</div>
+      <div><b>Loại:</b> ${escapeHtml(TYPE_LABEL_VI[h.warning_type] ?? h.warning_type)}</div>
+      ${h.value ? `<div><b>Giá trị:</b> ${escapeHtml(h.value)}</div>` : ''}
+      <div><b>Mức độ:</b> ${escapeHtml(SEVERITY_LABEL_VI[h.severity] ?? h.severity)}</div>
+      ${h.popupInfo ? `<div style="margin-top:4px;color:#555;font-size:11px">${escapeHtml(h.popupInfo)}</div>` : ''}
     </div>`;
 }
 
@@ -74,7 +75,7 @@ const VndmsHazardLayer: React.FC<Props> = ({ map, hazards }) => {
         weight: 1.5,
       })
         .bindPopup(buildPopup(h))
-        .bindTooltip(h.label || h.warning_type, { direction: 'top', sticky: true })
+        .bindTooltip(escapeHtml(h.label || h.warning_type), { direction: 'top', sticky: true })
         .addTo(group);
     });
     group.addTo(map);

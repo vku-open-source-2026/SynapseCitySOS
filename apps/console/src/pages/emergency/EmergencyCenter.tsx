@@ -330,10 +330,10 @@ const EmergencyCenter: React.FC = () => {
     }
     await runAction(async () => {
       const draft = await eopApi.generateDraft({ emergency_event_id: selectedEventId, force_new_version: true });
-      const generatedBy = draft.generated_by ?? 'tier2-ai';
+      const generatedBy = draft.generated_by ?? 'ai';
       setInfo(generatedBy === 'deterministic-fallback'
-        ? 'Đã tạo EOP draft bằng mẫu nghiệp vụ dự phòng (AI Tier-2 không khả dụng).'
-        : 'Đã tạo EOP draft bằng AI Tier-2.');
+        ? 'Đã tạo EOP draft bằng mẫu nghiệp vụ dự phòng (AI tạm thời không khả dụng).'
+        : 'Đã tạo EOP draft bằng AI.');
       await loadData(false);
     });
   };
@@ -350,7 +350,7 @@ const EmergencyCenter: React.FC = () => {
 
   const handleResolveEvent = async (eventId: string) => {
     await runAction(async () => {
-      const resolved = await emergencyApi.resolve(eventId, 'Resolved from command center board');
+      const resolved = await emergencyApi.resolve(eventId, 'Đã kết thúc từ trung tâm chỉ huy');
       setInfo(resolved.after_action_report_id
         ? `Đã resolve sự kiện và tạo AAR nháp ${resolved.after_action_report_id}.`
         : 'Đã resolve sự kiện.');
@@ -412,6 +412,9 @@ const EmergencyCenter: React.FC = () => {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
+          <Link to="/admin/emergency-center/new" className="inline-flex rounded-lg border border-white/35 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-white/90">
+            + Tạo sự kiện khẩn cấp
+          </Link>
           <Link to="/admin/emergency-center/before" className="inline-flex rounded-lg border border-white/35 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20">
             Bảng trước thiên tai
           </Link>
@@ -429,7 +432,7 @@ const EmergencyCenter: React.FC = () => {
           <p className="font-semibold">Dữ liệu cảnh báo không khả dụng hoặc đang suy giảm.</p>
           <p className="mt-1">
             {hazardStreamError ? `${hazardStreamError} ` : ''}
-            {dependencyDegraded ? 'Tier-2 đang báo suy giảm. ' : ''}
+            {dependencyDegraded ? 'Một số dịch vụ nền đang báo suy giảm. ' : ''}
             {degradedSources.length > 0 ? `Nguồn lỗi: ${degradedSources.join(', ')}. ` : ''}
             Hệ thống giữ snapshot tốt nhất gần nhất; không hiển thị trạng thái an toàn khi chưa xác minh.
           </p>
@@ -477,7 +480,7 @@ const EmergencyCenter: React.FC = () => {
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">Bản đồ nguy hiểm thời gian thực</h2>
               <span className="text-xs text-slate-500">
-                Last sync: {lastHazardRefresh ? lastHazardRefresh.toLocaleTimeString('vi-VN') : '--'}
+                Cập nhật gần nhất: {lastHazardRefresh ? lastHazardRefresh.toLocaleTimeString('vi-VN') : '--'}
               </span>
             </div>
             <HazardLiveMap hazards={hazards} />
@@ -655,7 +658,7 @@ const EmergencyCenter: React.FC = () => {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    Updated {formatDate(plan.updated_at)} · Bấm để quản lý task →
+                    Cập nhật {formatDate(plan.updated_at)} · Bấm để quản lý task →
                   </p>
                 </Link>
               ))}

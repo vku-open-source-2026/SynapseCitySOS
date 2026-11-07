@@ -3,6 +3,16 @@
 All notable changes to SynapseCitySOS are documented here. Entries follow the
 Keep a Changelog format and version tags use Semantic Versioning.
 
+## [Unreleased] - 2026-11-07
+
+### Fixed
+- Console UI audit: added a mounted emergency-event creation route, enabled
+  the “Gần tôi” filter to request geolocation, escaped Leaflet popup text,
+  rendered AI text without raw Markdown, removed product/architecture scope
+  copy from operator/citizen screens, translated phase-board labels, fixed
+  the footer About/contribution links, and localized the event-resolution
+  note.
+
 ## [Unreleased] — Tier-2 AI, event feed and ETag integration
 ### Added
 - **AI situation panel**: the public map calls `POST /v1/ai/brief` for a

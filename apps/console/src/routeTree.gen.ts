@@ -23,6 +23,7 @@ import { Route as AdminEmergencyCenterRouteImport } from './routes/admin/emergen
 import { Route as AdminEmergencyCenterAfterRouteImport } from './routes/admin/emergency-center/after'
 import { Route as AdminEmergencyCenterBeforeRouteImport } from './routes/admin/emergency-center/before'
 import { Route as AdminEmergencyCenterDuringRouteImport } from './routes/admin/emergency-center/during'
+import { Route as AdminEmergencyCenterNewRouteImport } from './routes/admin/emergency-center/new'
 import { Route as AdminSettingsIndexRouteImport } from './routes/admin/settings/index'
 import { Route as AdminEmergencyCenterOperationsEventIdRouteImport } from './routes/admin/emergency-center/operations.$eventId'
 
@@ -89,6 +90,11 @@ const AdminEmergencyCenterDuringRoute =
     path: '/during',
     getParentRoute: () => AdminEmergencyCenterRoute,
   } as any)
+const AdminEmergencyCenterNewRoute = AdminEmergencyCenterNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminEmergencyCenterRoute,
+} as any)
 const AdminSettingsIndexRoute = AdminSettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/admin/emergency-center/after': typeof AdminEmergencyCenterAfterRoute
   '/admin/emergency-center/before': typeof AdminEmergencyCenterBeforeRoute
   '/admin/emergency-center/during': typeof AdminEmergencyCenterDuringRoute
+  '/admin/emergency-center/new': typeof AdminEmergencyCenterNewRoute
   '/admin/settings/': typeof AdminSettingsIndexRoute
   '/admin/emergency-center/operations/$eventId': typeof AdminEmergencyCenterOperationsEventIdRoute
 }
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/admin/emergency-center/after': typeof AdminEmergencyCenterAfterRoute
   '/admin/emergency-center/before': typeof AdminEmergencyCenterBeforeRoute
   '/admin/emergency-center/during': typeof AdminEmergencyCenterDuringRoute
+  '/admin/emergency-center/new': typeof AdminEmergencyCenterNewRoute
   '/admin/settings': typeof AdminSettingsIndexRoute
   '/admin/emergency-center/operations/$eventId': typeof AdminEmergencyCenterOperationsEventIdRoute
 }
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/admin/emergency-center/after': typeof AdminEmergencyCenterAfterRoute
   '/admin/emergency-center/before': typeof AdminEmergencyCenterBeforeRoute
   '/admin/emergency-center/during': typeof AdminEmergencyCenterDuringRoute
+  '/admin/emergency-center/new': typeof AdminEmergencyCenterNewRoute
   '/admin/settings/': typeof AdminSettingsIndexRoute
   '/admin/emergency-center/operations/$eventId': typeof AdminEmergencyCenterOperationsEventIdRoute
 }
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/admin/emergency-center/after'
     | '/admin/emergency-center/before'
     | '/admin/emergency-center/during'
+    | '/admin/emergency-center/new'
     | '/admin/settings/'
     | '/admin/emergency-center/operations/$eventId'
   fileRoutesByTo: FileRoutesByTo
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/admin/emergency-center/after'
     | '/admin/emergency-center/before'
     | '/admin/emergency-center/during'
+    | '/admin/emergency-center/new'
     | '/admin/settings'
     | '/admin/emergency-center/operations/$eventId'
   id:
@@ -195,6 +206,7 @@ export interface FileRouteTypes {
     | '/admin/emergency-center/after'
     | '/admin/emergency-center/before'
     | '/admin/emergency-center/during'
+    | '/admin/emergency-center/new'
     | '/admin/settings/'
     | '/admin/emergency-center/operations/$eventId'
   fileRoutesById: FileRoutesById
@@ -295,6 +307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminEmergencyCenterDuringRouteImport
       parentRoute: typeof AdminEmergencyCenterRoute
     }
+    '/admin/emergency-center/new': {
+      id: '/admin/emergency-center/new'
+      path: '/new'
+      fullPath: '/admin/emergency-center/new'
+      preLoaderRoute: typeof AdminEmergencyCenterNewRouteImport
+      parentRoute: typeof AdminEmergencyCenterRoute
+    }
     '/admin/settings/': {
       id: '/admin/settings/'
       path: '/settings'
@@ -316,6 +335,7 @@ interface AdminEmergencyCenterRouteChildren {
   AdminEmergencyCenterAfterRoute: typeof AdminEmergencyCenterAfterRoute
   AdminEmergencyCenterBeforeRoute: typeof AdminEmergencyCenterBeforeRoute
   AdminEmergencyCenterDuringRoute: typeof AdminEmergencyCenterDuringRoute
+  AdminEmergencyCenterNewRoute: typeof AdminEmergencyCenterNewRoute
   AdminEmergencyCenterOperationsEventIdRoute: typeof AdminEmergencyCenterOperationsEventIdRoute
 }
 
@@ -323,6 +343,7 @@ const AdminEmergencyCenterRouteChildren: AdminEmergencyCenterRouteChildren = {
   AdminEmergencyCenterAfterRoute: AdminEmergencyCenterAfterRoute,
   AdminEmergencyCenterBeforeRoute: AdminEmergencyCenterBeforeRoute,
   AdminEmergencyCenterDuringRoute: AdminEmergencyCenterDuringRoute,
+  AdminEmergencyCenterNewRoute: AdminEmergencyCenterNewRoute,
   AdminEmergencyCenterOperationsEventIdRoute:
     AdminEmergencyCenterOperationsEventIdRoute,
 }

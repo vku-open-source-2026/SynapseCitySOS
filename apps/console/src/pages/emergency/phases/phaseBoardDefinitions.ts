@@ -6,10 +6,9 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
   before: {
     phase: 'before',
     routePath: '/admin/emergency-center/before',
-    tabLabel: 'Before',
-    title: 'Before Disaster Board',
-    subtitle: 'Preparedness, prevention, and risk reduction before disruption starts.',
-    teamBoundary: 'Preparedness team owns this board and can add preventive workflows independently.',
+    tabLabel: 'Trước',
+    title: 'Bảng chuẩn bị trước thiên tai',
+    subtitle: 'Chuẩn bị, phòng ngừa và giảm thiểu rủi ro trước khi thiên tai xảy ra.',
     dataSourceStubs: [
       {
         id: 'seasonal-forecast-feed',
@@ -74,10 +73,9 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
   during: {
     phase: 'during',
     routePath: '/admin/emergency-center/during',
-    tabLabel: 'During',
-    title: 'During Disaster Board',
-    subtitle: 'Live response orchestration, hazard tracking, and execution coordination.',
-    teamBoundary: 'Response operations team owns this board and can ship live-ops enhancements independently.',
+    tabLabel: 'Trong',
+    title: 'Bảng ứng phó trong thiên tai',
+    subtitle: 'Điều phối ứng phó trực tiếp, theo dõi cảnh báo và triển khai lực lượng.',
     dataSourceStubs: [
       {
         id: 'live-hazard-stream',
@@ -142,10 +140,9 @@ export const phaseBoardDefinitions: Record<DisasterPhase, PhaseBoardDefinition> 
   after: {
     phase: 'after',
     routePath: '/admin/emergency-center/after',
-    tabLabel: 'After',
-    title: 'After Disaster Board',
-    subtitle: 'Recovery execution, learning loops, and long-tail closure management.',
-    teamBoundary: 'Recovery and governance team owns this board and can iterate post-event workflows independently.',
+    tabLabel: 'Sau',
+    title: 'Bảng phục hồi sau thiên tai',
+    subtitle: 'Thực hiện phục hồi, tổng kết bài học và quản lý các tồn đọng sau sự kiện.',
     dataSourceStubs: [
       {
         id: 'after-action-reports',

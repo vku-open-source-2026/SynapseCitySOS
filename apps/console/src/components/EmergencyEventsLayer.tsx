@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { emergencyStatusLabel } from '../lib/emergencyStatus';
+import { escapeHtml } from '../lib/escapeHtml';
 import type { PublicEmergencyEvent, EmergencySeverity, EmergencyEventType } from '../types/emergency';
 
 const SEVERITY_COLOR: Record<EmergencySeverity, string> = {
@@ -75,15 +76,15 @@ function makePopupContent(e: PublicEmergencyEvent): string {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:20px">🚨</span>
         <div>
-          <div style="font-weight:700;font-size:14px;color:#0f172a">${e.title}</div>
-          <div style="font-size:11px;color:#64748b">${typeLabel} · ${emergencyStatusLabel(e.status)}</div>
+          <div style="font-weight:700;font-size:14px;color:#0f172a">${escapeHtml(e.title)}</div>
+          <div style="font-size:11px;color:#64748b">${escapeHtml(typeLabel)} · ${escapeHtml(emergencyStatusLabel(e.status))}</div>
         </div>
       </div>
       <div style="display:inline-block;padding:2px 8px;border-radius:999px;background:${color}22;color:${color};font-size:11px;font-weight:700;margin-bottom:8px">
-        ⚠ Mức độ: ${severityLabel}
+        ⚠ Mức độ: ${escapeHtml(severityLabel)}
       </div>
-      ${loc ? `<div style="font-size:11px;color:#64748b;margin-top:4px">📍 ${loc}</div>` : ''}
-      ${startedAt ? `<div style="font-size:11px;color:#94a3b8;margin-top:4px">Bắt đầu: ${startedAt}</div>` : ''}
+      ${loc ? `<div style="font-size:11px;color:#64748b;margin-top:4px">📍 ${escapeHtml(loc)}</div>` : ''}
+      ${startedAt ? `<div style="font-size:11px;color:#94a3b8;margin-top:4px">Bắt đầu: ${escapeHtml(startedAt)}</div>` : ''}
     </div>`;
 }
 

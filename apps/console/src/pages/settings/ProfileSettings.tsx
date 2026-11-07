@@ -58,7 +58,7 @@ const ProfileSettings: React.FC = () => {
             });
             setErrors({});
             setNotice(
-                "Yêu cầu đổi mật khẩu đã được gửi tới dịch vụ danh tính Tier-2. Các phiên khác có thể đã bị thu hồi."
+                "Yêu cầu đổi mật khẩu đã được gửi tới dịch vụ định danh. Các phiên khác có thể đã bị thu hồi."
             );
         },
         onError: (error: unknown) => {
@@ -158,9 +158,8 @@ const ProfileSettings: React.FC = () => {
                     </FormField>
                 </div>
                 <p className="mt-4 text-xs text-slate-500">
-                    Danh tính do dịch vụ xác thực Tier-2 (Tier-1 IAM) quản lý; SOS chỉ
-                    giữ phiên đã ký và không trả token Tier-2 về trình duyệt. Vai trò do
-                    máy chủ gán (responder mặc định, admin theo danh sách bootstrap).
+                    Danh tính do dịch vụ định danh quản lý; hệ thống chỉ giữ phiên đã
+                    ký và không trả token nội bộ về trình duyệt. Vai trò do máy chủ gán.
                 </p>
             </div>
 

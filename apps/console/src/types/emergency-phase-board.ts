@@ -15,7 +15,6 @@ export interface PhaseBoardDefinition {
   tabLabel: string;
   title: string;
   subtitle: string;
-  teamBoundary: string;
   dataSourceStubs: SectionStubItem[];
   kpiStubs: SectionStubItem[];
   actionQueueStubs: SectionStubItem[];

@@ -36,10 +36,10 @@ export function LoginPage() {
         const code = err.response?.data?.error;
         if (code === 'demo_auth_disabled') {
           setError(
-            'Đăng nhập demo đang tắt. Quản trị viên cần cấu hình SOS_AUTH_MODE=tier2/ALLOW_DEMO_AUTH cho môi trường demo.'
+            'Đăng nhập demo đang tắt. Vui lòng liên hệ quản trị viên để được cấp quyền truy cập.'
           );
         } else if (code === 'identity_not_configured' || code === 'identity_unavailable') {
-          setError('Dịch vụ danh tính Tier-2 hiện không khả dụng. Vui lòng thử lại sau.');
+          setError('Dịch vụ danh tính hiện không khả dụng. Vui lòng thử lại sau.');
         } else if (code === 'invalid_credentials') {
           setError('Email hoặc mật khẩu không đúng.');
         } else {
@@ -101,9 +101,8 @@ export function LoginPage() {
             </Button>
 
             <p className="text-xs text-slate-500">
-              Danh tính do dịch vụ xác thực Tier-2 (Tier-1 IAM) xác minh. SOS chỉ giữ phiên đăng nhập
-              đã ký; mật khẩu và token Tier-2 không được trả về trình duyệt. Sinh trắc học không được
-              hỗ trợ cục bộ.
+              Danh tính được xác minh bởi dịch vụ định danh. Hệ thống chỉ giữ phiên đăng nhập
+              đã ký; mật khẩu và token nội bộ không được trả về trình duyệt.
             </p>
 
             <div className="text-center text-sm">
