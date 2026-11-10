@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 VKU.VIC
 services:
   sos-service:
+    image: ghcr.io/${SYNAPSECITYSOS_IMAGE_OWNER:-vku-open-source-2026}/synapsecitysos-sos-service:${SYNAPSECITYSOS_VERSION:-latest}
     build:
       context: ..
       dockerfile: SynapseCitySOS/apps/sos-service/Dockerfile
@@ -33,6 +34,7 @@ services:
     expose: ["8084"]
     networks: [synapsecity-sos]
   gateway:
+    image: ghcr.io/${SYNAPSECITYSOS_IMAGE_OWNER:-vku-open-source-2026}/synapsecitysos-gateway:${SYNAPSECITYSOS_VERSION:-latest}
     build:
       context: ..
       dockerfile: SynapseCitySOS/apps/gateway/Dockerfile
@@ -57,6 +59,7 @@ services:
       synapsecity-sos:
         aliases: [synapsecity-sos-gateway]
   console:
+    image: ghcr.io/${SYNAPSECITYSOS_IMAGE_OWNER:-vku-open-source-2026}/synapsecitysos-console:${SYNAPSECITYSOS_VERSION:-latest}
     build:
       context: ./apps/console
       dockerfile: Dockerfile

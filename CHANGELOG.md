@@ -3,7 +3,14 @@
 All notable changes to SynapseCitySOS are documented here. Entries follow the
 Keep a Changelog format and version tags use Semantic Versioning.
 
-## [Unreleased] - 2026-11-07
+## [Unreleased]
+
+## [0.2.2] - 2026-11-10
+
+### Added
+- Public GHCR images for `sos-service`, `gateway` and `console` with
+  `vX.Y.Z`, `latest` and `sha-<commit>` tags, plus a self-host guide covering
+  `docker compose pull` and building from source.
 
 ### Fixed
 - Console UI audit: added a mounted emergency-event creation route, enabled

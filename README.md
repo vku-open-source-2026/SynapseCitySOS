@@ -108,12 +108,13 @@ protected keystore and publishes it through the Tier-2 files capability. See
 
 ## Run
 
-Build the Tier-2 SDK first; the workspace-local dependency is intentional until
-the workspace `@synapsedx/capabilities` package is published to the npm registry:
+The Tier-2 client is published on npm as
+`@synapsedx/capabilities@^0.5.1`, so a clean clone builds without a sibling
+SynapseDX checkout:
 
 ```bash
-cd ../SynapseDX/sdks/capabilities-js && npm install && npm run build
-cd ../../SynapseCitySOS && npm ci && npm run build
+npm ci
+npm run build
 SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
   npm run start --workspace=@synapsecity/sos-service
 ```
@@ -154,7 +155,55 @@ npm run dev --workspace=@synapsecity/sos-console
 
 The production stack is reproducible with `docker compose up -d --build`. The
 Tier-2 client is installed from the public npm registry as
-`@synapsedx/capabilities@^0.3.0`; no sibling checkout or prebuild is required.
+`@synapsedx/capabilities@^0.5.1`; no sibling checkout or prebuild is required.
+
+## Self-host
+
+Every release publishes three Apache-2.0 images to the public GitHub Container
+Registry (no registry login required):
+
+- `ghcr.io/vku-open-source-2026/synapsecitysos-sos-service`
+- `ghcr.io/vku-open-source-2026/synapsecitysos-gateway`
+- `ghcr.io/vku-open-source-2026/synapsecitysos-console`
+
+SOS is Tier 3: point `SYNAPSEDX_BASE_URL` at a Tier-2 SynapseDX deployment and
+set a scoped `SYNAPSEDX_API_KEY` issued for this product account. The default
+`https://synapsedx.sbs` is the public demo.
+
+### 1. Run the published images (recommended)
+
+```bash
+git clone https://github.com/vku-open-source-2026/SynapseCitySOS.git
+cd SynapseCitySOS
+cp .env.example .env       # set SYNAPSEDX_BASE_URL / API key and AUTH_SECRET
+export SYNAPSECITYSOS_VERSION=v0.2.2   # or latest
+
+docker compose pull
+docker compose up -d --no-build
+curl http://127.0.0.1:8086/health
+```
+
+The gateway is bound to loopback; terminate TLS at your own edge and proxy
+`/v1` to the gateway (see `infra/nginx/synapsecity-sos.conf`). Keep
+`SOS_AUTH_MODE=tier2` and a strong `AUTH_SECRET` in production.
+
+### 2. Build from source
+
+Requirements: Node.js 20+, Docker Engine 24+ and Compose v2.24+.
+
+```bash
+git clone https://github.com/vku-open-source-2026/SynapseCitySOS.git
+cd SynapseCitySOS
+cp .env.example .env
+npm ci
+npm run build
+npm test
+docker compose build
+docker compose up -d --no-build
+```
+
+`docker compose up -d --build` combines the last two steps. Local builds use
+the same GHCR image names, so `pull` and `build` are interchangeable.
 
 ## API
 
