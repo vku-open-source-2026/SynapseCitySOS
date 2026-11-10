@@ -76,6 +76,27 @@ the technician portal, infrastructure alerts, budgets, operational reports,
 city users, geofences, data ingestion, the public asset map and public incident
 reporting. Those are SynapseCity features.
 
+## Android app and home-screen widget
+
+The `mobile/` directory contains the SynapseSOS Android client and a native 4×3
+home-screen widget. It talks directly to `https://sos.synapsecity.sbs/v1`:
+feed-health banner, nearby hazards (GPS), hazard/event/shelter map, public SOS
+guidance, foreground SSE, local alerts, optional responder read-only view, and a
+widget with latest hazard, active events, mini-map, SOS and refresh actions. The
+UI is light-first, using the production SOS web console's cream/red palette. See
+[`mobile/README.md`](mobile/README.md) and
+[`docs/MOBILE_AUDIT.md`](docs/MOBILE_AUDIT.md).
+
+```bash
+cd mobile
+npm ci
+npm run typecheck && npm test
+npm run verify
+npm run build:android
+```
+
+Release APK: `mobile/dist/SynapseSOS-0.1.0-release.apk`.
+
 ## Run
 
 Build the Tier-2 SDK first; the workspace-local dependency is intentional until

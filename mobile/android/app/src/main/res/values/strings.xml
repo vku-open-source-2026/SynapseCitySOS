@@ -1,0 +1,20 @@
+<resources>
+  <string name="app_name">SynapseSOS</string>
+  <string name="expo_system_ui_user_interface_style" translatable="false">dark</string>
+  <string name="sos_widget_name">SynapseSOS · Cảnh báo thiên tai</string>
+  <string name="sos_widget_description">Cảnh báo thiên tai gần nhất, sự kiện khẩn cấp và bản đồ mini. Nút SOS mở hướng dẫn ứng phó.</string>
+  <string name="sos_widget_brand">SYNAPSE SOS</string>
+  <string name="sos_widget_feed_ok">Nguồn tin hoạt động</string>
+  <string name="sos_widget_unknown">Không xác định nguồn tin</string>
+  <string name="sos_widget_no_data">Đang tải cảnh báo…</string>
+  <string name="sos_widget_no_data_hint">Mở app một lần để lưu vị trí</string>
+  <string name="sos_widget_no_hazard">Không có cảnh báo trong 100 km</string>
+  <string name="sos_widget_waiting">Widget sẽ tự cập nhật</string>
+  <string name="sos_widget_refresh">↻ Làm mới</string>
+  <string name="sos_widget_sos">SOS</string>
+  <string name="sos_widget_stale">Dữ liệu cũ</string>
+  <string name="sos_widget_events">Sự kiện: %1$d · mức cao nhất: %2$s</string>
+  <string name="sos_widget_updated">Cập nhật %1$d phút trước · sos.synapsecity.sbs</string>
+  <string name="sos_widget_stale_footer">Dữ liệu cũ · %1$d phút trước · chạm làm mới</string>
+  <string name="sos_widget_map_description">Bản đồ mini cảnh báo thiên tai quanh vị trí của bạn</string>
+</resources>
