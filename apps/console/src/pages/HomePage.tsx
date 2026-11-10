@@ -20,7 +20,7 @@ import { emergencyApi } from "../api/emergency";
 import { hazardsApi } from "../api/hazards";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
-import { usePWA } from "../hooks/usePWA";
+import { LINKS } from "../lib/site";
 
 const capabilities = [
     {
@@ -74,7 +74,6 @@ const capabilities = [
 ];
 
 const HomePage = () => {
-    const { canShowInstallButton, promptInstall } = usePWA();
     const [activeEvents, setActiveEvents] = useState<number | null>(null);
     const [activeHazards, setActiveHazards] = useState<number | null>(null);
     const [criticalHazards, setCriticalHazards] = useState<number | null>(null);
@@ -169,15 +168,15 @@ const HomePage = () => {
                                     <MapPin className="w-4 h-4 mr-2" />
                                     Bản đồ nguy cơ
                                 </Link>
-                                {canShowInstallButton && (
-                                    <button
-                                        onClick={promptInstall}
-                                        className="inline-flex items-center justify-center px-6 py-3 bg-slate-900 text-white font-semibold rounded-full hover:bg-slate-800 transition-colors shadow-lg"
-                                    >
-                                        <Download className="w-4 h-4 mr-2" />
-                                        Cài đặt ứng dụng
-                                    </button>
-                                )}
+                                <a
+                                    href={LINKS.androidApk}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center px-6 py-3 bg-slate-900 text-white font-semibold rounded-full hover:bg-slate-800 transition-colors shadow-lg"
+                                >
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Tải APK Android
+                                </a>
                             </div>
                         </div>
 
