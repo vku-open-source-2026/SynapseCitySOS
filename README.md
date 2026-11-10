@@ -98,6 +98,8 @@ npm run build:android
 Release APK (public, served from Tier-1 SynapseOCS through Tier-2):
 <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content>
 
+GitHub release: <https://github.com/vku-open-source-2026/SynapseCitySOS/releases/tag/mobile-v0.1.0>
+
 SHA-256: `51cb3bd072c09ffce70a9e42c67165cc2a1a545d92a83853065ef0e97bf707f2`
 
 CI builds an unsigned APK; the production release job signs it with the
