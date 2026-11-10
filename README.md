@@ -166,6 +166,11 @@ Registry (no registry login required):
 - `ghcr.io/vku-open-source-2026/synapsecitysos-gateway`
 - `ghcr.io/vku-open-source-2026/synapsecitysos-console`
 
+> If `docker pull` returns `unauthorized`, the GHCR packages have not been
+> switched to public yet. An organization admin must add a `GHCR_PAT` secret
+> (package admin) and run the `packages-public` workflow in the SynapseOne
+> repository once.
+
 SOS is Tier 3: point `SYNAPSEDX_BASE_URL` at a Tier-2 SynapseDX deployment and
 set a scoped `SYNAPSEDX_API_KEY` issued for this product account. The default
 `https://synapsedx.sbs` is the public demo.
