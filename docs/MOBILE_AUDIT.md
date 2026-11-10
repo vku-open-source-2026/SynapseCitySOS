@@ -13,8 +13,8 @@ finding.**
 | --- | --- |
 | React Native/Expo app | `mobile/` |
 | Native Android widget | `mobile/android/app/src/main/java/sbs/synapsecity/sos/widget/` |
-| Release APK (signed) | `mobile/dist/SynapseSOS-0.1.0-release.apk` |
-| APK SHA-256 | `5AEA855E8B538A9AEFF28DB6966B41702102F6A5099A28106BA6699367D1D456` |
+| Release APK (signed, public) | <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content> |
+| APK SHA-256 | `afa7ac2d3d9d5b2374f7fc3a1eca10d80461887bea42ad72a04b804f9cf6e0a0` |
 | Evidence screenshots | `docs/evidence/` |
 | Plan | `docs/MOBILE_APP_PLAN.md` |
 
@@ -137,7 +137,7 @@ Fixed during this audit:
 | S4 | Medium | Local notification delivery was not observed end-to-end (no new high/critical hazard arrived during the test window). | Channel, permission, dedupe and widget-worker notification path exist; no server push claimed. |
 | S5 | Low | Feed can contain arbitrary hazard type strings (`rain`, `cold`, …); common types are mapped to Vietnamese, unknown ones show raw type. | Add labels as the feed evolves. |
 | S6 | Low | Widget refresh minimum 30 min and Doze can delay it. | Manual refresh + foreground sync + stale label. |
-| S7 | Low | APK contains all ABIs (84 MB). | Use ABI splits for store distribution. |
+| S7 | Low | APK contains arm64-v8a + x86_64 (52 MB). | Use ABI splits/AAB for store distribution. |
 | S8 | Low | Windows MAX_PATH can break native codegen in a long checkout. | `scripts/build-android.ps1` mirrors to `C:\r`; documented. |
 | S9 | Low | Map requires network for Leaflet/tiles; radar fallback is used. | Explicit map-unavailable state; API data remains real. |
 | S10 | Low | Duplicate security headers on the wire from edge + gateway (`nosniff,nosniff`). | Harmless; clean up edge config later. |

@@ -52,12 +52,12 @@ Release APK:
 npm run build:android
 ```
 
-Current release artefact:
+Current release artefact (public, served from Tier-1 SynapseOCS through
+Tier-2; CI builds unsigned and the production release job signs it):
 
 ```text
-mobile/dist/SynapseSOS-0.1.0-release.apk
-SHA-256 5AEA855E8B538A9AEFF28DB6966B41702102F6A5099A28106BA6699367D1D456
-adb install -r mobile/dist/SynapseSOS-0.1.0-release.apk
+https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content
+SHA-256 afa7ac2d3d9d5b2374f7fc3a1eca10d80461887bea42ad72a04b804f9cf6e0a0
 ```
 
 On Windows the generated CMake paths can exceed `MAX_PATH`. The included
