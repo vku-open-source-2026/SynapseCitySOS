@@ -14,7 +14,7 @@ finding.**
 | React Native/Expo app | `mobile/` |
 | Native Android widget | `mobile/android/app/src/main/java/sbs/synapsecity/sos/widget/` |
 | Release APK (signed, public) | <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content> |
-| APK SHA-256 | `afa7ac2d3d9d5b2374f7fc3a1eca10d80461887bea42ad72a04b804f9cf6e0a0` |
+| APK SHA-256 | `51cb3bd072c09ffce70a9e42c67165cc2a1a545d92a83853065ef0e97bf707f2` |
 | Evidence screenshots | `docs/evidence/` |
 | Plan | `docs/MOBILE_APP_PLAN.md` |
 
@@ -46,6 +46,8 @@ reference; dark mode is intentionally not enabled in this revision.
 | `npx vitest run` | 11/11 pass (feed health, geometry, labels, links) |
 | `node scripts/verify-production.mjs` | pass: 10 hazards, 0 public events, 0 shelters, VIETMAP, City namespace 404 |
 | `assembleRelease` | pass |
+| GitHub Actions `mobile-build.yml` | pass: unsigned arm64-v8a + x86_64 artifact |
+| Production signing/publish | pass: `zipalign` + `apksigner` + Tier-2 files → Tier-1 SynapseOCS |
 | APK signature | V2, CN=SynapseSOS, local upload key |
 | Boundary grep | no City API/namespace in `mobile/src`; City link is navigation only |
 
