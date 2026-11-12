@@ -14,6 +14,7 @@
     "start:service": "npm run start --workspace=@synapsecity/sos-service",
     "start:gateway": "npm run start --workspace=@synapsecity/sos-gateway",
     "demo:seed": "node scripts/demo-seed.mjs",
-    "demo:reset": "node scripts/demo-reset.mjs"
+    "demo:reset": "node scripts/demo-reset.mjs",
+    "workflows:validate": "node workflows/validate.mjs"
   }
 }
