@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 256" width="920" height="256">
+  <title>SynapseCity SOS — lockup light</title>
+  <g transform="translate(24 50) scale(0.61)">
+    <path fill="#1D4ED8" d="M 228.5 101.1 A 104 104 0 1 1 154.9 27.5 L 142.5 73.9 A 56 56 0 1 0 182.1 113.5 Z"/>
+  <rect x="164.6" y="51.4" width="40" height="40" rx="12" fill="#F59E0B"/>
+  </g>
+  <text x="204" y="158" font-family="Segoe UI, system-ui, -apple-system, sans-serif" font-size="88" font-weight="600" letter-spacing="-3" fill="#0F172A">Synapse<tspan fill="#1D4ED8">CitySOS</tspan></text>
+</svg>

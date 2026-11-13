@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-const CACHE_NAME = 'synapsecity-sos-v1';
+const CACHE_NAME = 'synapsecity-sos-v2';
 const STATIC_ASSETS = [
     '/',
     '/about',

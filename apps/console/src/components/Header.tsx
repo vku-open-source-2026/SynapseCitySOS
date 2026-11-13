@@ -5,6 +5,7 @@ import { useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBars, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { CircleAlert, LogIn, Siren } from "lucide-react";
+import { BrandSymbol } from "./BrandSymbol";
 
 interface NavigationItem {
     label: string;
@@ -67,10 +68,11 @@ const Header: React.FC = () => {
             <div className="flex items-center justify-between h-full px-4 mx-auto max-w-7xl">
                 {/* Logo */}
                 <div className="flex items-center">
-                    <Link to="/" onClick={closeMobileMenu}>
-                        <div className="ml-2">
-                            <h1 className="text-xl font-bold font-montserrat text-[#b9382b]">SynapseCity SOS</h1>
-                            <span className="text-[10px] font-semibold tracking-[0.18em] text-rose-700">EMERGENCY COMMAND</span>
+                    <Link to="/" onClick={closeMobileMenu} className="flex items-center gap-2.5">
+                        <BrandSymbol className="h-9 w-9 shrink-0" />
+                        <div className="ml-0">
+                            <h1 className="text-xl font-bold font-montserrat text-[#1D4ED8]">SynapseCity SOS</h1>
+                            <span className="text-[10px] font-semibold tracking-[0.18em] text-amber-600">EMERGENCY COMMAND</span>
                         </div>
                     </Link>
                 </div>
