@@ -69,7 +69,7 @@ import {
   toVndmsHazard,
   type IngestConnectorStatus,
 } from './vndms';
-import { proxyVietMapTile, vietMapAutocomplete, vietMapConfigured, vietMapGeocode, vietMapPlace, vietMapReverse, vietMapTileStyle } from './vietmap';
+import { proxyTier2Tile, tier2MapConfigured } from './tier2-map';
 import { fetchTier2HazardStatus, fetchTier2Hazards, mergeHazardFeed } from './tier2-hazards';
 
 const app = express();
@@ -2159,23 +2159,30 @@ app.get('/v1/geo/search-address', async (req, res, next) => {
   try {
     const query = String(req.query.q || '').trim();
     if (query.length < 2) return res.json([]);
-    const suggestions = await vietMapAutocomplete(query);
-    const enriched = await Promise.all(suggestions.slice(0, 5).map(async (item) => {
-      const place = item.ref_id ? await vietMapPlace(item.ref_id).catch(() => null) : null;
-      return { address: item.display || item.address || item.name || query, coordinates: { latitude: Number(place?.lat || 0), longitude: Number(place?.lng || 0) }, city: place?.city || '', country: 'Vietnam', ref_id: item.ref_id };
-    }));
-    res.json(enriched.filter((item) => item.coordinates.latitude !== 0 || item.coordinates.longitude !== 0));
+    const items = await client(req).geo.autocomplete({ q: query, limit: 5 });
+    res.json(items.map((item: any) => ({
+      address: item.address || item.label || item.display || query,
+      coordinates: { latitude: Number(item.lat), longitude: Number(item.lon) },
+      city: String(item.raw?.city || ''),
+      country: String(item.raw?.country || 'Vietnam'),
+      ...(item.id || item.ref_id ? { ref_id: String(item.id || item.ref_id) } : {}),
+      provider: 'synapsedx',
+    })).filter((item: any) => Number.isFinite(item.coordinates.latitude) && Number.isFinite(item.coordinates.longitude)));
   } catch (error) { next(error); }
 });
 app.post('/v1/geo/geocode', async (req, res, next) => {
   try {
     const text = String(req.body?.address || '').trim();
     if (!text) return res.status(400).json({ error: 'address_required' });
-    const [match] = await vietMapGeocode(text);
-    if (!match?.ref_id) return res.status(404).json({ error: 'address_not_found' });
-    const place = await vietMapPlace(match.ref_id);
-    if (!Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return res.status(404).json({ error: 'coordinates_not_found' });
-    res.json({ coordinates: { latitude: place.lat, longitude: place.lng }, geojson: { type: 'Point', coordinates: [place.lng, place.lat] }, display_name: place.display || match.display || text });
+    const items = await client(req).geo.geocode(text) as any[];
+    const hit = items.find((item) => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon)));
+    if (!hit) return res.status(404).json({ error: 'address_not_found' });
+    res.json({
+      coordinates: { latitude: Number(hit.lat), longitude: Number(hit.lon) },
+      geojson: { type: 'Point', coordinates: [Number(hit.lon), Number(hit.lat)] },
+      display_name: hit.address || hit.label || text,
+      provider: 'synapsedx',
+    });
   } catch (error) { next(error); }
 });
 app.post('/v1/geo/reverse-geocode', async (req, res, next) => {
@@ -2183,14 +2190,15 @@ app.post('/v1/geo/reverse-geocode', async (req, res, next) => {
     const latitude = Number(req.body?.latitude);
     const longitude = Number(req.body?.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return res.status(400).json({ error: 'coordinates_required' });
-    const [place] = await vietMapReverse(latitude, longitude);
-    if (!place) return res.status(404).json({ error: 'address_not_found' });
-    res.json({ address: place.display || place.address || '', city: place.city || '', country: 'Vietnam' });
+    const items = await client(req).geo.reverse(latitude, longitude) as any[];
+    const hit = items.find((item) => item.address || item.label || item.display);
+    if (!hit) return res.status(404).json({ error: 'address_not_found' });
+    res.json({ address: hit.address || hit.label || hit.display || '', city: String(hit.raw?.city || ''), country: String(hit.raw?.country || 'Vietnam'), provider: 'synapsedx' });
   } catch (error) { next(error); }
 });
-app.get('/v1/map/config', (_req, res) => res.json(vietMapConfigured() ? { provider: 'vietmap', tileUrl: '/v1/map/tiles/{z}/{x}/{y}.png', attribution: '&copy; VIETMAP', maxZoom: 20, maxNativeZoom: 20, style: vietMapTileStyle() } : { provider: 'openstreetmap', tileUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap contributors', maxZoom: 20, maxNativeZoom: 19 }));
-app.get('/v1/map/tiles/:z/:x/:y.png', async (req, res, next) => { try { await proxyVietMapTile(Number(req.params.z), Number(req.params.x), Number(req.params.y), res); } catch (error) { next(error); } });
-app.get('/v1/map/status', (_req, res) => res.json({ provider: vietMapConfigured() ? 'vietmap' : 'openstreetmap', configured: vietMapConfigured(), service: 'synapsecity-sos' }));
+app.get('/v1/map/config', (_req, res) => res.json({ provider: 'synapsedx', tileUrl: '/v1/map/tiles/{z}/{x}/{y}.png', attribution: '&copy; VIETMAP', maxZoom: 20, maxNativeZoom: 20, style: 'tm' }));
+app.get('/v1/map/tiles/:z/:x/:y.png', async (req, res, next) => { try { await proxyTier2Tile(Number(req.params.z), Number(req.params.x), Number(req.params.y), res); } catch (error) { next(error); } });
+app.get('/v1/map/status', (_req, res) => res.json({ provider: 'synapsedx', configured: tier2MapConfigured(), service: 'synapsecity-sos' }));
 
 app.get('/v1/ai/status', async (req, res, next) => {
   try {

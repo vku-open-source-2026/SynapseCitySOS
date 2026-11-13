@@ -7,7 +7,7 @@ or datasets. When working in the workspace, the workspace-level
 
 The repository is split into product parts:
 
-- `apps/gateway`: public HTTPS API boundary and console proxy;
+- `apps/gateway`: public HTTPS API boundary and console proxy (Rust/Axum);
 - `apps/sos-service`: Tier-3 emergency operations backend;
 - `apps/console`: emergency operations console;
 - `infra`: edge/deployment files.
@@ -152,6 +152,7 @@ Never add `/admin/assets*`, `/admin/incidents*`, `/admin/iot*`,
 npm ci
 npm run build
 npm test
+(cd apps/gateway && cargo test)                       # Rust gateway tests
 npm run start --workspace=@synapsecity/sos-service   # SOS service
 npm run dev --workspace=@synapsecity/sos-console     # console dev server
 docker compose up -d --build                         # production stack

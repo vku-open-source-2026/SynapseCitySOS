@@ -5,7 +5,8 @@ from public registries and remain under their upstream licenses.
 
 | Component family | License | Use |
 |---|---|---|
-| Node.js, TypeScript, Express, `@synapsedx/capabilities` | Apache-2.0/MIT/ISC/BSD | Emergency API and gateway |
+| Node.js, TypeScript, Express, `@synapsedx/capabilities` | Apache-2.0/MIT/ISC/BSD | Emergency API |
+| Rust, Axum, Tokio, Hyper, Reqwest | Apache-2.0/MIT | Public gateway (`apps/gateway`, `Cargo.lock`) |
 | React, Vite, Tailwind, TanStack | MIT | Emergency operations console |
 | Leaflet, MapLibre, Turf | BSD-2-Clause/BSD-3-Clause/MIT | Hazard maps and geospatial tools |
 | Font Awesome free icons | MIT or CC-BY-4.0 dual licensing | UI icons, used with attribution |

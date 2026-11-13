@@ -41,6 +41,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      RUST_LOG: ${RUST_LOG:-info}
       # Gateway always listens on 8080 inside the stack; the TLS edge and the
       # console proxy target this container port.
       PORT: "8080"
@@ -49,6 +50,12 @@ services:
       CORS_ORIGIN: https://sos.synapsecity.sbs
       GATEWAY_TIMEOUT_MS: ${GATEWAY_TIMEOUT_MS:-10000}
       GATEWAY_CONSOLE_TIMEOUT_MS: ${GATEWAY_CONSOLE_TIMEOUT_MS:-15000}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/synapsecity-sos-gateway", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on: [sos-service, console]
     ports:
       # Host 8086 is the local/public-stack gateway entry; 8084 stays the

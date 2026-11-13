@@ -8,6 +8,10 @@ Keep a Changelog format and version tags use Semantic Versioning.
 ### Changed
 - Mobile app: new Synapse logo system (app icon, adaptive/monochrome icon,
   splash, notification icon); Android version 0.1.1 (versionCode 2).
+- The public gateway is now a Rust/Axum service (`apps/gateway/src/main.rs`)
+  with the same product-boundary, proxy, CORS, correlation-ID, timeout,
+  metrics, binary and SSE behavior. The Docker image builds the release binary
+  and uses `--healthcheck` instead of Node.js.
 
 ## [0.2.2] - 2026-11-10
 

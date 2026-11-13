@@ -45,7 +45,7 @@ root. The repo-local summary is [`PRODUCT_BOUNDARY.md`](PRODUCT_BOUNDARY.md).
 ## Architecture
 
 ```text
-apps/gateway        public HTTPS API boundary and console proxy (port 8080)
+apps/gateway        public HTTPS API boundary and console proxy (Rust/Axum, port 8080)
 apps/sos-service    emergency operations domain backend (port 8084)
 apps/console        emergency operations console
 infra/              public-edge snippets and deployment material
@@ -201,7 +201,8 @@ The gateway is bound to loopback; terminate TLS at your own edge and proxy
 
 ### 2. Build from source
 
-Requirements: Node.js 20+, Docker Engine 24+ and Compose v2.24+.
+Requirements: Node.js 20+, Rust 1.82+ (only for building the gateway
+locally), Docker Engine 24+ and Compose v2.24+.
 
 ```bash
 git clone https://github.com/vku-open-source-2026/SynapseCitySOS.git
@@ -428,7 +429,9 @@ matrix, HITL contract and OLP evidence checklist are in
 ## PoF project checklist
 
 - License: Apache-2.0 (`LICENSE`) with per-source SPDX headers and attribution in `NOTICE`.
-- Build from source: `npm ci && npm run build` using Node.js 20+; Docker builds are reproducible with `docker compose build`.
+- Build from source: `npm ci && npm run build` using Node.js 20+; the Rust
+  gateway is covered by `(cd apps/gateway && cargo test)`. Docker builds are
+  reproducible with `docker compose build`.
 - Issue tracker: [GitHub Issues](https://github.com/vku-open-source-2026/SynapseCitySOS/issues).
 - Change history: [`CHANGELOG.md`](CHANGELOG.md). Versioned release tags are published on GitHub.
 - Dependency inventory: [`THIRD-PARTY.md`](THIRD-PARTY.md); dependencies are not modified or bundled into the repository.
