@@ -13,12 +13,12 @@ finding.**
 | --- | --- |
 | React Native/Expo app | `mobile/` |
 | Native Android widget | `mobile/android/app/src/main/java/sbs/synapsecity/sos/widget/` |
-| Release APK (signed, public) | <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content> |
-| APK SHA-256 | `51cb3bd072c09ffce70a9e42c67165cc2a1a545d92a83853065ef0e97bf707f2` |
+| Release APK (signed, public) | <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.1-arm64-x86_64/content> |
+| APK SHA-256 | `f462f9ce1d0ac005125fe683b005aa3877136290c8edfecf787f577f9a7cce77` |
 | Evidence screenshots | `docs/evidence/` |
 | Plan | `docs/MOBILE_APP_PLAN.md` |
 
-Package: `sbs.synapsecity.sos`, versionName `0.1.0`, versionCode `1`, minSdk 24,
+Package: `sbs.synapsecity.sos`, versionName `0.1.1`, versionCode `2`, minSdk 24,
 target/compile SDK 37.
 
 ## 2. Design — light-first, based on the web console
