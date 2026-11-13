@@ -13,8 +13,8 @@ finding.**
 | --- | --- |
 | React Native/Expo app | `mobile/` |
 | Native Android widget | `mobile/android/app/src/main/java/sbs/synapsecity/sos/widget/` |
-| Release APK (signed, public) | <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.1-arm64-x86_64/content> |
-| APK SHA-256 | `f462f9ce1d0ac005125fe683b005aa3877136290c8edfecf787f577f9a7cce77` |
+| Release APK (signed, public) | <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.2-arm64-x86_64/content> |
+| APK SHA-256 | `f8c6621ad94b2edc8ccdac0352d7d592458d4c6aa848722fe4362c76c7bcd584` |
 | Evidence screenshots | `docs/evidence/` |
 | Plan | `docs/MOBILE_APP_PLAN.md` |
 
