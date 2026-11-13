@@ -33,7 +33,7 @@ export function SettingsScreen({
   navigate: (route: AppRoute) => void;
   onBack: () => void;
 }) {
-  const appVersion = Constants.expoConfig?.version ?? '0.1.1';
+  const appVersion = Constants.expoConfig?.version ?? '0.1.2';
   return (
     <Screen>
       <PageHeader eyebrow="CÀI ĐẶT" title="SynapseSOS" subtitle={`Android ${appVersion}`} onBack={onBack} />

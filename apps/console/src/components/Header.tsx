@@ -71,8 +71,8 @@ const Header: React.FC = () => {
                     <Link to="/" onClick={closeMobileMenu} className="flex items-center gap-2.5">
                         <BrandSymbol className="h-9 w-9 shrink-0" />
                         <div className="ml-0">
-                            <h1 className="text-xl font-bold font-montserrat text-[#1D4ED8]">SynapseCity SOS</h1>
-                            <span className="text-[10px] font-semibold tracking-[0.18em] text-amber-600">EMERGENCY COMMAND</span>
+                            <h1 className="text-xl font-bold font-montserrat text-[#EA580C]">SynapseCity SOS</h1>
+                            <span className="text-[10px] font-semibold tracking-[0.18em] text-amber-700">EMERGENCY COMMAND</span>
                         </div>
                     </Link>
                 </div>

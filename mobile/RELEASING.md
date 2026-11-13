@@ -24,8 +24,8 @@ never receives S3 credentials.
 - Or push a tag:
 
 ```bash
-git tag mobile-v0.1.1
-git push origin mobile-v0.1.1
+git tag mobile-v0.1.2
+git push origin mobile-v0.1.2
 ```
 
 The workflow uploads:
@@ -55,13 +55,13 @@ export KEY_ALIAS='synapsecitysos'
 export KEY_PASSWORD='...'
 
 bash mobile/scripts/sign-release.sh \
-  /tmp/SynapseSOS-0.1.1-unsigned.apk /tmp/SynapseSOS-0.1.1-release.apk
+  /tmp/SynapseSOS-0.1.2-unsigned.apk /tmp/SynapseSOS-0.1.2-release.apk
 
 node mobile/scripts/publish-release.mjs \
   --product synapsecity-sos \
-  --version 0.1.1 \
+  --version 0.1.2 \
   --arch arm64-x86_64 \
-  --apk /tmp/SynapseSOS-0.1.1-release.apk
+  --apk /tmp/SynapseSOS-0.1.2-release.apk
 ```
 
 The publish script creates a public file record, asks Tier-2 for a short-lived
@@ -70,7 +70,7 @@ verification, downloads it again anonymously, and prints:
 
 ```json
 {
-  "publicUrl": "https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.1-arm64-x86_64/content",
+  "publicUrl": "https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.2-arm64-x86_64/content",
   "sha256": "...",
   "size": 84092233
 }
