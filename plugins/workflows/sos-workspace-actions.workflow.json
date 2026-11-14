@@ -1,0 +1,336 @@
+{
+  "name": "sos-workspace-actions",
+  "nodes": [
+    {
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "name": "Validate envelope and select operation",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst num = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);\nconst bool = (value) => (value === true || value === 'true' ? true : value === false || value === 'false' ? false : undefined);\nconst parseJson = (value, name) => {\n  if (typeof value !== 'string' || !value.trim()) return undefined;\n  try { return JSON.parse(value); } catch { throw new Error(name + '_invalid_json'); }\n};\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'action', 'submittedBy', 'submittedAt', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst action = text(envelope.action) || 'create';\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nif (product !== 'sos') throw new Error('unsupported_product');\nif (!['create', 'update', 'delete', 'execute'].includes(action)) throw new Error('unsupported_action');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\nconst SCHEMAS = {\"events\":{\"dataset\":\"sos-emergency-events\",\"recordType\":\"EmergencyEvent\",\"publish\":true,\"terminal\":[\"resolved\",\"canceled\",\"archived\"],\"statuses\":[\"monitoring\",\"active\",\"contained\",\"resolved\",\"canceled\",\"archived\"],\"decisionStatus\":{\"monitor\":\"monitoring\",\"activate\":\"active\",\"contain\":\"contained\",\"cancel\":\"canceled\",\"archive\":\"archived\"},\"fields\":{\"event_code\":{\"kind\":\"text\",\"max\":120},\"title\":{\"kind\":\"text\",\"max\":200},\"description\":{\"kind\":\"text\",\"max\":4000},\"event_type\":{\"kind\":\"text\",\"max\":40},\"severity\":{\"kind\":\"text\",\"max\":40},\"status\":{\"kind\":\"text\",\"max\":40},\"source\":{\"kind\":\"text\",\"max\":40},\"address\":{\"kind\":\"text\",\"max\":300},\"ward\":{\"kind\":\"text\",\"max\":120},\"district\":{\"kind\":\"text\",\"max\":120},\"city\":{\"kind\":\"text\",\"max\":120},\"affected_area_km2\":{\"kind\":\"number\"},\"instructions_json\":{\"kind\":\"json\"},\"tags_json\":{\"kind\":\"json\"},\"started_at\":{\"kind\":\"date\"},\"ended_at\":{\"kind\":\"date\"},\"resolution_note\":{\"kind\":\"text\",\"max\":4000},\"affected_asset_ids_json\":{\"kind\":\"json\"}},\"required\":[\"title\"],\"defaults\":{\"status\":\"monitoring\",\"severity\":\"medium\",\"source\":\"manual\"}},\"dispatch\":{\"dataset\":\"sos-dispatch-orders\",\"recordType\":\"DispatchOrder\",\"publish\":false,\"terminal\":[\"completed\",\"canceled\",\"rejected\"],\"statuses\":[\"pending\",\"assigned\",\"in_transit\",\"on_scene\",\"completed\",\"canceled\",\"rejected\"],\"decisionStatus\":{\"assign\":\"assigned\",\"start\":\"in_transit\",\"arrive\":\"on_scene\",\"complete\":\"completed\",\"reject\":\"rejected\",\"cancel\":\"canceled\"},\"fields\":{\"emergency_event_id\":{\"kind\":\"text\",\"max\":128},\"eop_plan_id\":{\"kind\":\"text\",\"max\":128},\"task_title\":{\"kind\":\"text\",\"max\":200},\"task_description\":{\"kind\":\"text\",\"max\":4000},\"priority\":{\"kind\":\"text\",\"max\":40},\"status\":{\"kind\":\"text\",\"max\":40},\"assigned_resource_unit_id\":{\"kind\":\"text\",\"max\":128},\"assigned_user_id\":{\"kind\":\"text\",\"max\":128},\"eta_minutes\":{\"kind\":\"number\"},\"started_at\":{\"kind\":\"date\"},\"completed_at\":{\"kind\":\"date\"},\"assignments_json\":{\"kind\":\"json\"},\"metadata_json\":{\"kind\":\"json\"},\"target_location_json\":{\"kind\":\"json\"}},\"required\":[\"emergency_event_id\",\"task_title\"],\"defaults\":{\"status\":\"pending\",\"priority\":\"medium\"}},\"resources\":{\"dataset\":\"sos-resource-units\",\"recordType\":\"ResourceUnit\",\"publish\":false,\"terminal\":[\"retired\"],\"statuses\":[\"available\",\"assigned\",\"deployed\",\"unavailable\",\"maintenance\",\"retired\"],\"decisionStatus\":{\"available\":\"available\",\"assign\":\"assigned\",\"deploy\":\"deployed\",\"unavailable\":\"unavailable\",\"maintain\":\"maintenance\",\"retire\":\"retired\"},\"fields\":{\"resource_code\":{\"kind\":\"text\",\"max\":120},\"name\":{\"kind\":\"text\",\"max\":200},\"resource_type\":{\"kind\":\"text\",\"max\":60},\"status\":{\"kind\":\"text\",\"max\":40},\"capacity\":{\"kind\":\"number\"},\"capacity_unit\":{\"kind\":\"text\",\"max\":40},\"district\":{\"kind\":\"text\",\"max\":120},\"ward\":{\"kind\":\"text\",\"max\":120},\"contact_phone\":{\"kind\":\"text\",\"max\":40},\"skills_json\":{\"kind\":\"json\"},\"assigned_dispatch_order_id\":{\"kind\":\"text\",\"max\":128},\"current_location_json\":{\"kind\":\"json\"},\"metadata_json\":{\"kind\":\"json\"}},\"required\":[\"resource_code\",\"name\",\"resource_type\"],\"defaults\":{\"status\":\"available\"}},\"sitrep\":{\"dataset\":\"sos-sitreps\",\"recordType\":\"Sitrep\",\"publish\":false,\"terminal\":[\"published\",\"archived\"],\"statuses\":[\"draft\",\"review_pending\",\"published\",\"archived\"],\"decisionStatus\":{\"submit\":\"review_pending\",\"publish\":\"published\",\"archive\":\"archived\"},\"fields\":{\"emergency_event_id\":{\"kind\":\"text\",\"max\":128},\"title\":{\"kind\":\"text\",\"max\":200},\"status\":{\"kind\":\"text\",\"max\":40},\"author\":{\"kind\":\"text\",\"max\":160},\"source\":{\"kind\":\"text\",\"max\":60},\"reporting_period_start\":{\"kind\":\"date\"},\"reporting_period_end\":{\"kind\":\"date\"},\"numbers_json\":{\"kind\":\"json\"},\"snapshot_json\":{\"kind\":\"json\"},\"deltas_json\":{\"kind\":\"json\"},\"amends_sitrep_id\":{\"kind\":\"text\",\"max\":128}},\"required\":[\"emergency_event_id\",\"title\",\"reporting_period_start\",\"reporting_period_end\"],\"defaults\":{\"status\":\"draft\"}},\"eop\":{\"dataset\":\"sos-eop-plans\",\"recordType\":\"EOPPlan\",\"publish\":false,\"terminal\":[\"published\",\"archived\",\"rejected\"],\"statuses\":[\"draft\",\"review_pending\",\"approved\",\"published\",\"archived\",\"rejected\"],\"decisionStatus\":{\"submit\":\"review_pending\",\"approve\":\"approved\",\"publish\":\"published\",\"reject\":\"rejected\",\"archive\":\"archived\"},\"fields\":{\"emergency_event_id\":{\"kind\":\"text\",\"max\":128},\"version\":{\"kind\":\"number\"},\"title\":{\"kind\":\"text\",\"max\":200},\"summary\":{\"kind\":\"text\",\"max\":4000},\"status\":{\"kind\":\"text\",\"max\":40},\"objectives_json\":{\"kind\":\"json\"},\"operational_phases_json\":{\"kind\":\"json\"},\"actions_json\":{\"kind\":\"json\"},\"assignment_matrix_json\":{\"kind\":\"json\"},\"evacuation_plan_json\":{\"kind\":\"json\"},\"fallback_plan_json\":{\"kind\":\"json\"},\"communications_plan_json\":{\"kind\":\"json\"},\"review_notes\":{\"kind\":\"text\",\"max\":4000},\"markdown_body\":{\"kind\":\"text\",\"max\":8000},\"metadata_json\":{\"kind\":\"json\"}},\"required\":[\"emergency_event_id\",\"title\"],\"defaults\":{\"status\":\"draft\",\"version\":1}},\"afterAction\":{\"dataset\":\"sos-after-action-reports\",\"recordType\":\"AfterActionReport\",\"publish\":false,\"terminal\":[\"published\",\"archived\"],\"statuses\":[\"draft\",\"published\",\"archived\"],\"decisionStatus\":{\"publish\":\"published\",\"archive\":\"archived\"},\"fields\":{\"emergency_event_id\":{\"kind\":\"text\",\"max\":128},\"report_code\":{\"kind\":\"text\",\"max\":160},\"title\":{\"kind\":\"text\",\"max\":200},\"summary\":{\"kind\":\"text\",\"max\":8000},\"status\":{\"kind\":\"text\",\"max\":40},\"lessons_learned_json\":{\"kind\":\"json\"},\"recommendations_json\":{\"kind\":\"json\"},\"timeline_json\":{\"kind\":\"json\"},\"kpi_json\":{\"kind\":\"json\"},\"generated_at\":{\"kind\":\"date\"},\"published_at\":{\"kind\":\"date\"},\"metadata_json\":{\"kind\":\"json\"}},\"required\":[\"emergency_event_id\",\"title\"],\"defaults\":{\"status\":\"draft\"}},\"hazards\":{\"dataset\":\"sos-hazard-layers\",\"recordType\":\"Hazard\",\"publish\":true,\"terminal\":[\"expired\",\"resolved\"],\"statuses\":[\"active\",\"monitoring\",\"expired\",\"resolved\"],\"decisionStatus\":{\"activate\":\"active\",\"monitor\":\"monitoring\",\"expire\":\"expired\",\"resolve\":\"resolved\"},\"fields\":{\"hazard_id\":{\"kind\":\"text\",\"max\":160},\"title\":{\"kind\":\"text\",\"max\":200},\"description\":{\"kind\":\"text\",\"max\":4000},\"event_type\":{\"kind\":\"text\",\"max\":40},\"severity\":{\"kind\":\"text\",\"max\":40},\"source\":{\"kind\":\"text\",\"max\":40},\"is_active\":{\"kind\":\"boolean\"},\"district\":{\"kind\":\"text\",\"max\":120},\"ward\":{\"kind\":\"text\",\"max\":120},\"detected_at\":{\"kind\":\"date\"},\"issued_at\":{\"kind\":\"date\"},\"expires_at\":{\"kind\":\"date\"},\"geometry_json\":{\"kind\":\"json\"},\"metadata_json\":{\"kind\":\"json\"}},\"required\":[\"hazard_id\",\"title\",\"event_type\",\"severity\"],\"defaults\":{\"is_active\":true,\"source\":\"manual\",\"severity\":\"medium\"}},\"hazardIngest\":{\"dataset\":\"sos-hazard-ingest-runs\",\"recordType\":\"HazardIngestRun\",\"publish\":false,\"terminal\":[\"completed\",\"failed\"],\"statuses\":[\"queued\",\"running\",\"completed\",\"failed\"],\"decisionStatus\":{\"start\":\"running\",\"complete\":\"completed\",\"fail\":\"failed\"},\"fields\":{\"source\":{\"kind\":\"text\",\"max\":60},\"status\":{\"kind\":\"text\",\"max\":40},\"started_at\":{\"kind\":\"date\"},\"finished_at\":{\"kind\":\"date\"},\"hazards_seen\":{\"kind\":\"number\"},\"hazards_ingested\":{\"kind\":\"number\"},\"error_message\":{\"kind\":\"text\",\"max\":4000},\"metadata_json\":{\"kind\":\"json\"}},\"required\":[\"source\"],\"defaults\":{\"status\":\"queued\"}},\"mutualAid\":{\"dataset\":\"sos-mutual-aid-requests\",\"recordType\":\"MutualAidRequest\",\"publish\":false,\"terminal\":[\"completed\",\"rejected\",\"canceled\"],\"statuses\":[\"pending\",\"approved\",\"rejected\",\"in_progress\",\"completed\",\"canceled\"],\"decisionStatus\":{\"approve\":\"approved\",\"reject\":\"rejected\",\"start\":\"in_progress\",\"complete\":\"completed\",\"cancel\":\"canceled\"},\"fields\":{\"requesting_org\":{\"kind\":\"text\",\"max\":160},\"target_org\":{\"kind\":\"text\",\"max\":160},\"emergency_event_id\":{\"kind\":\"text\",\"max\":128},\"resource_type\":{\"kind\":\"text\",\"max\":60},\"quantity\":{\"kind\":\"number\"},\"status\":{\"kind\":\"text\",\"max\":40},\"notes\":{\"kind\":\"text\",\"max\":4000},\"approved_at\":{\"kind\":\"date\"},\"metadata_json\":{\"kind\":\"json\"}},\"required\":[\"requesting_org\",\"target_org\",\"resource_type\"],\"defaults\":{\"status\":\"pending\",\"quantity\":1}}};\nconst schema = SCHEMAS[resource];\nif (!schema) throw new Error('unsupported_resource');\nconst audit = {\n  product, resource, action,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nconst base = 'https://synapsedx.sbs/v1/capabilities/datasets/' + schema.dataset + '/records';\nconst parseField = (name, spec) => {\n  const value = fields[name];\n  if (value === undefined || value === null || value === '') return undefined;\n  if (spec.kind === 'number') {\n    const number = num(value);\n    if (number === undefined) throw new Error(name + '_must_be_number');\n    return number;\n  }\n  if (spec.kind === 'boolean') {\n    const flag = bool(value);\n    if (flag === undefined) throw new Error(name + '_must_be_boolean');\n    return flag;\n  }\n  if (spec.kind === 'json') return parseJson(value, name);\n  const string = text(value);\n  if (typeof value !== 'string' || string.length > (spec.max || 4000)) throw new Error(name + '_invalid_text');\n  return string;\n};\nconst recordId = text(fields.record_id || fields.id);\nif (action !== 'create' && !/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nif (action === 'create') {\n  const unknown = Object.keys(fields).filter((key) => key !== 'record_id' && !(key in schema.fields));\n  if (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\n  for (const required of schema.required) {\n    const value = parseField(required, schema.fields[required]);\n    if (value === undefined || value === '') throw new Error(required + '_required');\n  }\n  const record = { type: schema.recordType, ...schema.defaults };\n  for (const [name, spec] of Object.entries(schema.fields)) {\n    const parsed = parseField(name, spec);\n    if (parsed === undefined) continue;\n    record[name.endsWith('_json') ? name.slice(0, -5) : name] = parsed;\n  }\n  if (record.status !== undefined && schema.statuses.length && !schema.statuses.includes(String(record.status))) throw new Error('status_invalid');\n  record.created_at = $now;\n  record.updated_at = $now;\n  return { mode: 'create', url: base, body: { data: record, publish: schema.publish === true }, audit, operation: resource + '.create' };\n}\nif (action === 'delete') {\n  return { mode: 'delete', url: base + '/' + encodeURIComponent(recordId), audit, operation: resource + '.delete' };\n}\nconst unknown = Object.keys(fields).filter((key) => key !== 'record_id' && key !== 'id' && key !== 'decision' && key !== 'notes' && !(key in schema.fields));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst patch = {};\nfor (const [name, spec] of Object.entries(schema.fields)) {\n  const parsed = parseField(name, spec);\n  if (parsed === undefined) continue;\n  patch[name.endsWith('_json') ? name.slice(0, -5) : name] = parsed;\n}\nconst decision = text(fields.decision);\nconst notes = text(fields.notes);\nif (notes) patch.notes = notes;\nif (action === 'execute') {\n  const map = schema.decisionStatus || {};\n  if (decision) {\n    if (!map[decision]) throw new Error('decision_invalid');\n    patch.status = map[decision];\n  }\n  if (!decision && !Object.keys(patch).length) throw new Error('action_fields_required');\n  if (patch.status === 'approved') patch.approved_at = $now;\n  if (patch.status === 'published') patch.published_at = $now;\n  if (patch.status === 'rejected') patch.rejected_at = $now;\n}\nif (!Object.keys(patch).length) throw new Error('nothing_to_update');\nif (patch.status !== undefined && schema.statuses.length && !schema.statuses.includes(String(patch.status))) throw new Error('status_invalid');\nreturn { mode: 'update', url: base + '/' + encodeURIComponent(recordId), patch, audit, operation: resource + '.' + (decision || action) };\n"
+      }
+    },
+    {
+      "name": "Create?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "create",
+              "operator": "equals"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create record",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        180
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.body }}",
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "name": "Update?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        860,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "update",
+              "operator": "equals"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Read current record",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        360
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "name": "Merge and enforce invariants",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        360
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst current = response.body;\nconst action = response.input;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('record_not_found');\nconst data = current.data;\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst schema = {\"events\":{\"terminal\":[\"resolved\",\"canceled\",\"archived\"]},\"dispatch\":{\"terminal\":[\"completed\",\"canceled\",\"rejected\"]},\"resources\":{\"terminal\":[\"retired\"]},\"sitrep\":{\"terminal\":[\"published\",\"archived\"]},\"eop\":{\"terminal\":[\"published\",\"archived\",\"rejected\"]},\"afterAction\":{\"terminal\":[\"published\",\"archived\"]},\"hazards\":{\"terminal\":[\"expired\",\"resolved\"]},\"hazardIngest\":{\"terminal\":[\"completed\",\"failed\"]},\"mutualAid\":{\"terminal\":[\"completed\",\"rejected\",\"canceled\"]}};\nconst terminal = schema[action.resource] ? schema[action.resource].terminal : [];\nif (terminal.includes(String(data.status))) throw new Error('record_terminal');\nconst next = { ...data, ...action.patch, updated_at: $now };\nreturn { body: { data: next, ifVersion: current.version }, url: action.url, audit: action.audit, operation: action.operation };"
+      }
+    },
+    {
+      "name": "Patch full record",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1520,
+        360
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.body }}",
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "name": "Delete?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        560
+      ],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "delete",
+              "operator": "equals"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete record",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1300,
+        500
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "DELETE",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "name": "Unsupported operation",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        620
+      ],
+      "parameters": {
+        "code": "throw new Error('unsupported_operation');\nreturn {};"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate envelope and select operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate envelope and select operation": {
+      "main": [
+        [
+          {
+            "node": "Create?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create?": {
+      "main": [
+        [
+          {
+            "node": "Create record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create record": {
+      "main": [
+        []
+      ]
+    },
+    "Update?": {
+      "main": [
+        [
+          {
+            "node": "Read current record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read current record": {
+      "main": [
+        [
+          {
+            "node": "Merge and enforce invariants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge and enforce invariants": {
+      "main": [
+        [
+          {
+            "node": "Patch full record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patch full record": {
+      "main": [
+        []
+      ]
+    },
+    "Delete?": {
+      "main": [
+        [
+          {
+            "node": "Delete record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unsupported operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete record": {
+      "main": [
+        []
+      ]
+    },
+    "Unsupported operation": {
+      "main": [
+        []
+      ]
+    }
+  }
+}

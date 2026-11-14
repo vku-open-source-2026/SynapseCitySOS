@@ -1,0 +1,274 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Emergency event command",
+    "slug": "sos-event-command",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Open, move through operational phases and close emergency events. Closing creates or reuses the after-action draft before the event status changes.",
+        "type": "text",
+        "title": "Event lifecycle and hazard context",
+        "width": "full"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "hazards-metric",
+        "type": "metric",
+        "title": "Hazard layers",
+        "width": "half",
+        "resource": "hazards"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Events",
+        "width": "full",
+        "columns": [
+          "id",
+          "event_code",
+          "title",
+          "event_type",
+          "severity",
+          "status",
+          "source",
+          "started_at",
+          "ended_at"
+        ],
+        "resource": "events"
+      },
+      {
+        "id": "hazards-table",
+        "type": "table",
+        "title": "Hazard context",
+        "width": "full",
+        "columns": [
+          "id",
+          "hazard_id",
+          "title",
+          "event_type",
+          "severity",
+          "source",
+          "is_active",
+          "district"
+        ],
+        "resource": "hazards"
+      },
+      {
+        "id": "event-create",
+        "type": "form",
+        "title": "Open an event",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "event_type",
+            "type": "text",
+            "label": "Event type",
+            "required": true
+          },
+          {
+            "name": "severity",
+            "type": "text",
+            "label": "Severity",
+            "required": true
+          },
+          {
+            "name": "description",
+            "type": "textarea",
+            "label": "Description"
+          },
+          {
+            "name": "address",
+            "type": "text",
+            "label": "Address"
+          },
+          {
+            "name": "district",
+            "type": "text",
+            "label": "District"
+          },
+          {
+            "name": "affected_area_km2",
+            "type": "number",
+            "label": "Affected area (km2)"
+          },
+          {
+            "name": "instructions_json",
+            "type": "textarea",
+            "label": "Instructions (JSON array)"
+          },
+          {
+            "name": "tags_json",
+            "type": "textarea",
+            "label": "Tags (JSON array)"
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-event-create",
+          "checksum": "c4cc3147e75398800e3248d19b0c7e6ed2f094b9e6c3122331d93964687dd4ef"
+        }
+      },
+      {
+        "id": "event-update",
+        "type": "form",
+        "title": "Update event details",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title"
+          },
+          {
+            "name": "severity",
+            "type": "text",
+            "label": "Severity"
+          },
+          {
+            "name": "status",
+            "type": "text",
+            "label": "Status"
+          },
+          {
+            "name": "district",
+            "type": "text",
+            "label": "District"
+          },
+          {
+            "name": "description",
+            "type": "textarea",
+            "label": "Description"
+          },
+          {
+            "name": "instructions_json",
+            "type": "textarea",
+            "label": "Instructions (JSON array)"
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "event-phase",
+        "type": "form",
+        "title": "Advance an event phase",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: monitor, activate, contain or archive",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "event-close",
+        "type": "form",
+        "title": "Close an event",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "event_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "resolution_note",
+            "type": "textarea",
+            "label": "Resolution note"
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-event-close",
+          "checksum": "61bb9f85be7659ed76a0f9b922a38d5d735e42d2e90081b5d903ba418ccdc225"
+        }
+      },
+      {
+        "id": "event-delete",
+        "type": "form",
+        "title": "Delete an event record",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-event-command.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:7e805d0044d90499fec35f5289772a4fc79b0af663fd20b8f504d088486b9eff"
+}

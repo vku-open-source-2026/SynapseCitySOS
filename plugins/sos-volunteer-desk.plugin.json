@@ -1,0 +1,99 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "SOS volunteer desk",
+    "audience": "member",
+    "roles": [
+      "volunteer"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "type": "text",
+        "title": "Volunteer situation picture",
+        "text": "Read the public-facing event and resource picture. Volunteer access is intentionally read-only; operational dispatch and medical data remain with responders and command staff.",
+        "width": "full"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "resource": "events",
+        "width": "half"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Shelters and resources",
+        "resource": "resources",
+        "width": "half"
+      },
+      {
+        "id": "hazards-metric",
+        "type": "metric",
+        "title": "Hazard layers",
+        "resource": "hazards",
+        "width": "half"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Event picture",
+        "resource": "events",
+        "columns": [
+          "id",
+          "event_code",
+          "title",
+          "event_type",
+          "severity",
+          "status",
+          "started_at"
+        ],
+        "width": "full"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Shelters and resource units",
+        "resource": "resources",
+        "columns": [
+          "id",
+          "resource_code",
+          "name",
+          "resource_type",
+          "status",
+          "district",
+          "capacity",
+          "capacity_unit"
+        ],
+        "width": "full"
+      },
+      {
+        "id": "hazards-table",
+        "type": "table",
+        "title": "Hazard context",
+        "resource": "hazards",
+        "columns": [
+          "id",
+          "hazard_id",
+          "title",
+          "event_type",
+          "severity",
+          "is_active",
+          "district",
+          "expires_at"
+        ],
+        "width": "full"
+      }
+    ],
+    "slug": "sos-volunteer-desk"
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-volunteer-desk.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:eed70d658753f211705d84b125d443b24232592cda71eeb76db62ef4d6c40783"
+}

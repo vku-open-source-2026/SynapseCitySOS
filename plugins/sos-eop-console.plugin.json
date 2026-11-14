@@ -1,0 +1,213 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Emergency EOP console",
+    "slug": "sos-eop-console",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Draft, review, approve and publish EOP plans for an event. Complex plan sections are JSON fields so the plan remains source-reviewable and portable.",
+        "type": "text",
+        "title": "Emergency operations plans",
+        "width": "full"
+      },
+      {
+        "id": "eop-metric",
+        "type": "metric",
+        "title": "EOP plans",
+        "width": "half",
+        "resource": "eop"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "eop-table",
+        "type": "table",
+        "title": "EOP plans",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "version",
+          "title",
+          "status",
+          "generated_by",
+          "approved_at",
+          "published_at"
+        ],
+        "resource": "eop"
+      },
+      {
+        "id": "eop-create",
+        "type": "form",
+        "title": "Create an EOP plan",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "summary",
+            "type": "textarea",
+            "label": "Summary"
+          },
+          {
+            "name": "objectives_json",
+            "type": "textarea",
+            "label": "Objectives (JSON array)"
+          },
+          {
+            "name": "operational_phases_json",
+            "type": "textarea",
+            "label": "Operational phases (JSON array)"
+          },
+          {
+            "name": "actions_json",
+            "type": "textarea",
+            "label": "Actions (JSON array)"
+          },
+          {
+            "name": "evacuation_plan_json",
+            "type": "textarea",
+            "label": "Evacuation plan (JSON array)"
+          },
+          {
+            "name": "fallback_plan_json",
+            "type": "textarea",
+            "label": "Fallback plan (JSON array)"
+          },
+          {
+            "name": "communications_plan_json",
+            "type": "textarea",
+            "label": "Communications plan (JSON array)"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "eop-update",
+        "type": "form",
+        "title": "Update an EOP plan",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "EOP id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title"
+          },
+          {
+            "name": "summary",
+            "type": "textarea",
+            "label": "Summary"
+          },
+          {
+            "name": "markdown_body",
+            "type": "textarea",
+            "label": "Plan body"
+          },
+          {
+            "name": "review_notes",
+            "type": "textarea",
+            "label": "Review notes"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "eop-decision",
+        "type": "form",
+        "title": "Review or publish an EOP",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "EOP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: submit, approve, publish, reject or archive",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Review note"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "eop-delete",
+        "type": "form",
+        "title": "Delete an EOP draft",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "EOP id",
+            "required": true
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-eop-console.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:874535ea336a4e55f1a608cdaad7ea08d4025e7626a9892644cdf7e098c95467"
+}

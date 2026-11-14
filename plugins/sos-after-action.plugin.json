@@ -1,0 +1,197 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "After-action review",
+    "slug": "sos-after-action",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Review the generated timeline and KPI, record lessons and recommendations, then publish the report. Closing an event creates a draft automatically.",
+        "type": "text",
+        "title": "After-action reports",
+        "width": "full"
+      },
+      {
+        "id": "aar-metric",
+        "type": "metric",
+        "title": "After-action reports",
+        "width": "half",
+        "resource": "afterAction"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "aar-table",
+        "type": "table",
+        "title": "After-action reports",
+        "width": "full",
+        "columns": [
+          "id",
+          "report_code",
+          "emergency_event_id",
+          "title",
+          "status",
+          "version",
+          "generated_at",
+          "published_at"
+        ],
+        "resource": "afterAction"
+      },
+      {
+        "id": "aar-create",
+        "type": "form",
+        "title": "Create an AAR draft",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "report_code",
+            "type": "text",
+            "label": "Report code"
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "summary",
+            "type": "textarea",
+            "label": "Summary"
+          },
+          {
+            "name": "lessons_learned_json",
+            "type": "textarea",
+            "label": "Lessons learned (JSON array)"
+          },
+          {
+            "name": "recommendations_json",
+            "type": "textarea",
+            "label": "Recommendations (JSON array)"
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "aar-update",
+        "type": "form",
+        "title": "Update an AAR",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "AAR id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title"
+          },
+          {
+            "name": "summary",
+            "type": "textarea",
+            "label": "Summary"
+          },
+          {
+            "name": "lessons_learned_json",
+            "type": "textarea",
+            "label": "Lessons learned (JSON array)"
+          },
+          {
+            "name": "recommendations_json",
+            "type": "textarea",
+            "label": "Recommendations (JSON array)"
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "aar-decision",
+        "type": "form",
+        "title": "Publish an AAR",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "AAR id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: publish or archive",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "aar-delete",
+        "type": "form",
+        "title": "Delete an AAR draft",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "AAR id",
+            "required": true
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-after-action.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:6041461e1521a5193163f1285a9e85bb909c5b14711f91b1c5747a802c5035e2"
+}

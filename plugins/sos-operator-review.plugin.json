@@ -1,0 +1,239 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "SOS operator review",
+    "slug": "sos-operator-review",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Review EOP, SITREP, after-action and mutual-aid records in one place. Decisions execute the reviewed SOS workflow and are attributed to the signed-in member.",
+        "type": "text",
+        "title": "Approval and publication lane",
+        "width": "full"
+      },
+      {
+        "id": "eop-metric",
+        "type": "metric",
+        "title": "EOP plans",
+        "width": "half",
+        "resource": "eop"
+      },
+      {
+        "id": "sitrep-metric",
+        "type": "metric",
+        "title": "SITREPs",
+        "width": "half",
+        "resource": "sitrep"
+      },
+      {
+        "id": "aar-metric",
+        "type": "metric",
+        "title": "AARs",
+        "width": "half",
+        "resource": "afterAction"
+      },
+      {
+        "id": "mutual-aid-metric",
+        "type": "metric",
+        "title": "Mutual-aid requests",
+        "width": "half",
+        "resource": "mutualAid"
+      },
+      {
+        "id": "eop-table",
+        "type": "table",
+        "title": "EOP review",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "version",
+          "title",
+          "status",
+          "approved_at"
+        ],
+        "resource": "eop"
+      },
+      {
+        "id": "sitrep-table",
+        "type": "table",
+        "title": "SITREP review",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "title",
+          "status",
+          "reporting_period_end"
+        ],
+        "resource": "sitrep"
+      },
+      {
+        "id": "aar-table",
+        "type": "table",
+        "title": "AAR review",
+        "width": "full",
+        "columns": [
+          "id",
+          "report_code",
+          "emergency_event_id",
+          "title",
+          "status",
+          "generated_at"
+        ],
+        "resource": "afterAction"
+      },
+      {
+        "id": "mutual-aid-table",
+        "type": "table",
+        "title": "Mutual-aid review",
+        "width": "full",
+        "columns": [
+          "id",
+          "requesting_org",
+          "target_org",
+          "resource_type",
+          "quantity",
+          "status"
+        ],
+        "resource": "mutualAid"
+      },
+      {
+        "id": "eop-decision",
+        "type": "form",
+        "title": "Decide an EOP plan",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "EOP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: approve, publish or reject",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "sitrep-decision",
+        "type": "form",
+        "title": "Publish a SITREP",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: publish"
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "aar-decision",
+        "type": "form",
+        "title": "Publish an AAR",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "AAR id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: publish"
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "mutual-aid-decision",
+        "type": "form",
+        "title": "Decide a mutual-aid request",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Request id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: approve, reject, start or complete",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-operator-review.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:393f2c01d5e0b4af4a48d24da9e29aeeb65a9070278e2bed49d59251695cf4e8"
+}

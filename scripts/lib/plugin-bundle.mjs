@@ -40,7 +40,10 @@ export const PRODUCT_SPEC = {
     /** Non-public SOS roles that may receive a workspace plugin. */
     roles: ['admin', 'manager', 'operator', 'responder', 'volunteer'],
     /** Catalog resource keys owned by SOS. Values are never URLs. */
-    resources: ['events', 'dispatch', 'resources', 'sitrep', 'eop', 'afterAction'],
+    resources: [
+        'events', 'dispatch', 'resources', 'sitrep', 'eop', 'afterAction',
+        'hazards', 'hazardIngest', 'mutualAid',
+    ],
 };
 
 /**

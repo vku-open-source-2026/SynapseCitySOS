@@ -14,74 +14,103 @@
     "widgets": [
       {
         "id": "intro",
+        "text": "Live command picture across emergency events, dispatch orders, resource units, situation reports, EOP plans, after-action reports, hazard layers and mutual-aid requests. Reads use Tier-2 SOS datasets; actions are reviewed SOS workflows.",
         "type": "text",
-        "title": "Emergency operations",
-        "text": "Read-only snapshot of emergency events, dispatch orders and resource units. Dispatch, EOP and SITREP writes stay in the SOS product API, which enforces the operator role and emergency permission.",
+        "title": "Emergency operations at a glance",
         "width": "full"
       },
       {
         "id": "events-metric",
         "type": "metric",
         "title": "Emergency events",
-        "resource": "events",
-        "width": "half"
+        "width": "half",
+        "resource": "events"
       },
       {
         "id": "dispatch-metric",
         "type": "metric",
         "title": "Dispatch orders",
-        "resource": "dispatch",
-        "width": "half"
+        "width": "half",
+        "resource": "dispatch"
       },
       {
         "id": "resources-metric",
         "type": "metric",
         "title": "Resource units",
-        "resource": "resources",
-        "width": "half"
+        "width": "half",
+        "resource": "resources"
       },
       {
         "id": "sitrep-metric",
         "type": "metric",
         "title": "Situation reports",
-        "resource": "sitrep",
-        "width": "half"
+        "width": "half",
+        "resource": "sitrep"
+      },
+      {
+        "id": "eop-metric",
+        "type": "metric",
+        "title": "EOP plans",
+        "width": "half",
+        "resource": "eop"
+      },
+      {
+        "id": "aar-metric",
+        "type": "metric",
+        "title": "After-action reports",
+        "width": "half",
+        "resource": "afterAction"
+      },
+      {
+        "id": "hazards-metric",
+        "type": "metric",
+        "title": "Hazard layers",
+        "width": "half",
+        "resource": "hazards"
+      },
+      {
+        "id": "mutual-aid-metric",
+        "type": "metric",
+        "title": "Mutual-aid requests",
+        "width": "half",
+        "resource": "mutualAid"
       },
       {
         "id": "events-table",
         "type": "table",
-        "title": "Active events",
-        "resource": "events",
+        "title": "Emergency events",
+        "width": "full",
         "columns": [
           "id",
           "event_code",
           "title",
+          "event_type",
           "severity",
           "status",
           "started_at"
         ],
-        "width": "full"
+        "resource": "events"
       },
       {
         "id": "dispatch-table",
         "type": "table",
         "title": "Dispatch queue",
-        "resource": "dispatch",
+        "width": "full",
         "columns": [
           "id",
           "emergency_event_id",
           "task_title",
           "priority",
           "status",
-          "created_at"
+          "assigned_resource_unit_id"
         ],
-        "width": "full"
+        "resource": "dispatch"
       },
       {
         "id": "resources-table",
         "type": "table",
         "title": "Resource availability",
-        "resource": "resources",
+        "width": "full",
         "columns": [
           "id",
           "resource_code",
@@ -90,152 +119,127 @@
           "status",
           "district"
         ],
-        "width": "full"
+        "resource": "resources"
       },
       {
-        "id": "event-create-form",
+        "id": "sitrep-table",
+        "type": "table",
+        "title": "Situation reports",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "title",
+          "status",
+          "reporting_period_end",
+          "published_at"
+        ],
+        "resource": "sitrep"
+      },
+      {
+        "id": "event-create",
         "type": "form",
         "title": "Open an emergency event",
-        "resource": "events",
-        "action": "create",
-        "workflowRef": {
-          "name": "sos-event-create",
-          "slug": "sos-event-create"
-        },
         "width": "full",
+        "action": "create",
         "fields": [
           {
             "name": "title",
-            "label": "Title",
             "type": "text",
+            "label": "Title",
             "required": true
           },
           {
             "name": "event_type",
-            "label": "Event type",
             "type": "text",
+            "label": "Event type",
             "required": true
           },
           {
             "name": "severity",
-            "label": "Severity",
             "type": "text",
+            "label": "Severity",
             "required": true
           },
           {
             "name": "description",
-            "label": "Description",
-            "type": "textarea"
+            "type": "textarea",
+            "label": "Description"
           }
-        ]
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-event-create",
+          "checksum": "c4cc3147e75398800e3248d19b0c7e6ed2f094b9e6c3122331d93964687dd4ef"
+        }
       },
       {
-        "id": "dispatch-create-form",
+        "id": "dispatch-create",
         "type": "form",
         "title": "Create a dispatch order",
-        "resource": "dispatch",
-        "action": "create",
-        "workflowRef": {
-          "name": "sos-dispatch-create",
-          "slug": "sos-dispatch-create"
-        },
         "width": "full",
+        "action": "create",
         "fields": [
           {
             "name": "emergency_event_id",
-            "label": "Emergency event id",
             "type": "text",
+            "label": "Emergency event id",
             "required": true
           },
           {
             "name": "task_title",
-            "label": "Task",
             "type": "text",
+            "label": "Task",
             "required": true
           },
           {
             "name": "priority",
-            "label": "Priority",
-            "type": "text"
+            "type": "text",
+            "label": "Priority"
           },
           {
             "name": "task_description",
-            "label": "Instructions",
-            "type": "textarea"
+            "type": "textarea",
+            "label": "Instructions"
           }
-        ]
-      },
-      {
-        "id": "dispatch-complete-form",
-        "type": "form",
-        "title": "Complete a dispatch order",
+        ],
         "resource": "dispatch",
-        "action": "update",
         "workflowRef": {
-          "name": "sos-dispatch-complete",
-          "slug": "sos-dispatch-complete"
-        },
-        "width": "half",
-        "fields": [
-          {
-            "name": "order_id",
-            "label": "Dispatch order id",
-            "type": "text",
-            "required": true
-          }
-        ]
+          "name": "sos-dispatch-create",
+          "checksum": "588826887db9c32c481597efa4323d65e823e32d2ef2f9519f9b1b217f2ac628"
+        }
       },
       {
-        "id": "dispatch-reject-form",
-        "type": "form",
-        "title": "Reject a dispatch order",
-        "resource": "dispatch",
-        "action": "update",
-        "workflowRef": {
-          "name": "sos-dispatch-reject",
-          "slug": "sos-dispatch-reject"
-        },
-        "width": "half",
-        "fields": [
-          {
-            "name": "order_id",
-            "label": "Dispatch order id",
-            "type": "text",
-            "required": true
-          }
-        ]
-      },
-      {
-        "id": "event-close-form",
+        "id": "event-close",
         "type": "form",
         "title": "Close an emergency event",
-        "resource": "events",
-        "action": "update",
-        "workflowRef": {
-          "name": "sos-event-close",
-          "slug": "sos-event-close"
-        },
         "width": "full",
+        "action": "update",
         "fields": [
           {
             "name": "event_id",
-            "label": "Emergency event id",
             "type": "text",
+            "label": "Emergency event id",
             "required": true
           },
           {
             "name": "resolution_note",
-            "label": "Resolution note",
-            "type": "textarea"
+            "type": "textarea",
+            "label": "Resolution note"
           }
-        ]
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-event-close",
+          "checksum": "61bb9f85be7659ed76a0f9b922a38d5d735e42d2e90081b5d903ba418ccdc225"
+        }
       }
     ]
   },
   "source": {
     "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
     "path": "plugins/sos-command-overview.plugin.json",
-    "revision": "2026-11-14"
+    "revision": "2026-11-14.3"
   },
-  "checksum": "sha256:931cb74562c0fb998b5e9d5e5511ab23a1edf89feb7ed60c7e9664a15a02d970"
+  "checksum": "sha256:6170d097ab700178ab75670d08cf08a05ce34f93041c93a6f79e7e4be770dc96"
 }

@@ -1,0 +1,305 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Hazard watch and ingest",
+    "slug": "sos-hazard-watch",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Monitor active hazard layers, record manual hazards and track hazard-ingest jobs. The public hazard map remains a Tier-3 public surface.",
+        "type": "text",
+        "title": "Hazard layers and VNDMS ingest runs",
+        "width": "full"
+      },
+      {
+        "id": "hazards-metric",
+        "type": "metric",
+        "title": "Hazard layers",
+        "width": "half",
+        "resource": "hazards"
+      },
+      {
+        "id": "ingest-metric",
+        "type": "metric",
+        "title": "Ingest runs",
+        "width": "half",
+        "resource": "hazardIngest"
+      },
+      {
+        "id": "hazards-table",
+        "type": "table",
+        "title": "Hazard layers",
+        "width": "full",
+        "columns": [
+          "id",
+          "hazard_id",
+          "title",
+          "event_type",
+          "severity",
+          "source",
+          "is_active",
+          "district",
+          "detected_at",
+          "expires_at"
+        ],
+        "resource": "hazards"
+      },
+      {
+        "id": "ingest-table",
+        "type": "table",
+        "title": "Ingest runs",
+        "width": "full",
+        "columns": [
+          "id",
+          "source",
+          "status",
+          "started_at",
+          "finished_at",
+          "hazards_seen",
+          "hazards_ingested",
+          "error_message"
+        ],
+        "resource": "hazardIngest"
+      },
+      {
+        "id": "hazard-create",
+        "type": "form",
+        "title": "Record a hazard layer",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "hazard_id",
+            "type": "text",
+            "label": "Hazard id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "event_type",
+            "type": "text",
+            "label": "Event type",
+            "required": true
+          },
+          {
+            "name": "severity",
+            "type": "text",
+            "label": "Severity",
+            "required": true
+          },
+          {
+            "name": "source",
+            "type": "text",
+            "label": "Source"
+          },
+          {
+            "name": "district",
+            "type": "text",
+            "label": "District"
+          },
+          {
+            "name": "ward",
+            "type": "text",
+            "label": "Ward"
+          },
+          {
+            "name": "detected_at",
+            "type": "text",
+            "label": "Detected at"
+          },
+          {
+            "name": "expires_at",
+            "type": "text",
+            "label": "Expires at"
+          },
+          {
+            "name": "geometry_json",
+            "type": "textarea",
+            "label": "Geometry GeoJSON"
+          }
+        ],
+        "resource": "hazards",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "hazard-update",
+        "type": "form",
+        "title": "Update a hazard",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Hazard id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title"
+          },
+          {
+            "name": "severity",
+            "type": "text",
+            "label": "Severity"
+          },
+          {
+            "name": "is_active",
+            "type": "text",
+            "label": "Active: true or false"
+          },
+          {
+            "name": "expires_at",
+            "type": "text",
+            "label": "Expires at"
+          },
+          {
+            "name": "geometry_json",
+            "type": "textarea",
+            "label": "Geometry GeoJSON"
+          }
+        ],
+        "resource": "hazards",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "hazard-decision",
+        "type": "form",
+        "title": "Expire or resolve a hazard",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Hazard id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: expire or resolve",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "hazards",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "hazard-delete",
+        "type": "form",
+        "title": "Delete a hazard layer",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Hazard id",
+            "required": true
+          }
+        ],
+        "resource": "hazards",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "ingest-create",
+        "type": "form",
+        "title": "Queue a hazard ingest run",
+        "width": "half",
+        "action": "create",
+        "fields": [
+          {
+            "name": "source",
+            "type": "text",
+            "label": "Source: vndms, nchmf or manual",
+            "required": true
+          }
+        ],
+        "resource": "hazardIngest",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "ingest-decision",
+        "type": "form",
+        "title": "Update ingest run status",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Ingest run id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: start, complete or fail",
+            "required": true
+          },
+          {
+            "name": "hazards_seen",
+            "type": "number",
+            "label": "Hazards seen"
+          },
+          {
+            "name": "hazards_ingested",
+            "type": "number",
+            "label": "Hazards ingested"
+          },
+          {
+            "name": "error_message",
+            "type": "textarea",
+            "label": "Error message"
+          }
+        ],
+        "resource": "hazardIngest",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-hazard-watch.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:a72e46ebb4edfa075661e16adbbbb54687cb644a2f0ec7f5060c21205bd25116"
+}

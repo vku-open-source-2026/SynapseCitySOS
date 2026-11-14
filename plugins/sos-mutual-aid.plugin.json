@@ -1,0 +1,182 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Mutual aid coordination",
+    "slug": "sos-mutual-aid",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Request rescue resources from another organization, record approval and track delivery. Requests reference SOS resource types only and never read City data.",
+        "type": "text",
+        "title": "Inter-organization mutual-aid requests",
+        "width": "full"
+      },
+      {
+        "id": "mutual-aid-metric",
+        "type": "metric",
+        "title": "Requests",
+        "width": "half",
+        "resource": "mutualAid"
+      },
+      {
+        "id": "mutual-aid-table",
+        "type": "table",
+        "title": "Mutual-aid requests",
+        "width": "full",
+        "columns": [
+          "id",
+          "requesting_org",
+          "target_org",
+          "emergency_event_id",
+          "resource_type",
+          "quantity",
+          "status",
+          "approved_at"
+        ],
+        "resource": "mutualAid"
+      },
+      {
+        "id": "mutual-aid-create",
+        "type": "form",
+        "title": "Create a mutual-aid request",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "requesting_org",
+            "type": "text",
+            "label": "Requesting organization",
+            "required": true
+          },
+          {
+            "name": "target_org",
+            "type": "text",
+            "label": "Target organization",
+            "required": true
+          },
+          {
+            "name": "resource_type",
+            "type": "text",
+            "label": "Resource type",
+            "required": true
+          },
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Event id"
+          },
+          {
+            "name": "quantity",
+            "type": "number",
+            "label": "Quantity"
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Notes"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "mutual-aid-update",
+        "type": "form",
+        "title": "Update a request",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Request id",
+            "required": true
+          },
+          {
+            "name": "quantity",
+            "type": "number",
+            "label": "Quantity"
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Notes"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "mutual-aid-decision",
+        "type": "form",
+        "title": "Approve or progress a request",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Request id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: approve, reject, start, complete or cancel",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "mutual-aid-delete",
+        "type": "form",
+        "title": "Delete a request",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Request id",
+            "required": true
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-mutual-aid.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:d9c13ea4702847090573f93888a1c7aac52893852a22e58a0ecf08fa979cd7ff"
+}

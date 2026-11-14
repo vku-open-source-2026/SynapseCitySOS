@@ -1,0 +1,246 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Emergency resource registry",
+    "slug": "sos-resource-registry",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Resource units are SOS rescue logistics, not City assets. Keep availability current so dispatch and the responder board see truthful capacity.",
+        "type": "text",
+        "title": "Rescue teams, vehicles and supplies",
+        "width": "full"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Resource units",
+        "width": "half",
+        "resource": "resources"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Resource units",
+        "width": "full",
+        "columns": [
+          "id",
+          "resource_code",
+          "name",
+          "resource_type",
+          "status",
+          "capacity",
+          "capacity_unit",
+          "district",
+          "contact_phone",
+          "assigned_dispatch_order_id"
+        ],
+        "resource": "resources"
+      },
+      {
+        "id": "resource-create",
+        "type": "form",
+        "title": "Register a resource unit",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "resource_code",
+            "type": "text",
+            "label": "Resource code",
+            "required": true
+          },
+          {
+            "name": "name",
+            "type": "text",
+            "label": "Name",
+            "required": true
+          },
+          {
+            "name": "resource_type",
+            "type": "text",
+            "label": "Resource type",
+            "required": true
+          },
+          {
+            "name": "status",
+            "type": "text",
+            "label": "Status"
+          },
+          {
+            "name": "capacity",
+            "type": "number",
+            "label": "Capacity"
+          },
+          {
+            "name": "capacity_unit",
+            "type": "text",
+            "label": "Capacity unit"
+          },
+          {
+            "name": "district",
+            "type": "text",
+            "label": "District"
+          },
+          {
+            "name": "ward",
+            "type": "text",
+            "label": "Ward"
+          },
+          {
+            "name": "contact_phone",
+            "type": "text",
+            "label": "Contact phone"
+          },
+          {
+            "name": "skills_json",
+            "type": "textarea",
+            "label": "Skills (JSON array)"
+          },
+          {
+            "name": "current_location_json",
+            "type": "textarea",
+            "label": "Location GeoJSON"
+          }
+        ],
+        "resource": "resources",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "resource-update",
+        "type": "form",
+        "title": "Update a resource unit",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Resource id",
+            "required": true
+          },
+          {
+            "name": "name",
+            "type": "text",
+            "label": "Name"
+          },
+          {
+            "name": "resource_type",
+            "type": "text",
+            "label": "Resource type"
+          },
+          {
+            "name": "capacity",
+            "type": "number",
+            "label": "Capacity"
+          },
+          {
+            "name": "capacity_unit",
+            "type": "text",
+            "label": "Capacity unit"
+          },
+          {
+            "name": "district",
+            "type": "text",
+            "label": "District"
+          },
+          {
+            "name": "contact_phone",
+            "type": "text",
+            "label": "Contact phone"
+          },
+          {
+            "name": "skills_json",
+            "type": "textarea",
+            "label": "Skills (JSON array)"
+          },
+          {
+            "name": "current_location_json",
+            "type": "textarea",
+            "label": "Location GeoJSON"
+          }
+        ],
+        "resource": "resources",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "resource-status",
+        "type": "form",
+        "title": "Set resource availability",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Resource id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: available, deploy, unavailable, maintain or retire",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "resources",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "resource-delete",
+        "type": "form",
+        "title": "Remove a resource unit",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Resource id",
+            "required": true
+          }
+        ],
+        "resource": "resources",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-resource-registry.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:9fc5d1c6fd0f1488fcdff05cb529c1eb665249673ead85ee666cbdb5ac222aaa"
+}

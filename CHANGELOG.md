@@ -6,10 +6,19 @@ Keep a Changelog format and version tags use Semantic Versioning.
 ## [Unreleased]
 
 ### Added
-- Portable SOS workspace plugin bundles under `plugins/` (emergency command
-  overview and responder assignment board) with `scripts/plugin-bundle.mjs` for
-  strict validation, checksum verification and HTTPS DX export/import/sync
-  (`docs/PLUGIN_SYNC.md`).
+- Full SOS work-page catalog (14 portable bundles): command overview, event
+  command, dispatch board, resource registry, EOP console, SITREP desk,
+  after-action review, hazard watch/ingest, phase boards, mutual aid, operator
+  review, rescue operations, responder board and volunteer desk. The catalog
+  covers every non-public SOS role.
+- Generic `sos-workspace-actions` workflow dispatcher plus its checked-in
+  generator. It supports allowlisted create/update/delete/execute actions for
+  events, dispatch, resource units, SITREPs, EOP plans, after-action reports,
+  hazard layers, ingest runs and mutual-aid requests through the Tier-2 records
+  API with the organization technical credential.
+- Portable SOS workspace plugin bundles under `plugins/` with
+  `scripts/plugin-bundle.mjs` for strict validation, checksum verification and
+  HTTPS DX export/import/sync (`docs/PLUGIN_SYNC.md`).
 - Product-owned Tier-1 workflow artifacts under `plugins/workflows/` for
   emergency.events.create, emergency.dispatch.create/complete/reject and emergency.close: create HTTP POST, transition GET(`includeInput:true`) → domain merge →
   conditional PATCH (`ifVersion`), AAR-before-event-close. Auth is the portable

@@ -172,5 +172,143 @@
       "sha256": "sha256:6470fc02392291b22c3236138fc205a0de429e01745cf824bfb8a85f1aed429e",
       "bytes": 9733
     }
+  ],
+  "workspacePages": [
+    {
+      "slug": "sos-after-action",
+      "file": "sos-after-action.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager"
+      ]
+    },
+    {
+      "slug": "sos-command-overview",
+      "file": "sos-command-overview.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-dispatch-board",
+      "file": "sos-dispatch-board.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-eop-console",
+      "file": "sos-eop-console.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-event-command",
+      "file": "sos-event-command.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-hazard-watch",
+      "file": "sos-hazard-watch.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-mutual-aid",
+      "file": "sos-mutual-aid.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-operator-review",
+      "file": "sos-operator-review.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-phase-boards",
+      "file": "sos-phase-boards.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-rescue-operations",
+      "file": "sos-rescue-operations.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator",
+        "responder"
+      ]
+    },
+    {
+      "slug": "sos-resource-registry",
+      "file": "sos-resource-registry.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-responder-board",
+      "file": "sos-responder-board.plugin.json",
+      "audience": "member",
+      "roles": [
+        "responder"
+      ]
+    },
+    {
+      "slug": "sos-sitrep-desk",
+      "file": "sos-sitrep-desk.plugin.json",
+      "audience": "admin",
+      "roles": [
+        "admin",
+        "manager",
+        "operator"
+      ]
+    },
+    {
+      "slug": "sos-volunteer-desk",
+      "file": "sos-volunteer-desk.plugin.json",
+      "audience": "member",
+      "roles": [
+        "volunteer"
+      ]
+    }
   ]
 }

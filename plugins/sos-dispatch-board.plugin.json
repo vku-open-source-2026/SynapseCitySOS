@@ -1,0 +1,256 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Emergency dispatch board",
+    "slug": "sos-dispatch-board",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Create tasks, assign a resource unit, track transit and close the order. The terminal state and assignment rules are enforced by SOS workflow source.",
+        "type": "text",
+        "title": "Dispatch queue and assignment",
+        "width": "full"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Resource units",
+        "width": "half",
+        "resource": "resources"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Active events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "dispatch-table",
+        "type": "table",
+        "title": "Dispatch queue",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "task_title",
+          "priority",
+          "status",
+          "assigned_resource_unit_id",
+          "eta_minutes",
+          "completed_at"
+        ],
+        "resource": "dispatch"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Available resources",
+        "width": "full",
+        "columns": [
+          "id",
+          "resource_code",
+          "name",
+          "resource_type",
+          "status",
+          "district",
+          "capacity"
+        ],
+        "resource": "resources"
+      },
+      {
+        "id": "dispatch-create",
+        "type": "form",
+        "title": "Create a dispatch order",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "task_title",
+            "type": "text",
+            "label": "Task",
+            "required": true
+          },
+          {
+            "name": "priority",
+            "type": "text",
+            "label": "Priority"
+          },
+          {
+            "name": "task_description",
+            "type": "textarea",
+            "label": "Instructions"
+          },
+          {
+            "name": "eta_minutes",
+            "type": "number",
+            "label": "ETA minutes"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-create",
+          "checksum": "588826887db9c32c481597efa4323d65e823e32d2ef2f9519f9b1b217f2ac628"
+        }
+      },
+      {
+        "id": "dispatch-assign",
+        "type": "form",
+        "title": "Assign a resource unit",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: assign"
+          },
+          {
+            "name": "assigned_resource_unit_id",
+            "type": "text",
+            "label": "Resource unit id",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Notes"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "dispatch-start",
+        "type": "form",
+        "title": "Start transit",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: start"
+          },
+          {
+            "name": "started_at",
+            "type": "text",
+            "label": "Started at"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "dispatch-arrive",
+        "type": "form",
+        "title": "Mark on scene",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: arrive"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "dispatch-complete",
+        "type": "form",
+        "title": "Complete a dispatch order",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-complete",
+          "checksum": "db4d5752f4615436852703930ec9ec00f78054b79c879be27385b1225edfe9b2"
+        }
+      },
+      {
+        "id": "dispatch-reject",
+        "type": "form",
+        "title": "Reject a dispatch order",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-reject",
+          "checksum": "36966fe422be7b3c59b4bd1930dba542f280f7f82fae6b1dbce2999229de65a0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-dispatch-board.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:bd21f548e868db36067b28f6f59eae737fc98613ddb031d21b827ae044ffdc65"
+}

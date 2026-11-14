@@ -1,0 +1,244 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Emergency phase boards",
+    "slug": "sos-phase-boards",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "before",
+        "text": "Resource readiness, EOP plans and hazard context before an event. Use the event and EOP pages to open a plan or move an event into monitoring.",
+        "type": "text",
+        "title": "Before a disaster: readiness",
+        "width": "full"
+      },
+      {
+        "id": "during",
+        "text": "Active events, dispatch queue, resources on scene and the latest SITREP. Updates use the dispatch and SITREP workflows.",
+        "type": "text",
+        "title": "During a disaster: command",
+        "width": "full"
+      },
+      {
+        "id": "after",
+        "text": "Resolved events, after-action reports and lessons learned. Closing an event creates a draft AAR for review.",
+        "type": "text",
+        "title": "After a disaster: review",
+        "width": "full"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "eop-metric",
+        "type": "metric",
+        "title": "EOP plans",
+        "width": "half",
+        "resource": "eop"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Resource units",
+        "width": "half",
+        "resource": "resources"
+      },
+      {
+        "id": "sitrep-metric",
+        "type": "metric",
+        "title": "SITREPs",
+        "width": "half",
+        "resource": "sitrep"
+      },
+      {
+        "id": "aar-metric",
+        "type": "metric",
+        "title": "AARs",
+        "width": "half",
+        "resource": "afterAction"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Event phase board",
+        "width": "full",
+        "columns": [
+          "id",
+          "event_code",
+          "title",
+          "event_type",
+          "severity",
+          "status",
+          "started_at",
+          "ended_at"
+        ],
+        "resource": "events"
+      },
+      {
+        "id": "eop-table",
+        "type": "table",
+        "title": "Readiness plans",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "version",
+          "title",
+          "status",
+          "approved_at",
+          "published_at"
+        ],
+        "resource": "eop"
+      },
+      {
+        "id": "dispatch-table",
+        "type": "table",
+        "title": "Operations board",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "task_title",
+          "priority",
+          "status",
+          "assigned_resource_unit_id"
+        ],
+        "resource": "dispatch"
+      },
+      {
+        "id": "sitrep-table",
+        "type": "table",
+        "title": "Situation reports",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "title",
+          "status",
+          "reporting_period_end",
+          "published_at"
+        ],
+        "resource": "sitrep"
+      },
+      {
+        "id": "aar-table",
+        "type": "table",
+        "title": "After-action board",
+        "width": "full",
+        "columns": [
+          "id",
+          "report_code",
+          "emergency_event_id",
+          "title",
+          "status",
+          "published_at"
+        ],
+        "resource": "afterAction"
+      },
+      {
+        "id": "eop-publish",
+        "type": "form",
+        "title": "Publish an EOP plan",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "EOP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: publish"
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "sitrep-publish",
+        "type": "form",
+        "title": "Publish a SITREP",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: publish"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "aar-publish",
+        "type": "form",
+        "title": "Publish an AAR",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "AAR id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: publish"
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-phase-boards.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:3468044eb93244cde9fa46307e6f829c2a8eaac3dcfdfee1d8ef0e6f9703f4b7"
+}

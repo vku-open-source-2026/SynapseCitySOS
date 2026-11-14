@@ -1,0 +1,200 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Situation report desk",
+    "slug": "sos-sitrep-desk",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Capture reporting periods, casualty and resource numbers, and publish a reviewed situation report. The reporting period and event id are required.",
+        "type": "text",
+        "title": "SITREP drafting and publication",
+        "width": "full"
+      },
+      {
+        "id": "sitrep-metric",
+        "type": "metric",
+        "title": "Situation reports",
+        "width": "half",
+        "resource": "sitrep"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "sitrep-table",
+        "type": "table",
+        "title": "Situation reports",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "title",
+          "status",
+          "reporting_period_start",
+          "reporting_period_end",
+          "author",
+          "published_at"
+        ],
+        "resource": "sitrep"
+      },
+      {
+        "id": "sitrep-create",
+        "type": "form",
+        "title": "Create a SITREP",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "reporting_period_start",
+            "type": "text",
+            "label": "Period start",
+            "required": true
+          },
+          {
+            "name": "reporting_period_end",
+            "type": "text",
+            "label": "Period end",
+            "required": true
+          },
+          {
+            "name": "numbers_json",
+            "type": "textarea",
+            "label": "Numbers (JSON object)"
+          },
+          {
+            "name": "snapshot_json",
+            "type": "textarea",
+            "label": "Snapshot (JSON object)"
+          },
+          {
+            "name": "source",
+            "type": "text",
+            "label": "Source"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "sitrep-update",
+        "type": "form",
+        "title": "Update a SITREP",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title"
+          },
+          {
+            "name": "numbers_json",
+            "type": "textarea",
+            "label": "Numbers (JSON object)"
+          },
+          {
+            "name": "snapshot_json",
+            "type": "textarea",
+            "label": "Snapshot (JSON object)"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "sitrep-decision",
+        "type": "form",
+        "title": "Submit or publish a SITREP",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: submit, publish or archive",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "sitrep-delete",
+        "type": "form",
+        "title": "Delete a SITREP draft",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-sitrep-desk.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:d3ad14de452a6009ab99b9c25eb2f3a46eae607064cd8e55fcdbb466271d0cf0"
+}

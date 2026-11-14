@@ -15,7 +15,8 @@
     "resource",
     "submittedBy",
     "submittedAt",
-    "fields"
+    "fields",
+    "action"
   ],
   "persistence": {
     "transport": "httpRequest",
@@ -229,5 +230,30 @@
     ],
     "kpiParity": "response/dispatch/sitrep/resource values match apps/sos-service/src/after-action.ts",
     "inputBounds": "queries request limit 500 (Tier-2 max page size); total > page fails the run with query_truncated_<collection>; AAR list is ordered version:desc"
+  },
+  "genericActionWorkflow": {
+    "workflow": "sos-workspace-actions",
+    "file": "plugins/workflows/sos-workspace-actions.workflow.json",
+    "product": "sos",
+    "description": "Declarative create/update/delete/execute dispatcher for organization workspace forms. The DX published-plugin binding pins revision and checksum; fields, datasets and statuses are product-owned allowlists.",
+    "actions": [
+      "create",
+      "update",
+      "delete",
+      "execute"
+    ],
+    "datasets": {
+      "events": "sos-emergency-events",
+      "dispatch": "sos-dispatch-orders",
+      "resources": "sos-resource-units",
+      "sitrep": "sos-sitreps",
+      "eop": "sos-eop-plans",
+      "afterAction": "sos-after-action-reports",
+      "hazards": "sos-hazard-layers",
+      "hazardIngest": "sos-hazard-ingest-runs",
+      "mutualAid": "sos-mutual-aid-requests"
+    },
+    "status": "source_ready_pending_credential_binding",
+    "generator": "plugins/workflows/generate-workspace-actions.mjs"
   }
 }

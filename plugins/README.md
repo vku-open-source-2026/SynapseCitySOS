@@ -10,8 +10,20 @@ truth for the SOS plugin artifacts that an administrator imports into DX.
 
 | File | Audience | Roles | Purpose |
 | --- | --- | --- | --- |
-| `sos-command-overview.plugin.json` | admin | `admin`, `manager`, `operator` | Event, dispatch, resource and SITREP overview |
-| `sos-responder-board.plugin.json` | member | `responder`, `volunteer` | Assignment and rescue-resource board |
+| `sos-command-overview.plugin.json` | admin | `admin`, `manager`, `operator` | Command overview: events, dispatch, resources, SITREP, EOP, AAR and hazards |
+| `sos-event-command.plugin.json` | admin | `admin`, `manager`, `operator` | Event lifecycle, phases and closure |
+| `sos-dispatch-board.plugin.json` | admin | `admin`, `manager`, `operator` | Dispatch creation, assignment, transit, arrival, completion and rejection |
+| `sos-resource-registry.plugin.json` | admin | `admin`, `manager`, `operator` | Rescue resource units and availability |
+| `sos-eop-console.plugin.json` | admin | `admin`, `manager`, `operator` | EOP drafting, review, approval and publication |
+| `sos-sitrep-desk.plugin.json` | admin | `admin`, `manager`, `operator` | SITREP drafting, review, publication and archive |
+| `sos-after-action.plugin.json` | admin | `admin`, `manager` | After-action reports, lessons and publication |
+| `sos-hazard-watch.plugin.json` | admin | `admin`, `manager`, `operator` | Hazard layers and VNDMS/hazard ingest runs |
+| `sos-phase-boards.plugin.json` | admin | `admin`, `manager`, `operator` | Before/during/after phase boards |
+| `sos-mutual-aid.plugin.json` | admin | `admin`, `manager`, `operator` | Inter-organization mutual-aid requests |
+| `sos-operator-review.plugin.json` | admin | `admin`, `manager`, `operator` | Approval and publication lane for EOP, SITREP, AAR and mutual aid |
+| `sos-rescue-operations.plugin.json` | admin | `admin`, `manager`, `operator`, `responder` | Rescue task execution and resource status |
+| `sos-responder-board.plugin.json` | member | `responder` | Assignment, event context and resource status |
+| `sos-volunteer-desk.plugin.json` | member | `volunteer` | Read-only event, shelter/resource and hazard picture |
 
 The declarative bundles contain metrics, tables and **workflow-bound form
 widgets**. A form carries `workflowRef` (portable) and `action`
@@ -79,8 +91,8 @@ work pages until the bound actions are verified end to end.
   safe repository-relative `plugins/*.json` path. `revision` is a short
   provenance label.
 - Widgets use only `text`, `metric`, `table` and `form`, and bind an SOS catalog
-  key (`events`, `dispatch`, `resources`, `sitrep`, `eop`, `afterAction`) —
-  never a URL.
+  key (`events`, `dispatch`, `resources`, `sitrep`, `eop`, `afterAction`,
+  `hazards`, `hazardIngest`, `mutualAid`) — never a URL.
 - A `form` widget may carry a portable `workflowRef` (`{name, slug?, checksum?}`);
   DX resolves it to server-owned `workflowArtifactId` + revision/checksum pins.
   `workflowArtifactId`, `workflowArtifactRevision` and `workflowArtifactChecksum`

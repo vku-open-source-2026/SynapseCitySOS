@@ -1,0 +1,196 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Rescue operations",
+    "slug": "sos-rescue-operations",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator",
+      "responder"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Responders work from the active event, assigned dispatch orders and resource status. Completing a task requires the assignment recorded by the dispatch workflow.",
+        "type": "text",
+        "title": "Rescue task execution",
+        "width": "full"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Resources",
+        "width": "half",
+        "resource": "resources"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events"
+      },
+      {
+        "id": "dispatch-table",
+        "type": "table",
+        "title": "Assigned tasks",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "task_title",
+          "priority",
+          "status",
+          "assigned_resource_unit_id",
+          "eta_minutes",
+          "completed_at"
+        ],
+        "resource": "dispatch"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Resource availability",
+        "width": "full",
+        "columns": [
+          "id",
+          "resource_code",
+          "name",
+          "resource_type",
+          "status",
+          "district",
+          "contact_phone"
+        ],
+        "resource": "resources"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Event context",
+        "width": "full",
+        "columns": [
+          "id",
+          "event_code",
+          "title",
+          "event_type",
+          "severity",
+          "status"
+        ],
+        "resource": "events"
+      },
+      {
+        "id": "dispatch-start",
+        "type": "form",
+        "title": "Start a task",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: start"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "dispatch-arrive",
+        "type": "form",
+        "title": "Mark on scene",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: arrive"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      },
+      {
+        "id": "dispatch-complete",
+        "type": "form",
+        "title": "Complete a task",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "text",
+            "label": "Dispatch id",
+            "required": true
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-complete",
+          "checksum": "db4d5752f4615436852703930ec9ec00f78054b79c879be27385b1225edfe9b2"
+        }
+      },
+      {
+        "id": "resource-status",
+        "type": "form",
+        "title": "Update my resource status",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Resource id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: available, deploy, unavailable or maintain",
+            "required": true
+          }
+        ],
+        "resource": "resources",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-rescue-operations.plugin.json",
+    "revision": "2026-11-14.3"
+  },
+  "checksum": "sha256:2febc98fa4f66026bb9164af7ace5dcc5f54b7c5b31dd016477f36ed87bfe0d0"
+}

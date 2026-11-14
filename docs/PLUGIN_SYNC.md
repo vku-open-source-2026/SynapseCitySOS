@@ -4,6 +4,16 @@ Status: 2026-11-14. Applies to the portable SOS plugin bundles in `plugins/`.
 The authoritative contract is the workspace `WORKSPACE_PLUGIN_CONTRACT.md`; the
 runtime is the Tier-2 SynapseDX workspace.
 
+## Page catalog and action source
+
+The repository tracks 14 non-public work pages (admin/member roles) plus the
+product-owned workflow source they bind. The catalog resource keys are
+`events, dispatch, resources, sitrep, eop, afterAction, hazards, hazardIngest, mutualAid`. Forms bind either a reviewed domain workflow
+(create/transition) or the generic `sos-workspace-actions` dispatcher, which accepts only the
+allowlisted create/update/delete/execute vocabulary for those resources and
+writes through the Tier-2 records API with the organization technical
+credential. No Tier-3 API is called at runtime.
+
 ## Why bundles live in this repository
 
 SOS owns its emergency-operations domain source. A plugin bundle is a **portable artifact**,
