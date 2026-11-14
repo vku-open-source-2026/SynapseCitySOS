@@ -130,13 +130,15 @@ SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
 generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
 value in production so sessions survive a restart.
 
-Identity is verified by the Tier-2 auth capability by default
-(`SOS_AUTH_MODE=tier2`, Tier-1 IAM backed). Operators log in with the email and
-password of their Tier-2 account; the Tier-2 access/refresh token is kept inside
-the signed SOS session and is never returned to the browser. A verified identity
-is a `responder`, unless its email is listed in `SOS_BOOTSTRAP_ADMIN_EMAILS`
-(comma-separated, lower-cased), which grants `admin`. A client-supplied `role`
-is always ignored.
+**Tier-3 auth is retired (2026-11-14 workspace contract).** Every
+`/v1/auth/*` request returns `410` with
+`{ "error": "workspace_moved", "workspace_url": "https://synapsedx.sbs/workspace" }`
+before credential handling. Login, registration, session management and role
+assignment belong to SynapseDX. The remaining session code is reachable only in
+non-production test runs via `TIER3_AUTH_MODE=legacy`; production always ignores
+that variable and answers 410. Remove the code with the Rust migration. The
+historical `SOS_AUTH_MODE` / `SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only
+apply to that non-production legacy code path.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -384,19 +386,34 @@ Remaining blockers are release/operator steps, not SOS work:
 
 ## Console
 
-The SOS console serves these owned routes:
+The SOS console is **public presentation only** (2026-11-14 workspace
+contract). Login, registration and every emergency operations dashboard moved
+to the Tier-2 SynapseDX workspace at `https://synapsedx.sbs/workspace`. The
+console serves these public routes:
 
 ```text
 /                              SOS landing
 /about /docs                   product and API docs
 /map                           public hazard/emergency map
-/login /register               auth shell
-/admin                         emergency operations dashboard
-/admin/emergency-center        command centre
-/admin/emergency-center/before during after
-/admin/emergency-center/operations/$eventId
-/admin/settings                self-service profile
 ```
+
+The retired paths `/login`, `/register`, `/admin/**`, `/technician/**` and
+`/workspace/**` return `308` to `https://synapsedx.sbs/workspace` from the
+console nginx and the public edge, and the console root route redirects
+client-side. No local command-centre dashboard can be mounted from a deep link.
+
+**Release gate:** until the DX workflow binding for event and dispatch create actions is
+verified end to end, the declarative bundles stay read-only and the production
+work pages must not be retired or these redirects deployed. See
+`plugins/workflows/README.md` for the exact gap.
+
+Tier-3 work interfaces are product plugins in DX; their portable source
+artifacts live in `plugins/` and are validated/synced with
+`npm run plugins:check` and `docs/PLUGIN_SYNC.md`. The exact pre-migration route
+source is archived under `plugins/source/` as reference, not built or executed.
+
+`/v1/auth/*` answers `410 workspace_moved` (with `workspace_url`) before any
+credential handling, so no Tier-3 session can be created.
 
 There is no `/admin/assets`, `/admin/incidents`, `/admin/iot`, `/admin/budgets`,
 `/admin/reports`, `/admin/alerts`, `/admin/ingest`, `/admin/users` or

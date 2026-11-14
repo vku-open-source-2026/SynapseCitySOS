@@ -4,8 +4,9 @@ import { Link } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBars, faXmark } from "@fortawesome/free-solid-svg-icons";
-import { CircleAlert, LogIn, Siren } from "lucide-react";
+import { CircleAlert, LogIn } from "lucide-react";
 import { BrandSymbol } from "./BrandSymbol";
+import { WORKSPACE_URL } from "../lib/workspace";
 
 interface NavigationItem {
     label: string;
@@ -22,27 +23,18 @@ interface NavigationItem {
  */
 const navigationItems: NavigationItem[] = [
     {
-        label: "Trung tâm chỉ huy",
-        to: "/admin/emergency-center",
-        isEmergency: true,
-    },
-    {
         label: "Bản đồ nguy cơ",
         to: "/map",
         isCitizen: true,
-    },
-    {
-        label: "SITREP & điều phối",
-        to: "/admin/emergency-center/during",
-        isEmergency: true,
     },
     {
         label: "Tài liệu API",
         to: "/docs",
     },
     {
-        label: "Đăng nhập",
-        to: "/login",
+        // Work surfaces live in the Tier-2 DX workspace; public link only.
+        label: "Không gian làm việc",
+        to: WORKSPACE_URL,
         isLogin: true,
     },
     {
@@ -133,29 +125,15 @@ const Header: React.FC = () => {
 
                         if (item.isLogin) {
                             return (
-                                <Link
+                                <a
                                     key={item.to}
-                                    to={item.to}
+                                    href={item.to}
                                     onClick={closeMobileMenu}
                                     className="ml-8 text-base text-[#6C7580] max-lg:text-lg max-lg:ml-2 max-lg:my-2 hover:text-[#4FACFE] transition-colors flex items-center gap-1.5"
                                 >
                                     <LogIn className="w-4 h-4" />
                                     {item.label}
-                                </Link>
-                            );
-                        }
-
-                        if (item.isEmergency) {
-                            return (
-                                <Link
-                                    key={item.to}
-                                    to={item.to}
-                                    onClick={closeMobileMenu}
-                                    className="ml-8 text-base text-[#b9382b] max-lg:text-lg max-lg:ml-2 max-lg:my-2 hover:text-red-600 transition-colors flex items-center gap-1.5 font-bold"
-                                >
-                                    <Siren className="w-4 h-4" />
-                                    {item.label}
-                                </Link>
+                                </a>
                             );
                         }
 

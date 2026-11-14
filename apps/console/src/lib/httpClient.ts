@@ -6,6 +6,7 @@ import axios, {
     type InternalAxiosRequestConfig,
 } from "axios";
 import { useAuthStore } from "../stores";
+import { WORKSPACE_URL } from "./workspace";
 import type { AxiosResponse } from "axios";
 
 export { asList, isNonListPayload } from "./asList";
@@ -57,13 +58,12 @@ const responseErrorInterceptor = (error: AxiosError) => {
 
         switch (status) {
             case 401:
-                // Unauthorized - clear auth and redirect to login, not the
-                // public landing page (issue #17).
+                // Tier 3 has no login page: work surfaces live in the DX
+                // workspace. Clear the session and go to the fixed workspace
+                // URL — never a token or return target in the URL.
                 useAuthStore.getState().logout();
-
-                if (typeof window !== 'undefined' && window.location.pathname.includes("/admin")) {
-                    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
-                    window.location.href = `/login?next=${next}`;
+                if (typeof window !== 'undefined') {
+                    window.location.assign(WORKSPACE_URL);
                 }
                 break;
 

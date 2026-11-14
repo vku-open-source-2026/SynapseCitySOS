@@ -1,0 +1,581 @@
+{
+  "name": "sos-event-close",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'events') throw new Error('unsupported_resource');\nconst recordId = text(fields.event_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst encodedId = encodeURIComponent(recordId);\nconst allowed = new Set([\"event_id\",\"resolution_note\"]);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst resolutionNote = text(fields.resolution_note);\nif (resolutionNote.length > 4000) throw new Error('resolution_note_max_4000');\n\nconst audit = {\n  product, resource, operation: 'emergency.close', recordId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\n\nreturn { recordId, encodedId, resolutionNote, audit };"
+      }
+    },
+    {
+      "id": "http-get-event",
+      "name": "Read event",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        620,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-emergency-events/records/' + $json.encodedId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "id": "prepare-queries",
+      "name": "Check terminal state and prepare queries",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst action = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('event_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst event = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(event.status);\nif (['canceled', 'archived'].includes(status)) throw new Error('event_terminal');\nif (!['monitoring', 'active', 'contained', 'resolved'].includes(status)) throw new Error('event_status_invalid');\nconst filter = { emergency_event_id: event.id };\nreturn {\n  event,\n  version: current.version,\n  action,\n  queries: {\n    dispatch: { where: filter, limit: 500 },\n    sitrep: { where: filter, limit: 500 },\n    resources: { limit: 500 },\n    afterAction: { where: filter, orderBy: 'version:desc', limit: 50 },\n  },\n};"
+      }
+    },
+    {
+      "id": "http-query-dispatch",
+      "name": "Query dispatch orders",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1060,
+        300
+      ],
+      "parameters": {
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records/query",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.queries.dispatch }}",
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "id": "extract-dispatch",
+      "name": "Extract dispatch orders",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || !Array.isArray(response.body.items)) throw new Error('query_failed_dispatch');\nconst rows = response.body.items.map((item) => {\n  const data = item && typeof item.data === 'object' && item.data ? item.data : {};\n  return { ...data, id: String(data.id || (item && item.id) || '') };\n});\nconst total = Number(response.body.total);\nif (Number.isFinite(total) && total > rows.length) throw new Error('query_truncated_dispatch');\nreturn { ...state, dispatch: rows };"
+      }
+    },
+    {
+      "id": "http-query-sitrep",
+      "name": "Query SITREPs",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1500,
+        300
+      ],
+      "parameters": {
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records/query",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.queries.sitrep }}",
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "id": "extract-sitrep",
+      "name": "Extract SITREPs",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || !Array.isArray(response.body.items)) throw new Error('query_failed_sitreps');\nconst rows = response.body.items.map((item) => {\n  const data = item && typeof item.data === 'object' && item.data ? item.data : {};\n  return { ...data, id: String(data.id || (item && item.id) || '') };\n});\nconst total = Number(response.body.total);\nif (Number.isFinite(total) && total > rows.length) throw new Error('query_truncated_sitreps');\nreturn { ...state, sitreps: rows };"
+      }
+    },
+    {
+      "id": "http-query-resources",
+      "name": "Query resources",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1940,
+        300
+      ],
+      "parameters": {
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/query",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.queries.resources }}",
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "id": "extract-resources",
+      "name": "Extract resources",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || !Array.isArray(response.body.items)) throw new Error('query_failed_resources');\nconst rows = response.body.items.map((item) => {\n  const data = item && typeof item.data === 'object' && item.data ? item.data : {};\n  return { ...data, id: String(data.id || (item && item.id) || '') };\n});\nconst total = Number(response.body.total);\nif (Number.isFinite(total) && total > rows.length) throw new Error('query_truncated_resources');\nreturn { ...state, resources: rows };"
+      }
+    },
+    {
+      "id": "http-query-aar",
+      "name": "Query existing AARs",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2380,
+        300
+      ],
+      "parameters": {
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-after-action-reports/records/query",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.queries.afterAction }}",
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "id": "decide-close",
+      "name": "Decide close path and version",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || !Array.isArray(response.body.items)) throw new Error('query_failed_after_action_reports');\nconst event = state.event;\nconst status = String(event.status);\nif (!['monitoring', 'active', 'contained', 'resolved'].includes(status)) throw new Error('event_status_invalid');\nconst aars = response.body.items.map((item) => {\n  const data = item && typeof item.data === 'object' && item.data ? item.data : {};\n  return { ...data, id: String(data.id || (item && item.id) || '') };\n}).filter((aar) => String(aar.emergency_event_id ?? event.id) === String(event.id));\naars.sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0) || String(b.id).localeCompare(String(a.id)));\nconst latestAaR = aars.length\n  ? { id: aars[0].id, version: Number.isInteger(Number(aars[0].version)) ? Number(aars[0].version) : 1 }\n  : null;\nconst resolutionNote = state.action.resolutionNote || (typeof event.resolution_note === 'string' ? event.resolution_note : '') || null;\nconst mode = status === 'resolved' ? 'idempotent' : latestAaR ? 'reuse' : 'create';\nreturn {\n  ...state,\n  closedAt: $now,\n  closedBy: state.action.audit.submittedBy,\n  resolutionNote,\n  latestAaR,\n  nextVersion: latestAaR ? latestAaR.version + 1 : 1,\n  mode,\n};"
+      }
+    },
+    {
+      "id": "if-idempotent",
+      "name": "Already resolved?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        2820,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.mode === 'idempotent' }}"
+      }
+    },
+    {
+      "id": "return-idempotent",
+      "name": "Return idempotent close",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        180
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'idempotent') throw new Error('unexpected_close_mode');\nreturn {\n  idempotent: true,\n  operation: 'emergency.close',\n  event_id: state.event.id,\n  status: 'resolved',\n  after_action_report_id: state.latestAaR ? state.latestAaR.id : null,\n  event_version: state.version,\n};"
+      }
+    },
+    {
+      "id": "if-reuse",
+      "name": "Reuse existing AAR?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        3040,
+        420
+      ],
+      "parameters": {
+        "condition": "={{ $json.mode === 'reuse' }}"
+      }
+    },
+    {
+      "id": "prepare-reuse-patch",
+      "name": "Prepare event patch with existing AAR",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        3260,
+        300
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'reuse' || !state.latestAaR) throw new Error('unexpected_close_mode');\nconst aarId = String(state.latestAaR.id);\nconst event = state.event;\nconst next = {\n  ...event,\n  status: 'resolved',\n  ended_at: state.closedAt,\n  resolution_note: state.resolutionNote,\n  after_action_report_id: aarId,\n  resolved_by: state.closedBy,\n  updated_at: state.closedAt,\n};\nreturn {\n  body: { data: next, ifVersion: state.version },\n  encodedId: state.action.encodedId,\n  audit: { ...state.action.audit, after_action_report_id: aarId, aar_version: state.latestAaR.version },\n  mode: state.mode,\n};"
+      }
+    },
+    {
+      "id": "compute-aar",
+      "name": "Compute AAR and prepare create",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        3260,
+        540
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'create') throw new Error('unexpected_close_mode');\nconst event = state.event;\nconst orders = state.dispatch || [];\nconst sitreps = state.sitreps || [];\nconst resources = state.resources || [];\nconst version = state.nextVersion;\nconst closedAt = state.closedAt;\nconst parseTime = (value) => {\n  if (typeof value !== 'string' || !value.trim()) return null;\n  const parsed = Date.parse(value);\n  return Number.isFinite(parsed) ? parsed : null;\n};\nconst round = (value, digits = 2) => Math.round(value * (10 ** digits)) / (10 ** digits);\nconst clamp = (value) => Number.isFinite(value) ? round(Math.min(100, Math.max(0, value))) : 0;\nconst iso = (ms) => new Date(ms).toISOString();\nconst severity = String(event.severity || 'medium');\nconst sla = { critical: 30, high: 60, medium: 120, low: 240 }[severity] || 120;\nconst eventStart = parseTime(event.started_at) ?? parseTime(event.created_at);\nconst eventEnd = parseTime(closedAt) ?? Date.now();\nconst timeline = [];\nif (parseTime(event.created_at) !== null) timeline.push({ timestamp: iso(parseTime(event.created_at)), source: 'event', action: 'event.created', details: { event_id: event.id, title: event.title } });\nif (parseTime(event.started_at) !== null) timeline.push({ timestamp: iso(parseTime(event.started_at)), source: 'event', action: 'event.started', details: { severity, event_type: event.event_type } });\nlet firstAssignment = null;\nlet completed = 0;\nlet canceled = 0;\nconst assignedResources = new Set();\nfor (const order of orders) {\n  const created = parseTime(order.created_at);\n  if (created !== null) timeline.push({ timestamp: iso(created), source: 'dispatch', action: 'dispatch.created', details: { order_id: order.id, task_title: order.task_title, priority: order.priority } });\n  const assignments = Array.isArray(order.assignments) ? order.assignments : [];\n  let assignedAt = null;\n  for (const assignment of assignments) {\n    if (!assignment || typeof assignment !== 'object') continue;\n    const time = parseTime(assignment.assigned_at);\n    if (time !== null) { assignedAt = time; break; }\n  }\n  if (assignedAt === null) assignedAt = parseTime(order.assigned_at) ?? parseTime(order.started_at);\n  if (assignedAt !== null) {\n    if (firstAssignment === null || assignedAt < firstAssignment) firstAssignment = assignedAt;\n    timeline.push({ timestamp: iso(assignedAt), source: 'dispatch', action: 'dispatch.assigned', details: { order_id: order.id, resource_unit_id: order.assigned_resource_unit_id ?? order.assigned_user_id ?? null } });\n  }\n  const resourceId = order.assigned_resource_unit_id ?? order.assigned_user_id ?? null;\n  if (resourceId) assignedResources.add(String(resourceId));\n  const status = String(order.status ?? '');\n  if (status === 'completed') {\n    completed += 1;\n    const completedAt = parseTime(order.completed_at) ?? parseTime(order.updated_at);\n    if (completedAt !== null) timeline.push({ timestamp: iso(completedAt), source: 'dispatch', action: 'dispatch.completed', details: { order_id: order.id } });\n  } else if (status === 'canceled' || status === 'rejected') {\n    canceled += 1;\n  }\n}\nlet publishedSitreps = 0;\nfor (const sitrep of sitreps) {\n  const created = parseTime(sitrep.created_at);\n  if (created !== null) timeline.push({ timestamp: iso(created), source: 'sitrep', action: 'sitrep.created', details: { sitrep_id: sitrep.id, title: sitrep.title } });\n  if (String(sitrep.status ?? '') === 'published') {\n    publishedSitreps += 1;\n    const published = parseTime(sitrep.published_at) ?? parseTime(sitrep.updated_at);\n    if (published !== null) timeline.push({ timestamp: iso(published), source: 'sitrep', action: 'sitrep.published', details: { sitrep_id: sitrep.id } });\n  }\n}\ntimeline.push({ timestamp: iso(eventEnd), source: 'event', action: 'event.resolved', details: { status: 'resolved' } });\ntimeline.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp) || a.action.localeCompare(b.action));\nconst responseAt = firstAssignment ?? eventEnd;\nconst responded = firstAssignment !== null;\nconst responseMinutes = eventStart !== null && responseAt !== null ? round(Math.max(0, (responseAt - eventStart) / 60000), 1) : null;\nconst counted = orders.filter((order) => !['canceled', 'rejected'].includes(String(order.status ?? ''))).length;\nconst dispatchCompletion = counted > 0 ? round((completed / counted) * 100, 2) : 0;\nconst durationMs = eventStart !== null ? Math.max(0, eventEnd - eventStart) : 0;\nconst expectedSitreps = Math.max(1, Math.ceil(durationMs / (6 * 60 * 60 * 1000)));\nconst sitrepCoverage = round((Math.min(publishedSitreps, expectedSitreps) / expectedSitreps) * 100, 2);\nconst availableResources = resources.filter((resource) => String(resource.status ?? '') === 'available' && !assignedResources.has(String(resource.id))).length;\nconst denominator = availableResources + assignedResources.size;\nconst resourceEfficiency = denominator > 0 ? round((assignedResources.size / denominator) * 100, 2) : 0;\nconst speed = !responded || responseMinutes === null ? 0\n  : responseMinutes <= sla ? 100\n    : responseMinutes <= sla * 1.5 ? 80\n      : responseMinutes <= sla * 2 ? 60\n        : responseMinutes <= sla * 4 ? 40 : 20;\nconst overall = round(0.3 * speed + 0.3 * dispatchCompletion + 0.2 * sitrepCoverage + 0.2 * resourceEfficiency, 2);\nconst eventCode = String(event.event_code ?? event.id);\nconst aarId = ('aar-' + String(event.id) + '-v' + version).replace(/[^A-Za-z0-9_.-]/g, '-').slice(0, 180);\nconst summary = 'Sự kiện ' + eventCode + ' (' + String(event.title ?? '') + ') kết thúc với ' + completed + '/' + counted + ' nhiệm vụ hoàn thành. '\n  + (responded ? 'Phản ứng đầu tiên sau ' + (responseMinutes ?? 0) + ' phút (SLA ' + sla + ' phút).' : 'Không ghi nhận phân công phản ứng nào.')\n  + ' ' + publishedSitreps + '/' + expectedSitreps + ' SITREP đã xuất bản; ' + assignedResources.size + ' nguồn lực được điều động.';\nconst aar = {\n  id: aarId,\n  emergency_event_id: String(event.id),\n  report_code: 'AAR-' + eventCode + '-v' + version,\n  title: 'After-action report — ' + String(event.title ?? event.id),\n  summary,\n  status: 'draft',\n  version,\n  timeline,\n  kpi: {\n    response_time_minutes: responseMinutes ?? 0,\n    response_sla_minutes: sla,\n    response_speed_score: clamp(speed),\n    dispatch_completion_rate: clamp(dispatchCompletion),\n    sitrep_coverage_rate: clamp(sitrepCoverage),\n    resource_efficiency_score: clamp(resourceEfficiency),\n    overall_score: clamp(overall),\n    dispatch_total: orders.length,\n    dispatch_completed: completed,\n    dispatch_canceled: canceled,\n    sitrep_published: publishedSitreps,\n    sitrep_expected: expectedSitreps,\n    resources_assigned: assignedResources.size,\n    resources_available: availableResources,\n  },\n  lessons_learned: [],\n  recommendations: [],\n  generated_by: 'sos-kpi-engine-v1',\n  generated_at: closedAt,\n  created_at: closedAt,\n  updated_at: closedAt,\n  metadata: {\n    generated_by: 'sos-kpi-engine-v1',\n    formula: 'overall=0.3*response+0.3*dispatch+0.2*sitrep+0.2*resource',\n    event_start: eventStart === null ? null : iso(eventStart),\n    event_end: iso(eventEnd),\n    first_assignment_at: firstAssignment === null ? null : iso(firstAssignment),\n    sla_minutes: sla,\n    computed_at: closedAt,\n    generated_by_user: state.closedBy,\n  },\n};\nreturn { ...state, aarBody: { id: aarId, data: aar, publish: false } };"
+      }
+    },
+    {
+      "id": "http-create-aar",
+      "name": "Create AAR draft",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        3480,
+        540
+      ],
+      "parameters": {
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-after-action-reports/records",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.aarBody }}",
+        "includeInput": true,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "id": "prepare-created-patch",
+      "name": "Prepare event patch",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        3700,
+        540
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('aar_create_failed');\nif (!response.body || typeof response.body.id !== 'string' || !response.body.id) throw new Error('aar_response_missing_id');\nconst aarId = response.body.id;\nconst event = state.event;\nconst next = {\n  ...event,\n  status: 'resolved',\n  ended_at: state.closedAt,\n  resolution_note: state.resolutionNote,\n  after_action_report_id: aarId,\n  resolved_by: state.closedBy,\n  updated_at: state.closedAt,\n};\nreturn {\n  body: { data: next, ifVersion: state.version },\n  encodedId: state.action.encodedId,\n  audit: { ...state.action.audit, after_action_report_id: aarId, aar_version: state.nextVersion },\n  mode: state.mode,\n};"
+      }
+    },
+    {
+      "id": "http-patch-event",
+      "name": "Patch resolved event",
+      "type": "httpRequest",
+      "typeVersion": 4,
+      "position": [
+        3920,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-emergency-events/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "body": "={{ $json.body }}",
+        "includeInput": false,
+        "timeoutMs": 15000
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read event": {
+      "main": [
+        [
+          {
+            "node": "Check terminal state and prepare queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check terminal state and prepare queries": {
+      "main": [
+        [
+          {
+            "node": "Query dispatch orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query dispatch orders": {
+      "main": [
+        [
+          {
+            "node": "Extract dispatch orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract dispatch orders": {
+      "main": [
+        [
+          {
+            "node": "Query SITREPs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query SITREPs": {
+      "main": [
+        [
+          {
+            "node": "Extract SITREPs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SITREPs": {
+      "main": [
+        [
+          {
+            "node": "Query resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query resources": {
+      "main": [
+        [
+          {
+            "node": "Extract resources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract resources": {
+      "main": [
+        [
+          {
+            "node": "Query existing AARs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query existing AARs": {
+      "main": [
+        [
+          {
+            "node": "Decide close path and version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide close path and version": {
+      "main": [
+        [
+          {
+            "node": "Already resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already resolved?": {
+      "main": [
+        [
+          {
+            "node": "Return idempotent close",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reuse existing AAR?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reuse existing AAR?": {
+      "main": [
+        [
+          {
+            "node": "Prepare event patch with existing AAR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Compute AAR and prepare create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare event patch with existing AAR": {
+      "main": [
+        [
+          {
+            "node": "Patch resolved event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute AAR and prepare create": {
+      "main": [
+        [
+          {
+            "node": "Create AAR draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AAR draft": {
+      "main": [
+        [
+          {
+            "node": "Prepare event patch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare event patch": {
+      "main": [
+        [
+          {
+            "node": "Patch resolved event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

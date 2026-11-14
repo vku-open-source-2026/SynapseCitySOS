@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
-import { createFileRoute, Outlet, useRouterState } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
+import { WorkspaceMovedNotice } from "@/components/WorkspaceMovedNotice";
 
-import EmergencyCenter from '@/pages/emergency/EmergencyCenter';
-
-const BASE_EMERGENCY_CENTER_PATH = '/admin/emergency-center';
-
-function EmergencyCenterRouteLayout() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const normalizedPathname = pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname;
-
-  if (normalizedPathname === BASE_EMERGENCY_CENTER_PATH) {
-    return <EmergencyCenter />;
-  }
-
-  return <Outlet />;
-}
-
-export const Route = createFileRoute('/admin/emergency-center')({
-  component: EmergencyCenterRouteLayout,
+/**
+ * Tier 3 is public presentation only (2026-11-14 workspace contract).
+ * Login, registration and emergency command dashboards live in the Tier-2
+ * SynapseDX workspace: https://synapsedx.sbs/workspace.
+ *
+ * The root route redirects this path before it renders and nginx redirects it
+ * server-side; this notice is the no-JavaScript fallback.
+ */
+export const Route = createFileRoute("/admin/emergency-center")({
+  component: WorkspaceMovedNotice,
 });

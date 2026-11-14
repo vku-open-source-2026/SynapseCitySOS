@@ -71,6 +71,7 @@ import {
 } from './vndms';
 import { proxyTier2Tile, tier2MapConfigured } from './tier2-map';
 import { fetchTier2HazardStatus, fetchTier2Hazards, mergeHazardFeed } from './tier2-hazards';
+import { workspaceMovedMiddleware } from './workspace-moved';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8084);
@@ -736,6 +737,10 @@ app.get('/metrics', (_req, res) => {
 
 app.get('/v1/sos', (_req, res) => res.json(SOS_METADATA));
 
+// Tier-3 auth surface is retired: every /v1/auth request is answered with
+// 410 workspace_moved before rate limiting, credential handling or session
+// code. Work interfaces live in the Tier-2 DX workspace.
+app.use('/v1/auth', workspaceMovedMiddleware('sos'));
 app.use('/v1/auth', rateLimiters.auth.middleware);
 installAuthRoutes(app, { clientForRequest: client });
 

@@ -201,6 +201,8 @@ before(async () => {
     savedEnv[key] = process.env[key];
   }
   process.env.SOS_AUTH_MODE = 'tier2';
+  // Non-production test only: keep the pre-migration auth routes reachable.
+  process.env.TIER3_AUTH_MODE = 'legacy';
   delete process.env.ALLOW_DEMO_AUTH;
   delete process.env.SOS_AUTH_EXCHANGE;
   delete process.env.SOS_AUTH_DEFAULT_ROLE;
@@ -506,17 +508,26 @@ test('me returns the SOS session user without the upstream credential', async ()
 
 // ── Production demo refusal ────────────────────────────────────────────────
 
-test('the demo login route stays refused in production even when the mode is demo', async () => {
-  const saved = { mode: process.env.SOS_AUTH_MODE, demo: process.env.ALLOW_DEMO_AUTH, node: process.env.NODE_ENV };
+test('Tier-3 auth is 410 workspace_moved in production even with the legacy test flag', async () => {
+  const saved = { mode: process.env.SOS_AUTH_MODE, demo: process.env.ALLOW_DEMO_AUTH, node: process.env.NODE_ENV, tier3: process.env.TIER3_AUTH_MODE };
   try {
     process.env.SOS_AUTH_MODE = 'demo';
     process.env.ALLOW_DEMO_AUTH = 'true';
     process.env.NODE_ENV = 'production';
+    process.env.TIER3_AUTH_MODE = 'legacy';
     const response = await post('/v1/auth/login', { username: 'demo', password: 'demo' });
-    assert.equal(response.status, 403);
-    assert.equal(((await response.json()) as Data).error, 'demo_auth_disabled');
+    assert.equal(response.status, 410);
+    const body = (await response.json()) as Data;
+    assert.equal(body.error, 'workspace_moved');
+    assert.equal(body.workspace_url, 'https://synapsedx.sbs/workspace');
+    assert.equal(body.access_token, undefined);
   } finally {
-    for (const [key, value] of [['SOS_AUTH_MODE', saved.mode], ['ALLOW_DEMO_AUTH', saved.demo], ['NODE_ENV', saved.node]] as const) {
+    for (const [key, value] of [
+      ['SOS_AUTH_MODE', saved.mode],
+      ['ALLOW_DEMO_AUTH', saved.demo],
+      ['NODE_ENV', saved.node],
+      ['TIER3_AUTH_MODE', saved.tier3],
+    ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

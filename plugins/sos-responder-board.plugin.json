@@ -1,0 +1,130 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Responder assignment board",
+    "slug": "sos-responder-board",
+    "audience": "member",
+    "roles": [
+      "responder",
+      "volunteer"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "type": "text",
+        "title": "Response assignments",
+        "text": "Read-only view of active emergency events, dispatch orders and rescue resources. Assignment changes still happen through the SOS product API with the responder permission; this page never grants rights.",
+        "width": "full"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Active events",
+        "resource": "events",
+        "width": "half"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "My dispatch queue",
+        "resource": "dispatch",
+        "width": "half"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Rescue resources",
+        "resource": "resources",
+        "width": "half"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Events in my area",
+        "resource": "events",
+        "columns": [
+          "id",
+          "title",
+          "severity",
+          "status",
+          "started_at"
+        ],
+        "width": "full"
+      },
+      {
+        "id": "dispatch-table",
+        "type": "table",
+        "title": "Assignment board",
+        "resource": "dispatch",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "task_title",
+          "status",
+          "priority",
+          "assigned_resource_unit_id"
+        ],
+        "width": "full"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Rescue teams and equipment",
+        "resource": "resources",
+        "columns": [
+          "id",
+          "name",
+          "resource_type",
+          "status",
+          "district"
+        ],
+        "width": "full"
+      },
+      {
+        "id": "event-create-form",
+        "type": "form",
+        "title": "Open an emergency event",
+        "resource": "events",
+        "action": "create",
+        "workflowRef": {
+          "name": "sos-event-create",
+          "slug": "sos-event-create"
+        },
+        "width": "full",
+        "fields": [
+          {
+            "name": "title",
+            "label": "Title",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "event_type",
+            "label": "Event type",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "severity",
+            "label": "Severity",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "description",
+            "label": "Description",
+            "type": "textarea"
+          }
+        ]
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-responder-board.plugin.json",
+    "revision": "2026-11-14"
+  },
+  "checksum": "sha256:1206e2ae3fd1ca1ca0040df8048e64bac894ea967ef884da5c8e1bdbe4fb7e4e"
+}

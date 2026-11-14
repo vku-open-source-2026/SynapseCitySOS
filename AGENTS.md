@@ -136,9 +136,25 @@ test when adding datasets.
 
 ## Console route ownership
 
-Keep: `/`, `/about`, `/docs`, `/map`, `/login`, `/register`, `/admin`,
-`/admin/emergency-center`, `/admin/emergency-center/before|during|after`,
-`/admin/emergency-center/operations/$eventId`, `/admin/settings`.
+Tier 3 is **public presentation only** (2026-11-14 workspace contract). Keep:
+`/`, `/about`, `/docs`, `/map`.
+
+Retired work surfaces redirect to `https://synapsedx.sbs/workspace`:
+`/login`, `/register`, `/workspace/**`, `/admin/**` (including
+`/admin/emergency-center/**`). They return `308` from
+`apps/console/nginx.conf` and `infra/nginx/`, and the root route redirects
+client-side. Route modules are redirect stubs/notices — never mount a local
+command-centre dashboard or login form again. `/v1/auth/*` answers
+`410 workspace_moved` before auth handling.
+
+**Release gate:** do not deploy the public-only redirects or retire the
+production command-centre pages until the DX workflow binding for event/dispatch
+actions is verified end to end (see `plugins/workflows/README.md`).
+
+Work interfaces are product plugins in DX; portable bundles live in `plugins/`
+with `npm run plugins:check` / `npm run plugins:test` and
+`docs/PLUGIN_SYNC.md`. Pre-migration route source is archived (not built) in
+`plugins/source/`.
 
 Never add `/admin/assets*`, `/admin/incidents*`, `/admin/iot*`,
 `/admin/budgets*`, `/admin/reports*`, `/admin/alerts*`, `/admin/ingest`,

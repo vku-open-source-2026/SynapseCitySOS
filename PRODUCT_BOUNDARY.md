@@ -180,20 +180,30 @@ sos-after-action-reports    sos-hazard-ingest-runs
 
 ## Console route ownership
 
-Owned:
+Tier 3 is public presentation only (2026-11-14 workspace contract). Work,
+login and emergency-command surfaces live in the Tier-2 SynapseDX workspace at
+`https://synapsedx.sbs/workspace`.
+
+Served by this console:
 
 ```text
 /                              SOS landing
 /about                         SOS product
 /docs                          SOS API docs
 /map                           public hazard/emergency map
-/login /register               auth shell
-/admin                         emergency operations dashboard
-/admin/emergency-center        command centre
-/admin/emergency-center/before during after
-/admin/emergency-center/operations/$eventId
-/admin/settings                self-service profile (shared shell; no user administration)
 ```
+
+Redirected to `https://synapsedx.sbs/workspace`:
+
+```text
+/login /register
+/admin/**  (dashboard, emergency command centre and phase boards, settings)
+/technician/**
+/workspace/**
+```
+
+`/v1/auth/*` returns `410 workspace_moved` before credential handling. The
+portable SOS plugin bundles that replace the retired pages live in `plugins/`.
 
 Never add:
 

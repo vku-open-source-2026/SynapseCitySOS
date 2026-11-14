@@ -1,0 +1,176 @@
+{
+  "format": "synapsedx-plugin-source",
+  "formatVersion": 1,
+  "product": "sos",
+  "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+  "revision": "d90e731887ade9fbc64a3e8d5f98b0157b56b4d5",
+  "capturedAt": "2026-11-14T07:13:37.365Z",
+  "activeRedirectUrl": "https://synapsedx.sbs/workspace",
+  "description": "Exact pre-migration source for the retired Tier-3 work surfaces: route wrappers, emergency-centre pages and their components. Reference only: outside the app build, never mounted, imported or executed by the console, the plugin CLI or SynapseDX. Import specifiers reflect the original src/ layout and are not resolved in this archive.",
+  "bundles": {
+    "apps/console/src/routes/admin": "plugins/sos-command-overview.plugin.json",
+    "apps/console/src/routes/admin/emergency-center": "plugins/sos-command-overview.plugin.json",
+    "apps/console/src/routes/login.tsx": "plugins/sos-command-overview.plugin.json",
+    "apps/console/src/routes/register.tsx": "plugins/sos-command-overview.plugin.json"
+  },
+  "files": [
+    {
+      "originalPath": "apps/console/src/routes/admin.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin.tsx",
+      "sha256": "sha256:74c404f8c36eb98de7f19cad70bad7aa24f203cb12050d7ef5d7f67648839da5",
+      "bytes": 427
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/emergency-center.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/emergency-center.tsx",
+      "sha256": "sha256:3d2d58f39cd6db2c91b67b7609e642960ad7e19d7ce966fc819d3b930a1c25cd",
+      "bytes": 754
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/emergency-center/after.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/emergency-center/after.tsx",
+      "sha256": "sha256:51fa86ee2e1b8fe2183e0e784b85ea7b56dba0a0f00a89ac8f6637a66840b9b6",
+      "bytes": 338
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/emergency-center/before.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/emergency-center/before.tsx",
+      "sha256": "sha256:66dd4fc291b83753656ed60d88aca4e6e76718ef86190e594703aa2a0329589d",
+      "bytes": 342
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/emergency-center/during.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/emergency-center/during.tsx",
+      "sha256": "sha256:c12c55682cc1df1909d04bc81a53de19ec4a24c653c40fee9e4bd3f825c8306f",
+      "bytes": 342
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/emergency-center/new.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/emergency-center/new.tsx",
+      "sha256": "sha256:b6bda67751b8e7b8ab102a5e24bfa73068e1e7c9da9ab97965c8b2658392e701",
+      "bytes": 329
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/emergency-center/operations.$eventId.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/emergency-center/operations.$eventId.tsx",
+      "sha256": "sha256:58a24e94b00b3c05df162c9030510adea0f11ea005ada4bcb20d6b3318c4bad1",
+      "bytes": 336
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/index.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/index.tsx",
+      "sha256": "sha256:21615806807bae3178c6139c1009eebc8cfa0042dcb4cfe9922f55e3602e67cc",
+      "bytes": 268
+    },
+    {
+      "originalPath": "apps/console/src/routes/admin/settings/index.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/admin/settings/index.tsx",
+      "sha256": "sha256:843db252403b4bb48f8b6b0ddcf633bea63ffdf56c4636ecbd6c4dc1084a703d",
+      "bytes": 295
+    },
+    {
+      "originalPath": "apps/console/src/routes/login.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/login.tsx",
+      "sha256": "sha256:67fc35bb73fa3e158c338d5e8b4951c74e8c64643b334ba73739c1906d4ae500",
+      "bytes": 263
+    },
+    {
+      "originalPath": "apps/console/src/routes/register.tsx",
+      "archivePath": "plugins/source/apps/console/src/routes/register.tsx",
+      "sha256": "sha256:ced6e08aa1f66377c0de3065f0dc2d7e9dfd9054796ad5b93e0f726bd87370a2",
+      "bytes": 275
+    }
+  ],
+  "uiFiles": [
+    {
+      "archivePath": "plugins/source/apps/console/src/components/emergency/DeployEopModal.tsx",
+      "sha256": "sha256:faf8fe0c0ea689f8f50a92a0b9a1234040160317c5573886671637eae46452c2",
+      "bytes": 5697
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/components/emergency/HazardLiveMap.tsx",
+      "sha256": "sha256:ed919bfa51c700e46008f7387bffd95ab344c7d65ab71ce38e2a25089159bae5",
+      "bytes": 10032
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/components/emergency/phase-board/PhaseBoardTemplate.tsx",
+      "sha256": "sha256:b1782c9704cf3a0caa6a2cbdeb9e2c5454370902347ab9ca49d7da98d2eae4a6",
+      "bytes": 30066
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/components/emergency/phase-board/SectionStubPanel.tsx",
+      "sha256": "sha256:cac4be4b57a4d2ae5d624a7eb7dd24b283624f3768146d08eddfa5200a7351d6",
+      "bytes": 1227
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/LoginPage.tsx",
+      "sha256": "sha256:a0301b6440e5c779ff9ca833ffb9dde525fb80db767e05b58710ce056f37c28b",
+      "bytes": 4640
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/RegisterPage.tsx",
+      "sha256": "sha256:851ec32a029be48d0d0fec40393670f00cc97ba948be9d5f9c6b9f4f4af6ffc9",
+      "bytes": 5032
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/SosDashboard.tsx",
+      "sha256": "sha256:08104a7e30a0425e139627f4f44d50c057ae44d697ece917ab17c35b0034ba39",
+      "bytes": 16556
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/EmergencyCenter.tsx",
+      "sha256": "sha256:e4c824e53e622eb4397a010187bc190d97568dd39a127e00982872c5cab901b3",
+      "bytes": 37008
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/EmergencyCommandCenter.tsx",
+      "sha256": "sha256:69127bc48bd38cd6d1706eb60611e2a33241ce779eebd15864ee6b6c48218a46",
+      "bytes": 13084
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/RescueOperationPage.tsx",
+      "sha256": "sha256:d53bd48f4e8ef3520271ea9267a44777fbee05853fa27cd1a659c274a09c5dd7",
+      "bytes": 18403
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/hazardStream.test.ts",
+      "sha256": "sha256:f586dd486cd42942bc4ddf86a069324e1efd4843f4099d27b4941a955e9c043a",
+      "bytes": 4693
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/hazardStream.ts",
+      "sha256": "sha256:25a63ac3e1bc85b79e73ac474c6d43ef6325a58906d1b075d5efed326df81354",
+      "bytes": 2663
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/phases/AfterDisasterBoardPage.tsx",
+      "sha256": "sha256:3a166e6d6db5b900fd1b2dafee3657a041858b6c7175dfea8553c4fa03193821",
+      "bytes": 423
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/phases/BeforeDisasterBoardPage.tsx",
+      "sha256": "sha256:4249f7ec4b95be8915af47f2f9ec7bafeb59800891ed6cd824f4db710ccf94db",
+      "bytes": 426
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/phases/DuringDisasterBoardPage.tsx",
+      "sha256": "sha256:0e05e74092ebc7dea8805375b9a892d71a1b027c46f65e16a12647b87bd315a6",
+      "bytes": 426
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/phases/EmergencyBoardsLandingPage.tsx",
+      "sha256": "sha256:b8b942a942609dac3f6404fd0090ed54f007491e10eb3d6a781adbdc63487cf5",
+      "bytes": 4604
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/emergency/phases/phaseBoardDefinitions.ts",
+      "sha256": "sha256:4051ea77d0cd254fadc9a93a3dece377bb5a094f9895157ac16aa0f8739577b8",
+      "bytes": 8967
+    },
+    {
+      "archivePath": "plugins/source/apps/console/src/pages/settings/ProfileSettings.tsx",
+      "sha256": "sha256:6470fc02392291b22c3236138fc205a0de429e01745cf824bfb8a85f1aed429e",
+      "bytes": 9733
+    }
+  ]
+}
