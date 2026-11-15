@@ -6,6 +6,10 @@ Keep a Changelog format and version tags use Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- Hazard near/polygon endpoints call the Tier-2 PostGIS spatial capability
+  first and fall back to the bounded in-process scan when unavailable.
+- The live hazard SSE stream subscribes to the Tier-2 capability event feed and
+  wakes the authoritative snapshot; the periodic ticker remains the fallback.
 - Full SOS work-page catalog (14 portable bundles): command overview, event
   command, dispatch board, resource registry, EOP console, SITREP desk,
   after-action review, hazard watch/ingest, phase boards, mutual aid, operator
@@ -58,6 +62,14 @@ Keep a Changelog format and version tags use Semantic Versioning.
   `docker compose pull` and building from source.
 
 ### Fixed
+- Every legacy `/v1/auth/*` path now returns `410 workspace_moved`; the
+  previously reachable `/me`/`logout` paths no longer answer 401/404, and
+  `/v1/sos` advertises the retired contract.
+- The gateway no longer applies its whole-request timeout to
+  `/v1/emergency/stream/*` and no longer echoes upstream error text in health
+  responses.
+- The public browser gate covers the live map/navigation surface; retired
+  command-centre specs no longer gate CI.
 - Console UI audit: added a mounted emergency-event creation route, enabled
   the “Gần tôi” filter to request geolocation, escaped Leaflet popup text,
   rendered AI text without raw Markdown, removed product/architecture scope
