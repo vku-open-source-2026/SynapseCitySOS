@@ -515,14 +515,17 @@ async fn proxy_to_sos(
         .and_then(|value| value.to_str().ok())
         .map(|value| value.to_string());
     let is_body_method = method != Method::GET && method != Method::HEAD;
+    // The hazard feed is long-lived; a whole-request timeout would cut every
+    // SSE connection at the normal API timeout even though the body streams.
+    let is_event_stream = target.starts_with("/v1/emergency/stream/");
 
-    let mut upstream = state
-        .client
-        .request(
-            reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET),
-            format!("{}{}", state.upstream, target),
-        )
-        .timeout(state.timeout);
+    let mut upstream = state.client.request(
+        reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET),
+        format!("{}{}", state.upstream, target),
+    );
+    if !is_event_stream {
+        upstream = upstream.timeout(state.timeout);
+    }
 
     for name in FORWARDED_REQUEST_HEADERS {
         if let Some(value) = headers.get(*name) {
