@@ -2899,7 +2899,7 @@ async fn hazard_stream(ctx: Ctx<'_>) -> ApiResult<Response> {
                         return;
                     }
                 }
-                Some(()) = event_rx.recv() => {
+                Some(()) = event_rx.recv(), if !event_rx.is_closed() => {
                     // Coalesce a burst, then read the authoritative snapshot.
                     while event_rx.try_recv().is_ok() {}
                     let frame = hazard_snapshot_frame(&state, &opts).await;
