@@ -444,17 +444,20 @@ async fn upstream_health(state: &AppState, path: &str) -> Response {
             .to_string(),
         )
             .into_response(),
-        Err(error) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            [("content-type", "application/json")],
-            json!({
-                "status": "degraded",
-                "service": "synapsecity-sos-gateway",
-                "error": error.to_string(),
-            })
-            .to_string(),
-        )
-            .into_response(),
+        Err(error) => {
+            tracing::warn!(error = %error, "health upstream request failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [("content-type", "application/json")],
+                json!({
+                    "status": "degraded",
+                    "service": "synapsecity-sos-gateway",
+                    "error": "upstream_unavailable",
+                })
+                .to_string(),
+            )
+                .into_response()
+        }
     }
 }
 
