@@ -2778,7 +2778,7 @@ async fn hazard_deploy(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
 }
 
 /// Snapshot frame shared by the periodic fallback and the live-event trigger.
-async fn hazard_snapshot_frame(state: &AppState, opts: &RequestOptions) -> String {
+async fn hazard_snapshot_frame(state: &AppState, opts: &RequestOptions, source: &str) -> String {
     match tier2::list_all_public(
         &state.tier2,
         opts,
@@ -2794,8 +2794,8 @@ async fn hazard_snapshot_frame(state: &AppState, opts: &RequestOptions) -> Strin
                     "snapshot": snapshot,
                     "degraded": false,
                     "last_good_at": crate::now_iso(),
-                    "transport": "snapshot-poll",
-                    "source": "poll",
+                    "transport": if source == "sse" { "sse-trigger" } else { "snapshot-poll" },
+                    "source": source,
                 }),
                 None,
             )
@@ -2887,14 +2887,14 @@ async fn hazard_stream(ctx: Ctx<'_>) -> ApiResult<Response> {
         let _ = tx.send(Ok(Bytes::from(": connected\n\nretry: 5000\n\n"))).await;
         // Initial snapshot is immediate; the event feed then wakes the same
         // authoritative read instead of streaming record payloads to browsers.
-        let initial = hazard_snapshot_frame(&state, &opts).await;
+        let initial = hazard_snapshot_frame(&state, &opts, "poll").await;
         if tx.send(Ok(Bytes::from(initial))).await.is_err() {
             return;
         }
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
-                    let frame = hazard_snapshot_frame(&state, &opts).await;
+                    let frame = hazard_snapshot_frame(&state, &opts, "poll").await;
                     if tx.send(Ok(Bytes::from(frame))).await.is_err() {
                         return;
                     }
@@ -2902,7 +2902,7 @@ async fn hazard_stream(ctx: Ctx<'_>) -> ApiResult<Response> {
                 Some(()) = event_rx.recv(), if !event_rx.is_closed() => {
                     // Coalesce a burst, then read the authoritative snapshot.
                     while event_rx.try_recv().is_ok() {}
-                    let frame = hazard_snapshot_frame(&state, &opts).await;
+                    let frame = hazard_snapshot_frame(&state, &opts, "sse").await;
                     if tx.send(Ok(Bytes::from(frame))).await.is_err() {
                         return;
                     }
