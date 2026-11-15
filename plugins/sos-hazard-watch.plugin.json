@@ -15,23 +15,90 @@
       {
         "id": "intro",
         "text": "Monitor active hazard layers, record manual hazards and track hazard-ingest jobs. The public hazard map remains a Tier-3 public surface.",
-        "type": "text",
+        "type": "heading",
         "title": "Hazard layers and VNDMS ingest runs",
         "width": "full"
+      },
+      {
+        "id": "workspace-navigation",
+        "type": "navigation",
+        "title": "Quick access",
+        "width": "full",
+        "links": [
+          {
+            "label": "Overview",
+            "target": "page:sos-command-overview",
+            "actionId": "act-workspace-navigation-link1"
+          },
+          {
+            "label": "Hazard watch",
+            "target": "page:sos-hazard-watch",
+            "actionId": "act-workspace-navigation-link2"
+          },
+          {
+            "label": "Dispatch",
+            "target": "page:sos-dispatch-board",
+            "actionId": "act-workspace-navigation-link3"
+          },
+          {
+            "label": "Resources",
+            "target": "page:sos-resource-registry",
+            "actionId": "act-workspace-navigation-link4"
+          },
+          {
+            "label": "Team tasks",
+            "target": "module:tasks",
+            "actionId": "act-workspace-navigation-link5"
+          }
+        ]
       },
       {
         "id": "hazards-metric",
         "type": "metric",
         "title": "Hazard layers",
         "width": "half",
-        "resource": "hazards"
+        "resource": "hazards",
+        "onLoad": "act-hazards-metric-load"
       },
       {
         "id": "ingest-metric",
         "type": "metric",
         "title": "Ingest runs",
         "width": "half",
-        "resource": "hazardIngest"
+        "resource": "hazardIngest",
+        "onLoad": "act-ingest-metric-load"
+      },
+      {
+        "id": "hazards-map",
+        "type": "map",
+        "title": "Hazards · Live map",
+        "width": "full",
+        "resource": "hazards",
+        "columns": [
+          "id",
+          "name",
+          "title",
+          "status",
+          "severity",
+          "address",
+          "district",
+          "latitude",
+          "longitude",
+          "geometry",
+          "geometry_json",
+          "location",
+          "current_location",
+          "current_location_json"
+        ],
+        "onLoad": "act-hazards-map-load",
+        "onRowClick": "act-hazards-map-row",
+        "onExport": "act-hazards-map-export"
+      },
+      {
+        "id": "records-section",
+        "type": "divider",
+        "title": "Operational picture",
+        "width": "full"
       },
       {
         "id": "hazards-table",
@@ -50,7 +117,10 @@
           "detected_at",
           "expires_at"
         ],
-        "resource": "hazards"
+        "resource": "hazards",
+        "onLoad": "act-hazards-table-load",
+        "onRowClick": "act-hazards-table-row",
+        "onExport": "act-hazards-table-export"
       },
       {
         "id": "ingest-table",
@@ -67,7 +137,16 @@
           "hazards_ingested",
           "error_message"
         ],
-        "resource": "hazardIngest"
+        "resource": "hazardIngest",
+        "onLoad": "act-ingest-table-load",
+        "onRowClick": "act-ingest-table-row",
+        "onExport": "act-ingest-table-export"
+      },
+      {
+        "id": "actions-section",
+        "type": "divider",
+        "title": "Take action",
+        "width": "full"
       },
       {
         "id": "hazard-create",
@@ -127,15 +206,18 @@
           },
           {
             "name": "geometry_json",
-            "type": "textarea",
-            "label": "Geometry GeoJSON"
+            "type": "json",
+            "label": "Geometry GeoJSON",
+            "editor": "geometry",
+            "selectionPath": "geometry"
           }
         ],
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
           "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
-        }
+        },
+        "onSubmit": "act-hazard-create-submit"
       },
       {
         "id": "hazard-update",
@@ -172,15 +254,18 @@
           },
           {
             "name": "geometry_json",
-            "type": "textarea",
-            "label": "Geometry GeoJSON"
+            "type": "json",
+            "label": "Geometry GeoJSON",
+            "editor": "geometry",
+            "selectionPath": "geometry"
           }
         ],
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
           "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
-        }
+        },
+        "onSubmit": "act-hazard-update-submit"
       },
       {
         "id": "hazard-decision",
@@ -211,7 +296,8 @@
         "workflowRef": {
           "name": "sos-workspace-actions",
           "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
-        }
+        },
+        "onSubmit": "act-hazard-decision-submit"
       },
       {
         "id": "hazard-delete",
@@ -231,7 +317,8 @@
         "workflowRef": {
           "name": "sos-workspace-actions",
           "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
-        }
+        },
+        "onSubmit": "act-hazard-delete-submit"
       },
       {
         "id": "ingest-create",
@@ -251,7 +338,8 @@
         "workflowRef": {
           "name": "sos-workspace-actions",
           "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
-        }
+        },
+        "onSubmit": "act-ingest-create-submit"
       },
       {
         "id": "ingest-decision",
@@ -292,6 +380,618 @@
         "workflowRef": {
           "name": "sos-workspace-actions",
           "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-ingest-decision-submit"
+      },
+      {
+        "id": "act-workspace-navigation-link1",
+        "type": "action",
+        "title": "Navigate Overview",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-command-overview"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link2",
+        "type": "action",
+        "title": "Navigate Hazard watch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-hazard-watch"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link3",
+        "type": "action",
+        "title": "Navigate Dispatch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-dispatch-board"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link4",
+        "type": "action",
+        "title": "Navigate Resources",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-resource-registry"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link5",
+        "type": "action",
+        "title": "Navigate Team tasks",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "module:tasks"
+        }
+      },
+      {
+        "id": "act-hazards-metric-load",
+        "type": "action",
+        "title": "Read Hazard layers",
+        "operation": {
+          "kind": "query",
+          "target": "hazards-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "hazards"
+        }
+      },
+      {
+        "id": "act-ingest-metric-load",
+        "type": "action",
+        "title": "Read Ingest runs",
+        "operation": {
+          "kind": "query",
+          "target": "ingest-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "hazardIngest"
+        }
+      },
+      {
+        "id": "act-hazards-map-load",
+        "type": "action",
+        "title": "Read Hazards · Live map",
+        "operation": {
+          "kind": "query",
+          "target": "hazards-map",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "hazards"
+        }
+      },
+      {
+        "id": "act-hazards-map-row",
+        "type": "action",
+        "title": "Inspect Hazards · Live map",
+        "operation": {
+          "kind": "showRecord",
+          "target": "hazards-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazards-map-export",
+        "type": "action",
+        "title": "Export Hazards · Live map",
+        "operation": {
+          "kind": "export",
+          "target": "hazards-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazards-table-load",
+        "type": "action",
+        "title": "Read Hazard layers",
+        "operation": {
+          "kind": "query",
+          "target": "hazards-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "hazards"
+        }
+      },
+      {
+        "id": "act-hazards-table-row",
+        "type": "action",
+        "title": "Inspect Hazard layers",
+        "operation": {
+          "kind": "showRecord",
+          "target": "hazards-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazards-table-export",
+        "type": "action",
+        "title": "Export Hazard layers",
+        "operation": {
+          "kind": "export",
+          "target": "hazards-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-ingest-table-load",
+        "type": "action",
+        "title": "Read Ingest runs",
+        "operation": {
+          "kind": "query",
+          "target": "ingest-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "hazardIngest"
+        }
+      },
+      {
+        "id": "act-ingest-table-row",
+        "type": "action",
+        "title": "Inspect Ingest runs",
+        "operation": {
+          "kind": "showRecord",
+          "target": "ingest-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-ingest-table-export",
+        "type": "action",
+        "title": "Export Ingest runs",
+        "operation": {
+          "kind": "export",
+          "target": "ingest-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-create-submit",
+        "type": "action",
+        "title": "Submit Record a hazard layer",
+        "operation": {
+          "kind": "create",
+          "target": "hazard-create",
+          "mappings": [
+            {
+              "field": "hazard_id",
+              "source": "event",
+              "value": "values.hazard_id",
+              "required": true
+            },
+            {
+              "field": "title",
+              "source": "event",
+              "value": "values.title",
+              "required": true
+            },
+            {
+              "field": "event_type",
+              "source": "event",
+              "value": "values.event_type",
+              "required": true
+            },
+            {
+              "field": "severity",
+              "source": "event",
+              "value": "values.severity",
+              "required": true
+            },
+            {
+              "field": "source",
+              "source": "event",
+              "value": "values.source",
+              "required": false
+            },
+            {
+              "field": "district",
+              "source": "event",
+              "value": "values.district",
+              "required": false
+            },
+            {
+              "field": "ward",
+              "source": "event",
+              "value": "values.ward",
+              "required": false
+            },
+            {
+              "field": "detected_at",
+              "source": "event",
+              "value": "values.detected_at",
+              "required": false
+            },
+            {
+              "field": "expires_at",
+              "source": "event",
+              "value": "values.expires_at",
+              "required": false
+            },
+            {
+              "field": "geometry_json",
+              "source": "event",
+              "value": "values.geometry_json",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-create-open",
+        "type": "action",
+        "title": "Open Record a hazard layer",
+        "operation": {
+          "kind": "openForm",
+          "target": "hazard-create",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-update-submit",
+        "type": "action",
+        "title": "Submit Update a hazard",
+        "operation": {
+          "kind": "update",
+          "target": "hazard-update",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "title",
+              "source": "event",
+              "value": "values.title",
+              "required": false
+            },
+            {
+              "field": "severity",
+              "source": "event",
+              "value": "values.severity",
+              "required": false
+            },
+            {
+              "field": "is_active",
+              "source": "event",
+              "value": "values.is_active",
+              "required": false
+            },
+            {
+              "field": "expires_at",
+              "source": "event",
+              "value": "values.expires_at",
+              "required": false
+            },
+            {
+              "field": "geometry_json",
+              "source": "event",
+              "value": "values.geometry_json",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-update-open",
+        "type": "action",
+        "title": "Open Update a hazard",
+        "operation": {
+          "kind": "openForm",
+          "target": "hazard-update",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-decision-submit",
+        "type": "action",
+        "title": "Submit Expire or resolve a hazard",
+        "operation": {
+          "kind": "execute",
+          "target": "hazard-decision",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "decision",
+              "source": "event",
+              "value": "values.decision",
+              "required": true
+            },
+            {
+              "field": "notes",
+              "source": "event",
+              "value": "values.notes",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-decision-open",
+        "type": "action",
+        "title": "Open Expire or resolve a hazard",
+        "operation": {
+          "kind": "openForm",
+          "target": "hazard-decision",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-delete-submit",
+        "type": "action",
+        "title": "Submit Delete a hazard layer",
+        "operation": {
+          "kind": "delete",
+          "target": "hazard-delete",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-hazard-delete-open",
+        "type": "action",
+        "title": "Open Delete a hazard layer",
+        "operation": {
+          "kind": "openForm",
+          "target": "hazard-delete",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-ingest-create-submit",
+        "type": "action",
+        "title": "Submit Queue a hazard ingest run",
+        "operation": {
+          "kind": "create",
+          "target": "ingest-create",
+          "mappings": [
+            {
+              "field": "source",
+              "source": "event",
+              "value": "values.source",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-ingest-create-open",
+        "type": "action",
+        "title": "Open Queue a hazard ingest run",
+        "operation": {
+          "kind": "openForm",
+          "target": "ingest-create",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-ingest-decision-submit",
+        "type": "action",
+        "title": "Submit Update ingest run status",
+        "operation": {
+          "kind": "execute",
+          "target": "ingest-decision",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "decision",
+              "source": "event",
+              "value": "values.decision",
+              "required": true
+            },
+            {
+              "field": "hazards_seen",
+              "source": "event",
+              "value": "values.hazards_seen",
+              "required": false
+            },
+            {
+              "field": "hazards_ingested",
+              "source": "event",
+              "value": "values.hazards_ingested",
+              "required": false
+            },
+            {
+              "field": "error_message",
+              "source": "event",
+              "value": "values.error_message",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-ingest-decision-open",
+        "type": "action",
+        "title": "Open Update ingest run status",
+        "operation": {
+          "kind": "openForm",
+          "target": "ingest-decision",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
         }
       }
     ]
@@ -299,7 +999,7 @@
   "source": {
     "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
     "path": "plugins/sos-hazard-watch.plugin.json",
-    "revision": "2026-11-14.3"
+    "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:a72e46ebb4edfa075661e16adbbbb54687cb644a2f0ec7f5060c21205bd25116"
+  "checksum": "sha256:4b579e80e87d0fa4cebef827cd38a5dd903a644614287762d6e6159ac1adccfb"
 }
