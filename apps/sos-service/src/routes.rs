@@ -442,7 +442,7 @@ fn sos_metadata(ctx: &Ctx<'_>) -> Value {
             "hazards", "mutual aid", "emergency events", "public emergency projection",
             "EOP", "dispatch", "resource units", "SITREP", "AAR", "live hazard stream",
             "command centre", "phase boards", "rescue operations", "public hazard map",
-            "map", "geocoding", "ai", "auth-shell"
+            "map", "geocoding", "ai", "tier-2-spatial", "workspace-login"
         ],
         "notOwned": [
             "city assets", "city incidents", "city users", "IoT", "maintenance",
@@ -458,11 +458,9 @@ fn sos_metadata(ctx: &Ctx<'_>) -> Value {
             "sdk": "synapsedx (Rust)",
         },
         "auth": {
-            "shell": "hmac-session",
-            "mode": ctx.config().auth_mode,
-            "demoEnabled": ctx.config().demo_auth_allowed(),
-            "identityProvider": "tier-2-auth-capability -> tier-1-iam",
-            "bootstrapAdminsConfigured": !ctx.config().bootstrap_admins.is_empty(),
+            "mode": "retired",
+            "workspace": "https://synapsedx.sbs/workspace",
+            "identityProvider": "synapsedx",
         },
     })
 }
