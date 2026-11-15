@@ -2377,11 +2377,42 @@ async fn hazards_vndms_live(ctx: Ctx<'_>) -> ApiResult<Response> {
     Ok(json_array(paginate(values, ctx.query, 200)))
 }
 
+/// Ask Tier-2 for spatially filtered SOS hazard records before falling back to
+/// the bounded in-process scan. The dataset/geometry binding stays server-side.
+async fn spatial_hazard_rows(ctx: &Ctx<'_>, mut body: Value) -> Option<Vec<Map<String, Value>>> {
+    body["limit"] = json!(500);
+    let opts = ctx.opts();
+    let response = ctx
+        .client()
+        .post(
+            "/v1/capabilities/datasets/sos-hazard-layers/records/spatial",
+            body,
+            &opts,
+        )
+        .await
+        .ok()?;
+    let items = response.get("items")?.as_array()?;
+    Some(
+        items
+            .iter()
+            .filter_map(|item| item.get("data")?.as_object().cloned())
+            .collect(),
+    )
+}
+
 async fn hazards_near(ctx: Ctx<'_>) -> ApiResult<Response> {
     let data = query_data(ctx.query);
     let near = domain::geo::parse_near_query(&data).map_err(domain_error)?;
-    let rows = all_hazards_with_feed(&ctx, 72).await?;
-    let result = domain::geo::near_hazards(&maps_to_data(&rows.items), &near);
+    let candidates = match spatial_hazard_rows(&ctx, json!({
+        "mode": "near",
+        "lat": near.lat,
+        "lng": near.lng,
+        "radiusMeters": near.radius_m,
+    })).await {
+        Some(rows) => rows,
+        None => all_hazards_with_feed(&ctx, 72).await?.items,
+    };
+    let result = domain::geo::near_hazards(&maps_to_data(&candidates), &near);
     let items = data_to_values(result.items);
     Ok(web::json_response(json!({
         "items": items,
@@ -2413,8 +2444,14 @@ async fn hazards_polygon(ctx: Ctx<'_>) -> ApiResult<Response> {
         .and_then(Value::as_f64)
         .unwrap_or(0.0)
         .max(0.0) as usize;
-    let rows = all_hazards_with_feed(&ctx, 72).await?;
-    let result = domain::geo::in_polygon_hazards(&maps_to_data(&rows.items), &area, limit, offset);
+    let candidates = match spatial_hazard_rows(&ctx, json!({
+        "mode": "within",
+        "geometry": polygon,
+    })).await {
+        Some(rows) => rows,
+        None => all_hazards_with_feed(&ctx, 72).await?.items,
+    };
+    let result = domain::geo::in_polygon_hazards(&maps_to_data(&candidates), &area, limit, offset);
     Ok(web::json_response(json!({
         "items": data_to_values(result.items),
         "total": result.total,
