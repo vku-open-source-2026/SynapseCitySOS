@@ -375,10 +375,10 @@ returns explicit degraded/unavailable states when a call fails.
 
 Remaining blockers are adoption/release/operator steps:
 
-1. **Spatial adoption.** Tier 2 now has a PostGIS `near`/`bbox`/`within`
-   capability (`dataset.geo`). SOS still pages records and filters geo
-   predicates in memory with a bounded scan (`x-sos-scan-truncated` is returned
-   when the bound is hit); switching to the capability is a product change.
+1. **Spatial adoption.** Tier 2 has a PostGIS `near`/`bbox`/`within`
+   capability (`dataset.geo`). SOS hazard near/polygon endpoints call it first
+   and fall back to the bounded in-memory scan; `x-sos-scan-truncated` is only
+   returned on the fallback path.
 2. **SSE adoption.** The Tier-2 SSE feed exists and is deployed, but the SOS
    Rust client still polls the dataset; adopting SSE requires the Rust SDK event
    stream and a product workflow change.
