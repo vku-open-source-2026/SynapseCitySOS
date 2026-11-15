@@ -241,21 +241,11 @@ GET  /v1/sos
 *    /v1/ai
 ```
 
-`/v1/auth/*` is a stateless HMAC-SHA256 session shell for the console:
-login/register/refresh/logout/change-password/me/verify. Credentials are
-verified by the Tier-2 auth capability (`auth.login`, `auth.register`,
-`auth.refresh`, `auth.logout`, `auth.me`, `auth.changePassword`, optional
-`auth.exchange`); SOS stores no password and creates no SOS user dataset or City
-user record. The Tier-1/Tier-2 token stays inside the signed SOS session and is
-forwarded only to Tier-2 — it is never returned as a response field. Tokens are
-accepted only from the `Authorization` header, never a query string. Demo mode
-is an explicit development shell (see Run).
-
-Roles are always server-assigned: `SOS_BOOTSTRAP_ADMIN_EMAILS` grants `admin`,
-everything else gets `SOS_AUTH_DEFAULT_ROLE` (`responder`). Registration through
-Tier-2 creates a responder account (or `admin` for a bootstrap email). Password
-changes are delegated to Tier-2 when the session carries a Tier-2 token and
-return `503 identity_not_configured` otherwise.
+Every `/v1/auth/*` path returns `410 workspace_moved`. Login, registration,
+sessions, MFA and account lifecycle belong to SynapseDX; SOS stores no password
+and creates no SOS user dataset or City user record. Tokens are accepted only
+from the `Authorization` header, never a query string. Internal emergency
+routes still require a verified principal and the permission matrix below.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: reads need `emergency:read`, event/SITREP writes need

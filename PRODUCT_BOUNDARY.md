@@ -84,14 +84,13 @@ through `/v1/emergency/resources`. They are **not** City user records:
 - Dispatch assignment references an SOS resource unit, not a City operator ID.
   The canonical field is `assigned_resource_unit_id`; `assigned_user_id` is a
   deprecated wire mirror of the same opaque resource-unit id.
-- Login/register/profile settings use the SOS `/v1/auth` session shell. They do
-  not make a responder a City user.
+- Login/register/profile settings belong to SynapseDX. SOS `/v1/auth/*` is
+  retired and never makes a responder a City user.
 
 ## Auth retired
 
-Tier-3 login/session management is retired. `/v1/auth/login`, `/register` and
-`/refresh` return `410 workspace_moved`; legacy `/me`/session paths may answer
-`401`/`404` during the migration but are not a supported client surface. Login,
+Tier-3 login/session management is retired. Every `/v1/auth/*` path returns
+`410 workspace_moved`; there is no supported legacy session surface. Login,
 registration, sessions, MFA and account lifecycle belong to SynapseDX. SOS
 stores no password or identity table and never creates City users. Tokens are
 accepted only from the `Authorization` header, never a URL query.

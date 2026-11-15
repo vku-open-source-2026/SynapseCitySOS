@@ -58,9 +58,8 @@ are not City users. Do not add `/v1/users`, read `city-users`, or resolve City
 operator IDs. Dispatch assignment references an SOS resource unit under
 `assigned_resource_unit_id`; `assigned_user_id` is a deprecated mirror.
 
-Tier-3 login/session management is retired. `/v1/auth/login`, `/register` and
-`/refresh` return `410 workspace_moved`; legacy `/me`/session paths may answer
-`401`/`404` during the migration but are not a supported client surface. Login,
+Tier-3 login/session management is retired. Every `/v1/auth/*` path returns
+`410 workspace_moved`; there is no supported legacy session surface. Login,
 registration, sessions and roles belong to SynapseDX. Do not add a new local
 session store, password table or demo administrator path. Tokens are accepted
 only from `Authorization: Bearer`, never a query string.
