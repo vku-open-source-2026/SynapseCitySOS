@@ -369,9 +369,10 @@ Remaining blockers are adoption/release/operator steps:
    capability (`dataset.geo`). SOS hazard near/polygon endpoints call it first
    and fall back to the bounded in-memory scan; `x-sos-scan-truncated` is only
    returned on the fallback path.
-2. **SSE adoption.** The Tier-2 SSE feed exists and is deployed, but the SOS
-   Rust client still polls the dataset; adopting SSE requires the Rust SDK event
-   stream and a product workflow change.
+2. **SSE adoption.** The hazard stream now subscribes to the Tier-2 SSE feed
+   and re-reads the authoritative snapshot on a hazard event; the periodic
+   ticker remains the fallback when the stream is unavailable. The public frame
+   is still a sanitized snapshot, not a raw record payload.
 3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
    `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
    a Tier-2 service credential (`SYNAPSEDX_API_KEY`/`SYNAPSEDX_TOKEN`) to read
