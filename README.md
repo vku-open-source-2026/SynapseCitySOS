@@ -130,14 +130,14 @@ SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
 generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
 value in production so sessions survive a restart.
 
-**Tier-3 auth is retired (2026-11-14 workspace contract).** Every
-`/v1/auth/*` request returns `410` with
+**Tier-3 auth is retired (2026-11-14 workspace contract).**
+`/v1/auth/login`, `/register` and `/refresh` return `410` with
 `{ "error": "workspace_moved", "workspace_url": "https://synapsedx.sbs/workspace" }`
-before credential handling. Login, registration, session management and role
-assignment belong to SynapseDX. The remaining session code is reachable only in
-non-production test runs via `TIER3_AUTH_MODE=legacy`; production always ignores
-that variable and answers 410. Remove the code with the Rust migration. The
-historical `SOS_AUTH_MODE` / `SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only
+before credential handling. Legacy `/me`/session paths may answer `401`/`404`
+during the migration but are not a supported client surface. Login,
+registration, session management and role assignment belong to SynapseDX.
+Production ignores `TIER3_AUTH_MODE=legacy`. The historical `SOS_AUTH_MODE` /
+`SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only
 apply to that non-production legacy code path.
 
 | Variable | Default | Purpose |
@@ -367,18 +367,22 @@ to the browser.
 
 ## Known lower-tier dependencies
 
-Tier 2 now provides everything this product needs at runtime: the AI capability
-(`/v1/capabilities/ai/*`), the event feed (`/v1/capabilities/events`), record
-versions with `If-Match` (`/v1/capabilities/datasets/:id/records/:recordId`),
-and scheduled jobs with run history (`/v1/capabilities/jobs`). SOS uses them
-directly and returns explicit degraded/unavailable states when a call fails.
+Tier 2 provides the runtime capabilities: AI (`/v1/capabilities/ai/*`), the
+cursor and SSE event feeds (`/v1/capabilities/events[/stream]`), record
+versions with `If-Match`, spatial dataset queries, assignment optimization and
+scheduled jobs with run history. SOS uses the capabilities it has adopted and
+returns explicit degraded/unavailable states when a call fails.
 
-Remaining blockers are release/operator steps, not SOS work:
+Remaining blockers are adoption/release/operator steps:
 
-1. **Spatial query.** Tier 2 has no spatial predicate yet, so SOS pages records
-   and filters geo predicates in memory with a bounded scan
-   (`x-sos-scan-truncated` is returned when the bound is hit).
-2. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
+1. **Spatial adoption.** Tier 2 now has a PostGIS `near`/`bbox`/`within`
+   capability (`dataset.geo`). SOS still pages records and filters geo
+   predicates in memory with a bounded scan (`x-sos-scan-truncated` is returned
+   when the bound is hit); switching to the capability is a product change.
+2. **SSE adoption.** The Tier-2 SSE feed exists and is deployed, but the SOS
+   Rust client still polls the dataset; adopting SSE requires the Rust SDK event
+   stream and a product workflow change.
+3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
    `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
    a Tier-2 service credential (`SYNAPSEDX_API_KEY`/`SYNAPSEDX_TOKEN`) to read
    the job/run status and the event feed. Until it exists, ingest status is
@@ -402,10 +406,13 @@ The retired paths `/login`, `/register`, `/admin/**`, `/technician/**` and
 console nginx and the public edge, and the console root route redirects
 client-side. No local command-centre dashboard can be mounted from a deep link.
 
-**Release gate:** until the DX workflow binding for event and dispatch create actions is
-verified end to end, the declarative bundles stay read-only and the production
-work pages must not be retired or these redirects deployed. See
-`plugins/workflows/README.md` for the exact gap.
+**Release gate (closed for representative operations, 2026-11-14):** all 28
+workspace pages across City and SOS loaded in production DX with zero page,
+console or HTTP errors; SOS event, dispatch and generic resource create/update
+executed and the records were removed. Every individual form was not submitted;
+the remaining action gap is tracked in `plugins/workflows/README.md`. EOP
+approval/publication, SITREP deltas and the other unmigrated operation families
+still require their reviewed workflows.
 
 Tier-3 work interfaces are product plugins in DX; their portable source
 artifacts live in `plugins/` and are validated/synced with

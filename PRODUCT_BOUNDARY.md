@@ -87,36 +87,14 @@ through `/v1/emergency/resources`. They are **not** City user records:
 - Login/register/profile settings use the SOS `/v1/auth` session shell. They do
   not make a responder a City user.
 
-## Auth shell
+## Auth retired
 
-`/v1/auth/*` is reachable through the gateway and implemented by
-`apps/sos-service`. It issues a stateless HS256 session token
-(`event: access | refresh`) signed with `AUTH_SECRET`. The shell stores no
-passwords and creates no SOS user dataset or City user record.
-
-Identity (password verification, MFA, account lifecycle, revocation) is
-delegated to the Tier-1 IAM/API gateway through the Tier-2 auth capability:
-`SOS_AUTH_MODE=tier2` is the default and the production path, and the
-`@synapsedx/capabilities` `auth` namespace supplies login/register/refresh/
-logout/me/changePassword and the optional delegated exchange. The verified
-Tier-2 access/refresh token is carried inside the signed SOS session and is
-forwarded only to Tier-2; it is never exposed to the browser as a response
-field. If `AUTH_SECRET` is unset, the service generates an ephemeral secret at
-start-up and logs a warning.
-
-Roles are assigned by the server after verification: `responder` by default,
-`admin` only when the verified email is listed in `SOS_BOOTSTRAP_ADMIN_EMAILS`.
-(`SOS_AUTH_DEFAULT_ROLE` can adjust the fallback but can never grant `admin`.)
-A client-supplied `role` is ignored. Registration through Tier-2 creates a
-responder account (or `admin` for a bootstrap email); password change is
-delegated to Tier-2 and returns `503 identity_not_configured` without a Tier-2
-token.
-
-The development-only demo shell requires both `SOS_AUTH_MODE=demo` and
-`ALLOW_DEMO_AUTH=true` outside production; `NODE_ENV=production` refuses to
-start with either demo switch enabled. A demo login is always `responder`,
-registration is read-only, and demo sessions never grant `admin`/`manager`.
-Tokens are accepted only from the `Authorization` header, never a URL query.
+Tier-3 login/session management is retired. `/v1/auth/login`, `/register` and
+`/refresh` return `410 workspace_moved`; legacy `/me`/session paths may answer
+`401`/`404` during the migration but are not a supported client surface. Login,
+registration, sessions, MFA and account lifecycle belong to SynapseDX. SOS
+stores no password or identity table and never creates City users. Tokens are
+accepted only from the `Authorization` header, never a URL query.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: `emergency:read`, `emergency:write`,

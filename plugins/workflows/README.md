@@ -1,9 +1,11 @@
 # SOS workflow artifacts (operation migration source)
 
 Status: **create and status-transition flows (including event close/AAR) are
-source-ready and engine-tested against the real Tier-2 record envelope and the
-real Tier-1 engine; credential binding and deployment are not done.** No
-production redirect or page retirement is deployed.
+source-ready, engine-tested, pinned in production DX and representative
+operations were live-tested on 2026-11-14.** The public-only redirects are
+deployed. Individual form coverage and the remaining action families below are
+still tracked; EOP approval/publication, SITREP deltas and other unmigrated
+operations are not claimed complete.
 
 | Operation | Artifact | Tier-2 dataset | Status |
 | --- | --- | --- | --- |

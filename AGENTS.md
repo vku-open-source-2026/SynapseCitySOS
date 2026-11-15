@@ -58,28 +58,16 @@ are not City users. Do not add `/v1/users`, read `city-users`, or resolve City
 operator IDs. Dispatch assignment references an SOS resource unit under
 `assigned_resource_unit_id`; `assigned_user_id` is a deprecated mirror.
 
-`/v1/auth/*` is a stateless HMAC session shell for the console. It stores no
-passwords and creates no user dataset. Identity is verified through the Tier-2
-auth capability (`SOS_AUTH_MODE=tier2`, the default in every environment): the
-`auth` namespace (login/register/refresh/logout/me/changePassword/optional
-exchange) proxies Tier-1 IAM. The Tier-2 access/refresh token is kept inside the
-signed SOS session and forwarded only to Tier-2; it is never returned to the
-browser as a field. `AUTH_SECRET` is optional and falls back to an ephemeral
-start-up secret with a warning. Tokens are accepted only from
-`Authorization: Bearer`, never a query string.
+Tier-3 login/session management is retired. `/v1/auth/login`, `/register` and
+`/refresh` return `410 workspace_moved`; legacy `/me`/session paths may answer
+`401`/`404` during the migration but are not a supported client surface. Login,
+registration, sessions and roles belong to SynapseDX. Do not add a new local
+session store, password table or demo administrator path. Tokens are accepted
+only from `Authorization: Bearer`, never a query string.
 
-Roles are always server-assigned and never read from the request body, the
-token or `SOS_AUTH_DEFAULT_ROLE=admin`. A verified identity is a `responder`
-unless its email is in `SOS_BOOTSTRAP_ADMIN_EMAILS` (comma-separated), which
-grants `admin`; registration through Tier-2 creates a responder account (or
-`admin` for a bootstrap email). Password changes call Tier-2 when the session
-carries a Tier-2 token.
-
-Demo mode exists only with `SOS_AUTH_MODE=demo` **and** `ALLOW_DEMO_AUTH=true`
-outside production; `NODE_ENV=production` refuses to start with either demo
-switch enabled. Demo login is `responder`, registration is read-only
-`volunteer`, and demo sessions never grant `admin`/`manager`. `SOS_AUTH_MODE=demo`
-in production is a start-up error.
+Internal emergency routes still require a verified principal and the
+role-derived permission described below. The public projection and hazard feed
+remain anonymous read surfaces.
 
 Internal emergency routes require a session **and** a permission:
 `emergency:read` for reads, `emergency:write` for event/SITREP writes,
