@@ -13,6 +13,7 @@ use axum::body::Bytes;
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use futures::StreamExt;
 use serde_json::{json, Map, Value};
 use synapsedx::RequestOptions;
 
@@ -2776,41 +2777,132 @@ async fn hazard_deploy(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     })))
 }
 
+/// Snapshot frame shared by the periodic fallback and the live-event trigger.
+async fn hazard_snapshot_frame(state: &AppState, opts: &RequestOptions) -> String {
+    match tier2::list_all_public(
+        &state.tier2,
+        opts,
+        tier2::HAZARDS,
+        state.config.max_scan_records,
+    )
+    .await
+    {
+        Ok(rows) => {
+            let snapshot: Vec<Value> = rows.items.into_iter().map(Value::Object).collect();
+            domain::hazards::sse_hazards_frame(
+                &json!({
+                    "snapshot": snapshot,
+                    "degraded": false,
+                    "last_good_at": crate::now_iso(),
+                    "transport": "snapshot-poll",
+                    "source": "poll",
+                }),
+                None,
+            )
+        }
+        Err(error) => domain::hazards::sse_error_frame(
+            &json!({
+                "error": "hazard_stream_degraded",
+                "message": "Hazard data is temporarily unavailable.",
+                "retry_ms": 5000,
+                "last_good_at": Value::Null,
+                "has_snapshot": false,
+                "transport": "snapshot-poll",
+                "detail": error.to_string(),
+            }),
+            None,
+        ),
+    }
+}
+
+/// Subscribe to Tier-2 capability events and wake the snapshot loop as soon as
+/// a hazard record changes. Retries forever; the periodic ticker remains the
+/// correctness fallback when the stream is unavailable.
+async fn watch_tier2_hazard_events(state: AppState, wake: tokio::sync::mpsc::Sender<()>) {
+    let Some(api_key) = state
+        .config
+        .tier2_api_key
+        .clone()
+        .or_else(|| state.config.tier2_token.clone())
+    else {
+        return;
+    };
+    let url = format!(
+        "{}/v1/capabilities/events/stream",
+        state.config.tier2_url.trim_end_matches('/')
+    );
+    let client = match reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return,
+    };
+    loop {
+        let mut request = client
+            .get(&url)
+            .header("accept", "text/event-stream")
+            .header("cache-control", "no-cache");
+        request = if state.config.tier2_api_key.is_some() {
+            request.header("x-api-key", &api_key)
+        } else {
+            request.header("authorization", format!("Bearer {api_key}"))
+        };
+        match request.send().await {
+            Ok(response) if response.status().is_success() => {
+                let mut body = response.bytes_stream();
+                let mut buffer: Vec<u8> = Vec::new();
+                while let Some(chunk) = body.next().await {
+                    let Ok(chunk) = chunk else { break };
+                    buffer.extend_from_slice(&chunk);
+                    while let Some(position) = buffer.windows(2).position(|pair| pair == b"\n\n") {
+                        let frame = String::from_utf8_lossy(&buffer[..position]).to_string();
+                        buffer.drain(..position + 2);
+                        if frame.lines().any(|line| line.trim() == "event: capability") {
+                            // Capacity one coalesces bursts; the snapshot is
+                            // re-read from Tier-2, never built from the event.
+                            let _ = wake.try_send(());
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
 async fn hazard_stream(ctx: Ctx<'_>) -> ApiResult<Response> {
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(16);
     let state = ctx.state.clone();
     let headers = ctx.headers.clone();
     let session = ctx.session.cloned();
     let interval_ms = state.config.stream_poll_ms;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(1);
+    tokio::spawn(watch_tier2_hazard_events(state.clone(), event_tx));
     tokio::spawn(async move {
         let opts = tier2::request_options(&state.config, &headers, session.as_ref());
         let mut ticker = tokio::time::interval(Duration::from_millis(interval_ms));
         let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
         let _ = tx.send(Ok(Bytes::from(": connected\n\nretry: 5000\n\n"))).await;
+        // Initial snapshot is immediate; the event feed then wakes the same
+        // authoritative read instead of streaming record payloads to browsers.
+        let initial = hazard_snapshot_frame(&state, &opts).await;
+        if tx.send(Ok(Bytes::from(initial))).await.is_err() {
+            return;
+        }
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
-                    let frame = match tier2::list_all_public(&state.tier2, &opts, tier2::HAZARDS, state.config.max_scan_records).await {
-                        Ok(rows) => {
-                            let snapshot: Vec<Value> = rows.items.into_iter().map(Value::Object).collect();
-                            domain::hazards::sse_hazards_frame(&json!({
-                                "snapshot": snapshot,
-                                "degraded": false,
-                                "last_good_at": crate::now_iso(),
-                                "transport": "snapshot-poll",
-                                "source": "poll",
-                            }), None)
-                        }
-                        Err(error) => domain::hazards::sse_error_frame(&json!({
-                            "error": "hazard_stream_degraded",
-                            "message": "Hazard data is temporarily unavailable.",
-                            "retry_ms": 5000,
-                            "last_good_at": Value::Null,
-                            "has_snapshot": false,
-                            "transport": "snapshot-poll",
-                            "detail": error.to_string(),
-                        }), None),
-                    };
+                    let frame = hazard_snapshot_frame(&state, &opts).await;
+                    if tx.send(Ok(Bytes::from(frame))).await.is_err() {
+                        return;
+                    }
+                }
+                Some(()) = event_rx.recv() => {
+                    // Coalesce a burst, then read the authoritative snapshot.
+                    while event_rx.try_recv().is_ok() {}
+                    let frame = hazard_snapshot_frame(&state, &opts).await;
                     if tx.send(Ok(Bytes::from(frame))).await.is_err() {
                         return;
                     }
