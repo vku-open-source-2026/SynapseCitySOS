@@ -204,7 +204,8 @@ export function createApp(options: GatewayOptions = {}): express.Express {
     res.setHeader('referrer-policy', 'no-referrer');
     res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
     if (req.method === 'OPTIONS') return res.status(204).end();
-    res.setHeader('x-correlation-id', req.header('x-correlation-id') || randomUUID());
+    const incoming = req.header('x-correlation-id');
+    res.setHeader('x-correlation-id', incoming && /^[A-Za-z0-9_.:-]{1,128}$/.test(incoming) ? incoming : randomUUID());
     const start = process.hrtime.bigint();
     const label = routeLabel(req);
     res.on('finish', () => {

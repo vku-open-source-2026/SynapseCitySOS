@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import { escapeHtml } from '../lib/escapeHtml';
 import type { Hazard, HazardEventType, HazardSeverity } from '../types/hazard';
 
 // ── Visual config ────────────────────────────────────────────────────────────
@@ -98,16 +99,16 @@ function makePopupContent(h: Hazard): string {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:20px">${emoji}</span>
         <div>
-          <div style="font-weight:700;font-size:14px;color:#0f172a">${h.title}</div>
-          <div style="font-size:11px;color:#64748b">${typeLabel}</div>
+          <div style="font-weight:700;font-size:14px;color:#0f172a">${escapeHtml(h.title)}</div>
+          <div style="font-size:11px;color:#64748b">${escapeHtml(typeLabel)}</div>
         </div>
       </div>
       <div style="display:inline-block;padding:2px 8px;border-radius:999px;background:${color}22;color:${color};font-size:11px;font-weight:700;margin-bottom:8px">
-        ⚠ Mức độ: ${severityLabel}
+        ⚠ Mức độ: ${escapeHtml(severityLabel)}
       </div>
-      ${h.description ? `<div style="font-size:12px;color:#374151;margin-bottom:6px">${h.description}</div>` : ''}
-      ${h.district ? `<div style="font-size:11px;color:#64748b">📍 ${h.district}${h.ward ? ', ' + h.ward : ''}</div>` : ''}
-      <div style="font-size:11px;color:#94a3b8;margin-top:4px">Hết hiệu lực: ${expiresAt}</div>
+      ${h.description ? `<div style="font-size:12px;color:#374151;margin-bottom:6px">${escapeHtml(h.description)}</div>` : ''}
+      ${h.district ? `<div style="font-size:11px;color:#64748b">📍 ${escapeHtml(h.district)}${h.ward ? ', ' + escapeHtml(h.ward) : ''}</div>` : ''}
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px">Hết hiệu lực: ${escapeHtml(expiresAt)}</div>
     </div>`;
 }
 

@@ -15,6 +15,8 @@ import {
     Home,
     LifeBuoy,
     Siren,
+    Sparkles,
+    Send,
 } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -24,6 +26,7 @@ import { useVndmsHazards, useVndmsStatus, type VndmsHazard } from "../hooks/useV
 import HazardMarkersLayer from "../components/HazardMarkersLayer";
 import EmergencyEventsLayer from "../components/EmergencyEventsLayer";
 import { hazardsApi } from "../api/hazards";
+import { aiApi, type AiAnswer } from "../api/ai";
 import { resourcesApi, type NearbyShelter } from "../api/resources";
 import { usePublicEmergencyEvents } from "../hooks/usePublicEmergencyEvents";
 import { emergencyStatusLabel, emergencyStatusTone, isOngoingEmergencyStatus } from "../lib/emergencyStatus";
@@ -87,6 +90,15 @@ function timeAgo(ms: number): string {
     const h = Math.floor(m / 60);
     if (h < 24) return `${h} giờ trước`;
     return `${Math.floor(h / 24)} ngày trước`;
+}
+
+/** Model output is plain text in the panel; strip Markdown markers safely. */
+function formatAiText(text: string): string {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/^#{1,6}\s+/gm, "")
+        .replace(/^\s*[-*]\s+/gm, "• ");
 }
 
 function haversineKm(
@@ -443,6 +455,11 @@ const PublicHazardMap: React.FC = () => {
     const [focusedHazardId, setFocusedHazardId] = useState<string | null>(null);
     const [focusHazardNonce, setFocusHazardNonce] = useState(0);
     const [showHelp, setShowHelp] = useState(false);
+    const [aiQuestion, setAiQuestion] = useState("");
+    const [aiAnswer, setAiAnswer] = useState<AiAnswer | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
+    const [aiAsking, setAiAsking] = useState(false);
+    const [aiBriefExpanded, setAiBriefExpanded] = useState(false);
 
     const {
         data: vndmsHazards = [],
@@ -464,6 +481,20 @@ const PublicHazardMap: React.FC = () => {
         queryFn: () => hazardsApi.list({ is_active: true, limit: 200 }),
         staleTime: 60_000,
         refetchInterval: 5 * 60_000,
+    });
+
+    const {
+        data: aiBrief,
+        isLoading: aiBriefLoading,
+        isError: aiBriefError,
+        isFetching: aiBriefFetching,
+        refetch: refetchAiBrief,
+    } = useQuery({
+        queryKey: ["ai", "brief"],
+        queryFn: () => aiApi.brief({ hours: 24, limit: 8 }),
+        staleTime: 5 * 60_000,
+        refetchInterval: (query) => (query.state.data?.fallback ? 30_000 : 5 * 60_000),
+        retry: 1,
     });
 
     const {
@@ -637,6 +668,21 @@ const PublicHazardMap: React.FC = () => {
         if (filterChip === "near" && userLocation) void refetchNearby();
     }, [refetchVndms, refetchStored, refetchEvents, refetchNearby, filterChip, userLocation]);
 
+    const handleAskAi = useCallback(async () => {
+        const question = aiQuestion.trim();
+        if (!question || aiAsking) return;
+        setAiAsking(true);
+        setAiError(null);
+        try {
+            setAiAnswer(await aiApi.ask(question, 5));
+        } catch (error) {
+            console.error("AI ask failed", error);
+            setAiError("AI tạm thời không trả lời được. Vui lòng thử lại sau.");
+        } finally {
+            setAiAsking(false);
+        }
+    }, [aiQuestion, aiAsking]);
+
     const handleFindShelters = useCallback(() => {
         if (!navigator.geolocation) {
             setShelterError("Trình duyệt không hỗ trợ định vị.");
@@ -741,7 +787,7 @@ const PublicHazardMap: React.FC = () => {
                         </h2>
                         <p className="text-[11px] text-white/80 hidden sm:block">
                             Cập nhật công khai · Dành cho người dân
-                            {!vndmsConfigured ? " · nguồn VNDMS chưa cấu hình" : ""}
+                            {!vndmsConfigured ? " · nguồn KTTV chưa cấu hình" : " · nguồn KTTV đã kết nối"}
                         </p>
                     </div>
                 </div>
@@ -823,7 +869,7 @@ const PublicHazardMap: React.FC = () => {
                                     { key: "near", label: "Gần tôi" },
                                 ] as const
                             ).map((chip) => {
-                                const disabled =
+                                const needsLocation =
                                     chip.key === "near" && !userLocation;
                                 const active = filterChip === chip.key;
                                 return (
@@ -837,9 +883,8 @@ const PublicHazardMap: React.FC = () => {
                                             }
                                             setFilterChip(chip.key);
                                         }}
-                                        disabled={disabled && filterChip !== chip.key}
                                         title={
-                                            disabled
+                                            needsLocation
                                                 ? "Cho phép định vị để dùng bộ lọc này"
                                                 : undefined
                                         }
@@ -847,10 +892,6 @@ const PublicHazardMap: React.FC = () => {
                                             active
                                                 ? "bg-red-600 text-white border-red-600"
                                                 : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                                        } ${
-                                            disabled && !active
-                                                ? "opacity-60 cursor-not-allowed"
-                                                : ""
                                         }`}
                                     >
                                         {chip.label}
@@ -894,6 +935,143 @@ const PublicHazardMap: React.FC = () => {
 
                     {/* List sections */}
                     <div className="flex-1 overflow-y-auto p-3 space-y-4">
+                        {/* Section 0: grounded AI situation brief */}
+                        <section>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-[11px] uppercase font-bold tracking-wide text-violet-700 flex items-center gap-1">
+                                    <Sparkles size={12} /> AI nhận định tình hình
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => void refetchAiBrief()}
+                                    disabled={aiBriefFetching}
+                                    className="p-1.5 rounded-lg text-violet-600 hover:bg-violet-50 disabled:opacity-40"
+                                    title="Làm mới nhận định AI"
+                                >
+                                    <RefreshCw size={12} className={aiBriefFetching ? "animate-spin" : ""} />
+                                </button>
+                            </div>
+                            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+                                {aiBriefLoading ? (
+                                    <p className="text-[11px] text-slate-500">Đang tổng hợp tình hình…</p>
+                                ) : aiBriefError ? (
+                                    <div className="text-[11px] text-slate-600">
+                                        <p className="font-semibold text-violet-800">AI tạm thời không khả dụng.</p>
+                                        <p className="mt-0.5">Bản đồ và cảnh báo chính thức vẫn hoạt động bình thường.</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => void refetchAiBrief()}
+                                            className="mt-2 text-[11px] font-bold text-violet-700 underline"
+                                        >
+                                            Thử lại
+                                        </button>
+                                    </div>
+                                ) : aiBrief ? (
+                                    <>
+                                        <p
+                                            className="text-xs text-slate-700 whitespace-pre-line leading-relaxed"
+                                            style={aiBriefExpanded ? undefined : {
+                                                display: "-webkit-box",
+                                                WebkitLineClamp: 6,
+                                                WebkitBoxOrient: "vertical",
+                                                overflow: "hidden",
+                                            }}
+                                        >
+                                            {formatAiText(aiBrief.brief)}
+                                        </p>
+                                        {aiBrief.brief.length > 360 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setAiBriefExpanded((value) => !value)}
+                                                className="mt-1 text-[10px] font-bold text-violet-700 underline"
+                                            >
+                                                {aiBriefExpanded ? "Thu gọn" : "Xem thêm"}
+                                            </button>
+                                        )}
+                                        {aiBrief.hazards.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                {aiBrief.hazards.slice(0, 5).map((hazard) => (
+                                                    <a
+                                                        key={hazard.id}
+                                                        href={hazard.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        title={hazard.title}
+                                                        className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-violet-200 text-violet-700 hover:bg-violet-100"
+                                                    >
+                                                        {hazard.title.slice(0, 28)}
+                                                        {hazard.title.length > 28 ? "…" : ""}
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <p className="mt-2 text-[10px] text-slate-500">
+                                            {aiBrief.fallback
+                                                ? "Tóm tắt tất định từ feed cảnh báo"
+                                                : `AI · ${aiBrief.model ?? "trợ lý"}`}
+                                            {" · "}
+                                            {new Date(aiBrief.generated_at).toLocaleString("vi-VN")}
+                                        </p>
+                                    </>
+                                ) : null}
+
+                                <div className="mt-3 flex gap-1.5">
+                                    <input
+                                        value={aiQuestion}
+                                        onChange={(e) => setAiQuestion(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                void handleAskAi();
+                                            }
+                                        }}
+                                        placeholder="Hỏi AI về tình hình…"
+                                        className="flex-1 min-w-0 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-[11px] text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleAskAi()}
+                                        disabled={aiAsking || !aiQuestion.trim()}
+                                        className="px-2.5 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40"
+                                        title="Hỏi AI"
+                                    >
+                                        <Send size={13} />
+                                    </button>
+                                </div>
+                                {aiError && <p className="mt-2 text-[10px] text-red-600">{aiError}</p>}
+                                {aiAnswer && (
+                                    <div className="mt-2 rounded-lg border border-violet-100 bg-white p-2.5">
+                                        <p className="text-[11px] text-slate-700 whitespace-pre-line leading-relaxed">
+                                            {formatAiText(aiAnswer.answer)}
+                                        </p>
+                                        {aiAnswer.citations.length > 0 && (
+                                            <div className="mt-1.5 flex flex-wrap gap-1">
+                                                {aiAnswer.citations.slice(0, 4).map((citation) =>
+                                                    citation.url ? (
+                                                        <a
+                                                            key={`${citation.documentId}-${citation.index}`}
+                                                            href={citation.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            title={citation.title}
+                                                            className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 hover:bg-violet-100"
+                                                        >
+                                                            [{citation.index}] {citation.title.slice(0, 24)}
+                                                            {citation.title.length > 24 ? "…" : ""}
+                                                        </a>
+                                                    ) : (
+                                                        <span key={`${citation.documentId}-${citation.index}`} className="text-[10px] text-slate-500">
+                                                            [{citation.index}] {citation.title.slice(0, 24)}
+                                                        </span>
+                                                    ),
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
                         {/* Section 1: ongoing rescue operations */}
                         <section>
                             <h3 className="text-[11px] uppercase font-bold tracking-wide text-red-600 mb-2 flex items-center gap-1">
@@ -919,8 +1097,14 @@ const PublicHazardMap: React.FC = () => {
                         {/* Section 2: hazards 24h */}
                         <section>
                             <h3 className="text-[11px] uppercase font-bold tracking-wide text-amber-700 mb-2 flex items-center gap-1">
-                                ⚠️ Cảnh báo thiên tai
+                                ⚠️ Cảnh báo thiên tai hôm nay
                             </h3>
+                            <p className="text-[10px] text-slate-500 mb-2">
+                                Nguồn NCHMF/VNDMS ·{" "}
+                                {vndmsStatus?.last_success_at
+                                    ? new Date(vndmsStatus.last_success_at).toLocaleString("vi-VN")
+                                    : "đang cập nhật"}
+                            </p>
                             {dataError ? (
                                 <div className="text-center py-6 text-slate-400">
                                     <ShieldAlert size={28} className="mx-auto mb-2 opacity-30" />

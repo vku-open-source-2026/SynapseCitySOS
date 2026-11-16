@@ -74,11 +74,8 @@ port, queue or database.
 - The console filters terminal statuses client-side as well and uses a shared
   `emergencyStatusLabel`, so a cached payload never labels a resolved/canceled
   event "Đang triển khai".
-- SDK: the workspace `@synapsedx/capabilities` package (0.3.0 locally at the
-  time of writing) is **not published** (`npm view` → 404), so
-  `file:../../../SynapseDX/sdks/capabilities-js` stays and `prebuild` builds the
-  local SDK. Replacing it with the published semver range is an operator release
-  step; #19 stays open only for that publish.
+- SDK: SOS installs `@synapsedx/capabilities@^0.3.0` from the public npm
+  registry. No sibling checkout, vendored tarball or prebuild is used.
 
 ## #20 — idempotency, ETag, metrics, timeouts, binary proxy
 

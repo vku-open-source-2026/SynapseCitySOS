@@ -1,0 +1,894 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Rescue operations",
+    "slug": "sos-rescue-operations",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator",
+      "responder"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Responders work from the active event, assigned dispatch orders and resource status. Completing a task requires the assignment recorded by the dispatch workflow.",
+        "type": "heading",
+        "title": "Rescue task execution",
+        "width": "full"
+      },
+      {
+        "id": "workspace-navigation",
+        "type": "navigation",
+        "title": "Quick access",
+        "width": "full",
+        "links": [
+          {
+            "label": "Overview",
+            "target": "page:sos-command-overview",
+            "actionId": "act-workspace-navigation-link1"
+          },
+          {
+            "label": "Hazard watch",
+            "target": "page:sos-hazard-watch",
+            "actionId": "act-workspace-navigation-link2"
+          },
+          {
+            "label": "Dispatch",
+            "target": "page:sos-dispatch-board",
+            "actionId": "act-workspace-navigation-link3"
+          },
+          {
+            "label": "Resources",
+            "target": "page:sos-resource-registry",
+            "actionId": "act-workspace-navigation-link4"
+          },
+          {
+            "label": "Team tasks",
+            "target": "module:tasks",
+            "actionId": "act-workspace-navigation-link5"
+          }
+        ]
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch",
+        "onLoad": "act-dispatch-metric-load"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Resources",
+        "width": "half",
+        "resource": "resources",
+        "onLoad": "act-resources-metric-load"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events",
+        "onLoad": "act-events-metric-load"
+      },
+      {
+        "id": "resources-map",
+        "type": "map",
+        "title": "Resources · Live map",
+        "width": "full",
+        "resource": "resources",
+        "columns": [
+          "id",
+          "name",
+          "title",
+          "status",
+          "severity",
+          "address",
+          "district",
+          "latitude",
+          "longitude",
+          "geometry",
+          "geometry_json",
+          "location",
+          "current_location",
+          "current_location_json"
+        ],
+        "onLoad": "act-resources-map-load",
+        "onRowClick": "act-resources-map-row",
+        "onExport": "act-resources-map-export"
+      },
+      {
+        "id": "events-map",
+        "type": "map",
+        "title": "Events · Live map",
+        "width": "full",
+        "resource": "events",
+        "columns": [
+          "id",
+          "name",
+          "title",
+          "status",
+          "severity",
+          "address",
+          "district",
+          "latitude",
+          "longitude",
+          "geometry",
+          "geometry_json",
+          "location",
+          "current_location",
+          "current_location_json"
+        ],
+        "onLoad": "act-events-map-load",
+        "onRowClick": "act-events-map-row",
+        "onExport": "act-events-map-export"
+      },
+      {
+        "id": "records-section",
+        "type": "divider",
+        "title": "Operational picture",
+        "width": "full"
+      },
+      {
+        "id": "dispatch-table",
+        "type": "table",
+        "title": "Assigned tasks",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "task_title",
+          "priority",
+          "status",
+          "assigned_resource_unit_id",
+          "eta_minutes",
+          "completed_at"
+        ],
+        "resource": "dispatch",
+        "onLoad": "act-dispatch-table-load",
+        "onRowClick": "act-dispatch-table-row",
+        "onExport": "act-dispatch-table-export"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Resource availability",
+        "width": "full",
+        "columns": [
+          "id",
+          "resource_code",
+          "name",
+          "resource_type",
+          "status",
+          "district",
+          "contact_phone"
+        ],
+        "resource": "resources",
+        "onLoad": "act-resources-table-load",
+        "onRowClick": "act-resources-table-row",
+        "onExport": "act-resources-table-export"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Event context",
+        "width": "full",
+        "columns": [
+          "id",
+          "event_code",
+          "title",
+          "event_type",
+          "severity",
+          "status"
+        ],
+        "resource": "events",
+        "onLoad": "act-events-table-load",
+        "onRowClick": "act-events-table-row",
+        "onExport": "act-events-table-export"
+      },
+      {
+        "id": "actions-section",
+        "type": "divider",
+        "title": "Take action",
+        "width": "full"
+      },
+      {
+        "id": "dispatch-start",
+        "type": "form",
+        "title": "Start a task",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: start"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-dispatch-start-submit"
+      },
+      {
+        "id": "dispatch-arrive",
+        "type": "form",
+        "title": "Mark on scene",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Dispatch id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: arrive"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-dispatch-arrive-submit"
+      },
+      {
+        "id": "dispatch-complete",
+        "type": "form",
+        "title": "Complete a task",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "text",
+            "label": "Dispatch id",
+            "required": true
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-complete",
+          "checksum": "db4d5752f4615436852703930ec9ec00f78054b79c879be27385b1225edfe9b2"
+        },
+        "onSubmit": "act-dispatch-complete-submit"
+      },
+      {
+        "id": "resource-status",
+        "type": "form",
+        "title": "Update my resource status",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "Resource id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: available, deploy, unavailable or maintain",
+            "required": true
+          }
+        ],
+        "resource": "resources",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-resource-status-submit"
+      },
+      {
+        "id": "act-workspace-navigation-link1",
+        "type": "action",
+        "title": "Navigate Overview",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-command-overview"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link2",
+        "type": "action",
+        "title": "Navigate Hazard watch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-hazard-watch"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link3",
+        "type": "action",
+        "title": "Navigate Dispatch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-dispatch-board"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link4",
+        "type": "action",
+        "title": "Navigate Resources",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-resource-registry"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link5",
+        "type": "action",
+        "title": "Navigate Team tasks",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "module:tasks"
+        }
+      },
+      {
+        "id": "act-dispatch-metric-load",
+        "type": "action",
+        "title": "Read Dispatch orders",
+        "operation": {
+          "kind": "query",
+          "target": "dispatch-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "dispatch"
+        }
+      },
+      {
+        "id": "act-resources-metric-load",
+        "type": "action",
+        "title": "Read Resources",
+        "operation": {
+          "kind": "query",
+          "target": "resources-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "resources"
+        }
+      },
+      {
+        "id": "act-events-metric-load",
+        "type": "action",
+        "title": "Read Events",
+        "operation": {
+          "kind": "query",
+          "target": "events-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-resources-map-load",
+        "type": "action",
+        "title": "Read Resources · Live map",
+        "operation": {
+          "kind": "query",
+          "target": "resources-map",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "resources"
+        }
+      },
+      {
+        "id": "act-resources-map-row",
+        "type": "action",
+        "title": "Inspect Resources · Live map",
+        "operation": {
+          "kind": "showRecord",
+          "target": "resources-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resources-map-export",
+        "type": "action",
+        "title": "Export Resources · Live map",
+        "operation": {
+          "kind": "export",
+          "target": "resources-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-map-load",
+        "type": "action",
+        "title": "Read Events · Live map",
+        "operation": {
+          "kind": "query",
+          "target": "events-map",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-events-map-row",
+        "type": "action",
+        "title": "Inspect Events · Live map",
+        "operation": {
+          "kind": "showRecord",
+          "target": "events-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-map-export",
+        "type": "action",
+        "title": "Export Events · Live map",
+        "operation": {
+          "kind": "export",
+          "target": "events-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-table-load",
+        "type": "action",
+        "title": "Read Assigned tasks",
+        "operation": {
+          "kind": "query",
+          "target": "dispatch-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "dispatch"
+        }
+      },
+      {
+        "id": "act-dispatch-table-row",
+        "type": "action",
+        "title": "Inspect Assigned tasks",
+        "operation": {
+          "kind": "showRecord",
+          "target": "dispatch-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-table-export",
+        "type": "action",
+        "title": "Export Assigned tasks",
+        "operation": {
+          "kind": "export",
+          "target": "dispatch-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resources-table-load",
+        "type": "action",
+        "title": "Read Resource availability",
+        "operation": {
+          "kind": "query",
+          "target": "resources-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "resources"
+        }
+      },
+      {
+        "id": "act-resources-table-row",
+        "type": "action",
+        "title": "Inspect Resource availability",
+        "operation": {
+          "kind": "showRecord",
+          "target": "resources-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resources-table-export",
+        "type": "action",
+        "title": "Export Resource availability",
+        "operation": {
+          "kind": "export",
+          "target": "resources-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-table-load",
+        "type": "action",
+        "title": "Read Event context",
+        "operation": {
+          "kind": "query",
+          "target": "events-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-events-table-row",
+        "type": "action",
+        "title": "Inspect Event context",
+        "operation": {
+          "kind": "showRecord",
+          "target": "events-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-table-export",
+        "type": "action",
+        "title": "Export Event context",
+        "operation": {
+          "kind": "export",
+          "target": "events-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-start-submit",
+        "type": "action",
+        "title": "Submit Start a task",
+        "operation": {
+          "kind": "execute",
+          "target": "dispatch-start",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "decision",
+              "source": "event",
+              "value": "values.decision",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-start-open",
+        "type": "action",
+        "title": "Open Start a task",
+        "operation": {
+          "kind": "openForm",
+          "target": "dispatch-start",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-arrive-submit",
+        "type": "action",
+        "title": "Submit Mark on scene",
+        "operation": {
+          "kind": "execute",
+          "target": "dispatch-arrive",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "decision",
+              "source": "event",
+              "value": "values.decision",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-arrive-open",
+        "type": "action",
+        "title": "Open Mark on scene",
+        "operation": {
+          "kind": "openForm",
+          "target": "dispatch-arrive",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-complete-submit",
+        "type": "action",
+        "title": "Submit Complete a task",
+        "operation": {
+          "kind": "update",
+          "target": "dispatch-complete",
+          "mappings": [
+            {
+              "field": "order_id",
+              "source": "event",
+              "value": "values.order_id",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-complete-open",
+        "type": "action",
+        "title": "Open Complete a task",
+        "operation": {
+          "kind": "openForm",
+          "target": "dispatch-complete",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resource-status-submit",
+        "type": "action",
+        "title": "Submit Update my resource status",
+        "operation": {
+          "kind": "execute",
+          "target": "resource-status",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "decision",
+              "source": "event",
+              "value": "values.decision",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resource-status-open",
+        "type": "action",
+        "title": "Open Update my resource status",
+        "operation": {
+          "kind": "openForm",
+          "target": "resource-status",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-rescue-operations.plugin.json",
+    "revision": "2026-11-15.business"
+  },
+  "checksum": "sha256:c1d50d501074b6804940f720701df432847880258bd4c86fc1d4341fbbbd3cb7"
+}

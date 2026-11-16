@@ -3,7 +3,104 @@
 All notable changes to SynapseCitySOS are documented here. Entries follow the
 Keep a Changelog format and version tags use Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+- Hazard near/polygon endpoints call the Tier-2 PostGIS spatial capability
+  first and fall back to the bounded in-process scan when unavailable.
+- The live hazard SSE stream subscribes to the Tier-2 capability event feed and
+  wakes the authoritative snapshot; the periodic ticker remains the fallback.
+- Full SOS work-page catalog (14 portable bundles): command overview, event
+  command, dispatch board, resource registry, EOP console, SITREP desk,
+  after-action review, hazard watch/ingest, phase boards, mutual aid, operator
+  review, rescue operations, responder board and volunteer desk. The catalog
+  covers every non-public SOS role.
+- Generic `sos-workspace-actions` workflow dispatcher plus its checked-in
+  generator. It supports allowlisted create/update/delete/execute actions for
+  events, dispatch, resource units, SITREPs, EOP plans, after-action reports,
+  hazard layers, ingest runs and mutual-aid requests through the Tier-2 records
+  API with the organization technical credential.
+- Portable SOS workspace plugin bundles under `plugins/` with
+  `scripts/plugin-bundle.mjs` for strict validation, checksum verification and
+  HTTPS DX export/import/sync (`docs/PLUGIN_SYNC.md`).
+- Product-owned Tier-1 workflow artifacts under `plugins/workflows/` for
+  emergency.events.create, emergency.dispatch.create/complete/reject and emergency.close: create HTTP POST, transition GET(`includeInput:true`) → domain merge →
+  conditional PATCH (`ifVersion`), AAR-before-event-close. Auth is the portable
+  `synapsedx-organization` credentialRef; plugin bundles bind forms with
+  `workflowRef`/action create|update. Source-ready and engine-tested, inactive
+  until DX binds the credential/pins.
+- `plugins/source/` preserves the exact pre-migration SOS route, command-centre
+  page and component source (with revision and SHA-256 manifest) as reference;
+  it is outside the build.
+
+### Changed
+- DX repository export is now published-only; a draft answers `409
+  plugin_not_published`. `plugin-bundle.mjs sync` compares `source` provenance
+  as well as the plugin checksum, so a path/repository-only change is written
+  instead of being reported as `in-sync`.
+- Tier 3 is public presentation only (2026-11-14 workspace contract). Login,
+  registration and every emergency command dashboard moved to
+  `https://synapsedx.sbs/workspace`; `/login`, `/register`, `/admin/**`,
+  `/technician/**` and `/workspace/**` return `308` (nginx and client root
+  route). The public hazard map stays.
+- `/v1/auth/*` answers `410 workspace_moved` with `workspace_url` before any
+  credential handling; production ignores `TIER3_AUTH_MODE=legacy`.
+- Mobile app: new Synapse logo system (app icon, adaptive/monochrome icon,
+  splash, notification icon); Android version 0.1.1 (versionCode 2).
+- SOS brand mark switched to the orange/amber emergency palette; Android
+  version 0.1.2 (versionCode 3).
+- The public gateway is now a Rust/Axum service (`apps/gateway/src/main.rs`)
+  with the same product-boundary, proxy, CORS, correlation-ID, timeout,
+  metrics, binary and SSE behavior. The Docker image builds the release binary
+  and uses `--healthcheck` instead of Node.js.
+
+## [0.2.2] - 2026-11-10
+
+### Added
+- Public GHCR images for `sos-service`, `gateway` and `console` with
+  `vX.Y.Z`, `latest` and `sha-<commit>` tags, plus a self-host guide covering
+  `docker compose pull` and building from source.
+
+### Fixed
+- Every legacy `/v1/auth/*` path now returns `410 workspace_moved`; the
+  previously reachable `/me`/`logout` paths no longer answer 401/404, and
+  `/v1/sos` advertises the retired contract.
+- The gateway no longer applies its whole-request timeout to
+  `/v1/emergency/stream/*` and no longer echoes upstream error text in health
+  responses.
+- The public browser gate covers the live map/navigation surface; retired
+  command-centre specs no longer gate CI.
+- Console UI audit: added a mounted emergency-event creation route, enabled
+  the “Gần tôi” filter to request geolocation, escaped Leaflet popup text,
+  rendered AI text without raw Markdown, removed product/architecture scope
+  copy from operator/citizen screens, translated phase-board labels, fixed
+  the footer About/contribution links, and localized the event-resolution
+  note.
+
 ## [Unreleased] — Tier-2 AI, event feed and ETag integration
+### Added
+- **AI situation panel**: the public map calls `POST /v1/ai/brief` for a
+  grounded 24-hour brief with source citations and `POST /v1/ai/ask` for
+  knowledge-base RAG answers. Both use the published Tier-2 SDK
+  (`@synapsedx/capabilities@^0.5.1`); no Tier-1/model key exists in SOS.
+- **Live KTTV hazard feed**: the public map reads
+  `@synapsedx/capabilities@0.4.0` `hazards.today` through a 30-second
+  read-through cache and merges it into `/v1/hazards`, `/v1/hazards/recent`
+  and the geo queries. Crawler status is projected into
+  `/v1/hazards/ingest/status`.
+- The map panel now shows **"Cảnh báo thiên tai hôm nay"** with the
+  NCHMF/VNDMS source and the last successful update time.
+
+### Security
+- `AUTH_SECRET` must be set in production: the service fails fast instead of
+  silently generating an ephemeral session secret.
+- Rate limiting trusts the last `X-Forwarded-For` hop appended by the edge.
+- The console CSP now matches the app: Google Fonts and the pre-paint boot
+  script are allowed (previously blocked, breaking fonts/splash), while
+  external script origins stay `'self'`.
+- Public gateway ports are bound to 127.0.0.1; the gateway sanitizes echoed
+  correlation IDs.
+
 
 ### Added
 
