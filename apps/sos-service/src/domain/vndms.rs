@@ -241,7 +241,8 @@ pub fn to_vndms_hazard(row: &Data) -> Option<VndmsHazard> {
     let warning_level = warning_level_of(row);
     let district = string_or(row, "district", "");
     let description = string_or(row, "description", "");
-    let observed_at = nullish_string(row, &["observed_at", "created_at"]).filter(|value| !value.is_empty());
+    let observed_at =
+        nullish_string(row, &["observed_at", "created_at"]).filter(|value| !value.is_empty());
 
     let label = non_null(row, "title")
         .or_else(|| non_null(row, "label"))
@@ -465,8 +466,8 @@ pub fn normalize_ingest_batch(
                 .as_str()
                 .to_string()
         };
-        let observed_at = nullish_string(record, &["observed_at", "issued_at"])
-            .unwrap_or_else(|| at.clone());
+        let observed_at =
+            nullish_string(record, &["observed_at", "issued_at"]).unwrap_or_else(|| at.clone());
         let expires_at = record
             .get("expires_at")
             .filter(|value| js_truthy(value))
@@ -657,10 +658,13 @@ const RUN_SUCCEEDED: &[&str] = &["success", "succeeded", "completed", "complete"
 const RUN_FAILED: &[&str] = &["failed", "error", "crashed", "timeout", "timed_out"];
 
 fn run_stamp(run: &Data) -> i64 {
-    nullish_string(run, &["finishedAt", "finished_at", "startedAt", "started_at"])
-        .as_deref()
-        .and_then(parse_timestamp)
-        .unwrap_or(0)
+    nullish_string(
+        run,
+        &["finishedAt", "finished_at", "startedAt", "started_at"],
+    )
+    .as_deref()
+    .and_then(parse_timestamp)
+    .unwrap_or(0)
 }
 
 fn run_status(run: &Data) -> String {
@@ -680,8 +684,11 @@ fn run_last_error(run: &Data) -> Option<String> {
 }
 
 fn run_stamp_text(run: &Data) -> Option<String> {
-    let value = nullish_string(run, &["finishedAt", "finished_at", "startedAt", "started_at"])
-        .unwrap_or_default();
+    let value = nullish_string(
+        run,
+        &["finishedAt", "finished_at", "startedAt", "started_at"],
+    )
+    .unwrap_or_default();
     if value.is_empty() {
         None
     } else {
@@ -690,11 +697,7 @@ fn run_stamp_text(run: &Data) -> Option<String> {
 }
 
 /// Project a Tier-2 job plus its run history into a connector status.
-pub fn connector_status_from_runs(
-    job: &Data,
-    runs: &[Data],
-    now_ms: i64,
-) -> IngestConnectorStatus {
+pub fn connector_status_from_runs(job: &Data, runs: &[Data], now_ms: i64) -> IngestConnectorStatus {
     let mut ordered: Vec<&Data> = runs.iter().collect();
     ordered.sort_by(|left, right| run_stamp(right).cmp(&run_stamp(left)));
     let last = ordered.first().copied();
@@ -742,7 +745,9 @@ pub fn connector_status_from_runs(
         source: "tier-2-scheduled-job".to_string(),
         available: true,
         configured: true,
-        job_id: non_null(job, "id").filter(|value| js_truthy(value)).map(js_string),
+        job_id: non_null(job, "id")
+            .filter(|value| js_truthy(value))
+            .map(js_string),
         job_name: non_null(job, "name")
             .filter(|value| js_truthy(value))
             .map(js_string),
@@ -790,9 +795,26 @@ pub fn ingest_status_from_run(
     now_ms: i64,
     connector: Option<&IngestConnectorStatus>,
 ) -> IngestStatus {
-    let stale_after = ingest_stale_minutes(None);
+    ingest_status_from_run_with_stale(run, now_ms, connector, None)
+}
+
+/// Same projection with an explicit deployment threshold. Routes pass
+/// `VNDMS_STALE_MINUTES` so a healthy dependency with an old ingest cannot be
+/// reported as fresh.
+pub fn ingest_status_from_run_with_stale(
+    run: Option<&Data>,
+    now_ms: i64,
+    connector: Option<&IngestConnectorStatus>,
+    stale_minutes: Option<f64>,
+) -> IngestStatus {
+    let stale_after = stale_minutes
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.clamp(5.0, 24.0 * 60.0))
+        .unwrap_or_else(|| ingest_stale_minutes(None));
     let checked_at = iso_from_millis(now_ms).unwrap_or_default();
-    let connector_configured = connector.map(|connector| connector.configured).unwrap_or(false);
+    let connector_configured = connector
+        .map(|connector| connector.configured)
+        .unwrap_or(false);
     if run.is_none() && !connector_configured {
         return IngestStatus {
             status: "unconfigured".to_string(),
@@ -810,7 +832,8 @@ pub fn ingest_status_from_run(
             connector: connector.cloned(),
         };
     }
-    let last_run_at = run.and_then(|run| nullish_string(run, &["finished_at", "created_at"]))
+    let last_run_at = run
+        .and_then(|run| nullish_string(run, &["finished_at", "created_at"]))
         .filter(|value| !value.is_empty());
     let push_success_at = run.and_then(|run| {
         if let Some(value) = non_null(run, "last_success_at") {
@@ -828,7 +851,10 @@ pub fn ingest_status_from_run(
     });
     let connector_success_at = connector.and_then(|connector| connector.last_success_at.clone());
     let mut success_candidates: Vec<(String, i64)> = Vec::new();
-    for value in [push_success_at, connector_success_at].into_iter().flatten() {
+    for value in [push_success_at, connector_success_at]
+        .into_iter()
+        .flatten()
+    {
         if let Some(ms) = parse_timestamp(&value) {
             success_candidates.push((value, ms));
         }
@@ -839,15 +865,15 @@ pub fn ingest_status_from_run(
     let stale = success_ms
         .map(|ms| (now_ms - ms) as f64 > stale_after * 60.0 * 1000.0)
         .unwrap_or(true);
-    let run_status = run.map(|run| string_or(run, "status", "")).unwrap_or_default();
+    let run_status = run
+        .map(|run| string_or(run, "status", ""))
+        .unwrap_or_default();
     let connector_error = connector.and_then(|connector| connector.error.clone());
     let run_error = run
         .and_then(|run| run.get("error"))
         .filter(|value| js_truthy(value))
         .map(js_string);
-    let status = if run_status == "failed"
-        || (run_error.is_some() && last_success_at.is_none())
-    {
+    let status = if run_status == "failed" || (run_error.is_some() && last_success_at.is_none()) {
         "error"
     } else if connector_error.is_some() && last_success_at.is_none() {
         "error"
@@ -862,7 +888,8 @@ pub fn ingest_status_from_run(
         status: status.to_string(),
         configured: true,
         source: "vndms".to_string(),
-        last_run_at: last_run_at.or_else(|| connector.and_then(|connector| connector.last_run_at.clone())),
+        last_run_at: last_run_at
+            .or_else(|| connector.and_then(|connector| connector.last_run_at.clone())),
         last_success_at,
         records_ingested: value_to_count(run, "records_ingested"),
         records_rejected: value_to_count(run, "records_rejected"),
@@ -908,16 +935,15 @@ mod tests {
         assert_eq!(wire.warning_type, VndmsWarningType::WarningFlood);
         assert_eq!(wire.warning_level, 3);
         assert_eq!(wire.severity, VndmsSeverity::High);
-        assert_eq!(
-            wire.geometry.expect("geometry").coordinates,
-            [108.0, 16.0]
-        );
+        assert_eq!(wire.geometry.expect("geometry").coordinates, [108.0, 16.0]);
     }
 
     #[test]
     fn vndms_detection_distinguishes_manual_hazards() {
         assert!(is_vndms_record(&row(json!({"source": "vndms"}))));
-        assert!(is_vndms_record(&row(json!({"warning_type": "warning_rain"}))));
+        assert!(is_vndms_record(&row(
+            json!({"warning_type": "warning_rain"})
+        )));
         assert!(!is_vndms_record(&row(
             json!({"source": "manual", "event_type": "flood"})
         )));
@@ -934,10 +960,7 @@ mod tests {
             VndmsWarningType::WarningRain
         );
         assert_eq!(warning_level_of(&row(json!({"severity": "critical"}))), 3);
-        assert_eq!(
-            warning_level_of(&row(json!({"warning_level": 1.9}))),
-            1
-        );
+        assert_eq!(warning_level_of(&row(json!({"warning_level": 1.9}))), 1);
         assert_eq!(
             severity_of(&row(json!({"warning_level": 3}))),
             VndmsSeverity::High
@@ -1056,8 +1079,12 @@ mod tests {
             "schedule": {"everySeconds": 300}, "enabled": true
         }));
         let runs = vec![
-            row(json!({"id": "r2", "status": "success", "startedAt": iso_at(-10), "finishedAt": iso_at(-5), "attempt": 1, "lastError": null})),
-            row(json!({"id": "r1", "status": "failed", "startedAt": iso_at(-20), "finishedAt": iso_at(-19), "attempt": 1, "lastError": "timeout"})),
+            row(
+                json!({"id": "r2", "status": "success", "startedAt": iso_at(-10), "finishedAt": iso_at(-5), "attempt": 1, "lastError": null}),
+            ),
+            row(
+                json!({"id": "r1", "status": "failed", "startedAt": iso_at(-20), "finishedAt": iso_at(-19), "attempt": 1, "lastError": "timeout"}),
+            ),
         ];
         let status = connector_status_from_runs(&job, &runs, NOW);
         assert!(status.configured);
@@ -1104,7 +1131,9 @@ mod tests {
                 "id": "vndms-connector", "name": "VNDMS feed ingest",
                 "schedule": {"cron": "*/5 * * * *"}, "enabled": true
             })),
-            &[row(json!({"id": "r1", "status": "success", "finishedAt": iso_at(-5)}))],
+            &[row(
+                json!({"id": "r1", "status": "success", "finishedAt": iso_at(-5)}),
+            )],
             NOW,
         );
         let ready = ingest_status_from_run(None, NOW, Some(&connector));
@@ -1117,8 +1146,12 @@ mod tests {
         let stale = ingest_status_from_run(None, NOW + 120 * 60_000, Some(&connector));
         assert_eq!(stale.status, "stale");
 
-        let not_configured =
-            connector_not_configured(Some("2026-11-04T12:00:00.000Z"));
+        let configured_threshold =
+            ingest_status_from_run_with_stale(None, NOW + 10 * 60_000, Some(&connector), Some(5.0));
+        assert_eq!(configured_threshold.status, "stale");
+        assert_eq!(configured_threshold.stale_after_minutes, 5.0);
+
+        let not_configured = connector_not_configured(Some("2026-11-04T12:00:00.000Z"));
         let unconfigured = ingest_status_from_run(None, NOW, Some(&not_configured));
         assert_eq!(unconfigured.status, "unconfigured");
         assert!(!unconfigured.configured);
@@ -1128,10 +1161,7 @@ mod tests {
             Some("2026-11-04T12:00:00.000Z"),
         );
         assert!(!unavailable.available);
-        assert_eq!(
-            unavailable.error.as_deref(),
-            Some("tier2_jobs_unavailable")
-        );
+        assert_eq!(unavailable.error.as_deref(), Some("tier2_jobs_unavailable"));
         let with_unavailable = ingest_status_from_run(
             Some(&row(json!({
                 "status": "succeeded", "finished_at": iso_at(-5), "last_success_at": iso_at(-5)

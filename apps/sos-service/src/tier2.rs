@@ -111,7 +111,10 @@ pub fn request_options_from(
     session_token: Option<&str>,
 ) -> RequestOptions {
     let mut opts = RequestOptions::new();
-    if let Some(token) = session_token.filter(|value| !value.is_empty()).or(config_token.filter(|value| !value.is_empty())) {
+    if let Some(token) = session_token
+        .filter(|value| !value.is_empty())
+        .or(config_token.filter(|value| !value.is_empty()))
+    {
         opts = opts.token(token);
     }
     if let Some(key) = header_key
@@ -124,7 +127,11 @@ pub fn request_options_from(
     opts
 }
 
-pub fn request_options(config: &Config, headers: &HeaderMap, session: Option<&Claims>) -> RequestOptions {
+pub fn request_options(
+    config: &Config,
+    headers: &HeaderMap,
+    session: Option<&Claims>,
+) -> RequestOptions {
     let header_key = headers
         .get("x-api-key")
         .and_then(|value| value.to_str().ok());
@@ -136,7 +143,11 @@ pub fn request_options(config: &Config, headers: &HeaderMap, session: Option<&Cl
     )
 }
 
-pub fn client_for(config: &Config, headers: &HeaderMap, session: Option<&Claims>) -> (Arc<Client>, RequestOptions) {
+pub fn client_for(
+    config: &Config,
+    headers: &HeaderMap,
+    session: Option<&Claims>,
+) -> (Arc<Client>, RequestOptions) {
     // The base client is built once in AppState; callers get a clone through
     // the state instead. This helper exists for routes that only have config.
     let client = config
@@ -202,7 +213,11 @@ pub async fn ensure_dataset(
                 }
                 Err(create_error) => {
                     if matches!(create_error.status(), Some(400 | 409)) {
-                        client.datasets().get(spec.id, opts).await.map_err(ApiError::from)
+                        client
+                            .datasets()
+                            .get(spec.id, opts)
+                            .await
+                            .map_err(ApiError::from)
                     } else {
                         Err(ApiError::from(create_error))
                     }
@@ -370,39 +385,14 @@ pub async fn write(
         .await
     {
         Ok(created) => Ok(record_data(&created)),
-        Err(error) if error.is_conflict() => {
-            let current = get(client, opts, spec, &record_id).await?;
-            let expected = current
-                .get("record_version")
-                .and_then(Value::as_i64)
-                .unwrap_or(0);
-            let mut merged = data;
-            if let Some(created_at) = current.get("created_at") {
-                merged.insert("created_at".into(), created_at.clone());
-            }
-            let mut update_opts = opts.clone();
-            if expected > 0 {
-                update_opts = update_opts.if_version(expected);
-            }
-            match client
-                .records()
-                .update(
-                    dataset.id.as_str(),
-                    record_id.as_str(),
-                    Value::Object(merged),
-                    Some(spec.public),
-                    &update_opts,
-                )
-                .await
-            {
-                Ok(updated) => Ok(record_data(&updated)),
-                Err(retry) if retry.is_conflict() => Err(ApiError::conflict(
-                    "record_version_conflict",
-                    format!("record {record_id} changed while it was being created"),
-                )),
-                Err(retry) => Err(ApiError::from(retry)),
-            }
-        }
+        // Creates are deliberately create-only. A client-supplied id that
+        // already exists is a conflict; lifecycle writes must use the explicit
+        // update endpoint and conditional versions.
+        Err(error) if error.is_conflict() => Err(ApiError::conflict(
+            "record_exists",
+            format!("record {record_id} already exists"),
+        )
+        .with_details(json!({ "id": record_id }))),
         Err(error) => Err(ApiError::from(error)),
     }
 }
@@ -492,10 +482,7 @@ pub async fn list_all_public(
             .entities(dataset.id.as_str(), Some(limit), Some(offset), opts)
             .await
             .map_err(ApiError::from)?;
-        let batch: Vec<Map<String, Value>> = entities
-            .iter()
-            .filter_map(from_ngsi_ld)
-            .collect();
+        let batch: Vec<Map<String, Value>> = entities.iter().filter_map(from_ngsi_ld).collect();
         let batch_len = batch.len();
         items.extend(batch);
         offset += batch_len as i64;
@@ -627,7 +614,10 @@ pub fn requested_version(
     headers: &HeaderMap,
     body: Option<&Map<String, Value>>,
 ) -> Result<Option<i64>, ApiError> {
-    let from_header = match headers.get("if-match").and_then(|value| value.to_str().ok()) {
+    let from_header = match headers
+        .get("if-match")
+        .and_then(|value| value.to_str().ok())
+    {
         Some(raw) => {
             let raw = raw.trim();
             if raw == "*" {
@@ -674,7 +664,6 @@ pub fn session_of(headers: &HeaderMap, config: &Config) -> Option<Claims> {
     auth::session_from_headers(config, headers)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{request_options, request_options_from};
@@ -694,12 +683,7 @@ mod tests {
         assert_eq!(opts.token.as_deref(), Some("session-token"));
         assert_eq!(opts.api_key.as_deref(), Some("header-key"));
 
-        let opts = request_options_from(
-            Some("config-key"),
-            Some("config-token"),
-            None,
-            None,
-        );
+        let opts = request_options_from(Some("config-key"), Some("config-token"), None, None);
         assert_eq!(opts.token.as_deref(), Some("config-token"));
         assert_eq!(opts.api_key.as_deref(), Some("config-key"));
 
@@ -711,7 +695,9 @@ mod tests {
     async fn sdk_records_request_uses_expected_path_and_override_key() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/v1/capabilities/datasets/sos-emergency-events/records"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-emergency-events/records",
+            ))
             .and(query_param("limit", "10"))
             .and(query_param("offset", "0"))
             .and(header("x-api-key", "override-key"))
@@ -739,6 +725,48 @@ mod tests {
             .unwrap();
         assert!(page.items.is_empty());
         assert_eq!(page.total, 0);
+    }
+
+    #[tokio::test]
+    async fn create_with_an_existing_id_returns_conflict_without_overwriting() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-emergency-events"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "sos-emergency-events",
+                "slug": "sos-emergency-events",
+                "name": "SynapseCitySOS emergency events",
+                "entityType": "EmergencyEvent",
+                "license": "CC-BY-4.0",
+                "public": true,
+                "status": "published",
+                "description": "Emergency event command records",
+                "schemaVersion": "1.0.0",
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-emergency-events/records",
+            ))
+            .respond_with(ResponseTemplate::new(409).set_body_json(json!({
+                "error": "record_exists"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = Client::new(server.uri(), Credentials::none()).unwrap();
+        let opts = RequestOptions::new().api_key("test-key");
+        let mut input = serde_json::Map::new();
+        input.insert("title".into(), json!("Attempted overwrite"));
+        let error = super::write(&client, &opts, super::EVENTS, input, Some("existing-event"))
+            .await
+            .expect_err("create must not upsert");
+        assert_eq!(error.status, axum::http::StatusCode::CONFLICT);
+        assert_eq!(error.code, "record_exists");
     }
 
     /// Read-only diagnostic. Run only with explicit dev credentials:

@@ -79,18 +79,33 @@ export interface FeedStatus {
   hazard_feed: {
     status: string;
     configured: boolean;
-    source: string;
-    last_run_at: string | null;
+    source?: string;
+    last_run_at?: string | null;
     last_success_at: string | null;
-    records_ingested: number;
-    records_rejected: number;
-    error: string | null;
+    last_fetch_at?: string | null;
+    last_fetch_error?: string | null;
+    merge_error?: string | null;
+    records_ingested?: number;
+    records_rejected?: number;
+    error?: string | null;
     stale: boolean;
-    feed_version: string | null;
-    checked_at: string;
-    stale_after_minutes: number;
+    feed_version?: string | null;
+    checked_at?: string;
+    stale_after_minutes?: number;
+    age_minutes?: number;
     records_visible?: number;
     connector?: Record<string, unknown>;
+    ingest?: {
+      status: string;
+      configured: boolean;
+      stale: boolean;
+      last_run_at: string | null;
+      last_success_at: string | null;
+      error: string | null;
+      stale_after_minutes?: number;
+    };
+    ingest_status?: string;
+    ingest_stale?: boolean;
   };
 }
 

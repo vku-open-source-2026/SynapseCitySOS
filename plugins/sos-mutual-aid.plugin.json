@@ -73,13 +73,13 @@
         "width": "full",
         "columns": [
           "id",
-          "requesting_org",
-          "target_org",
-          "emergency_event_id",
+          "request_number",
+          "requesting_agency",
           "resource_type",
           "quantity",
-          "status",
-          "approved_at"
+          "filled_quantity",
+          "urgency",
+          "status"
         ],
         "resource": "mutualAid",
         "onLoad": "act-mutual-aid-table-load",
@@ -100,15 +100,9 @@
         "action": "create",
         "fields": [
           {
-            "name": "requesting_org",
+            "name": "requesting_agency",
             "type": "text",
-            "label": "Requesting organization",
-            "required": true
-          },
-          {
-            "name": "target_org",
-            "type": "text",
-            "label": "Target organization",
+            "label": "Requesting agency",
             "required": true
           },
           {
@@ -118,14 +112,30 @@
             "required": true
           },
           {
-            "name": "emergency_event_id",
-            "type": "text",
-            "label": "Event id"
-          },
-          {
             "name": "quantity",
             "type": "number",
-            "label": "Quantity"
+            "label": "Quantity",
+            "required": true
+          },
+          {
+            "name": "urgency",
+            "type": "text",
+            "label": "Urgency: low, medium, high or critical"
+          },
+          {
+            "name": "location_json",
+            "type": "textarea",
+            "label": "Location JSON (city, address)"
+          },
+          {
+            "name": "contact_json",
+            "type": "textarea",
+            "label": "Contact JSON (name, phone, email)"
+          },
+          {
+            "name": "request_number",
+            "type": "text",
+            "label": "Request number (optional; generated when omitted)"
           },
           {
             "name": "notes",
@@ -136,7 +146,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-mutual-aid-create-submit"
       },
@@ -167,14 +177,14 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-mutual-aid-update-submit"
       },
       {
         "id": "mutual-aid-decision",
         "type": "form",
-        "title": "Approve or progress a request",
+        "title": "Decline or hand off a request",
         "width": "half",
         "action": "execute",
         "fields": [
@@ -187,7 +197,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: approve, reject, start, complete or cancel",
+            "label": "Decision: decline or handoff",
             "required": true
           },
           {
@@ -199,7 +209,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-mutual-aid-decision-submit"
       },
@@ -220,7 +230,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-mutual-aid-delete-submit"
       },
@@ -384,15 +394,9 @@
           "target": "mutual-aid-create",
           "mappings": [
             {
-              "field": "requesting_org",
+              "field": "requesting_agency",
               "source": "event",
-              "value": "values.requesting_org",
-              "required": true
-            },
-            {
-              "field": "target_org",
-              "source": "event",
-              "value": "values.target_org",
+              "value": "values.requesting_agency",
               "required": true
             },
             {
@@ -402,15 +406,33 @@
               "required": true
             },
             {
-              "field": "emergency_event_id",
-              "source": "event",
-              "value": "values.emergency_event_id",
-              "required": false
-            },
-            {
               "field": "quantity",
               "source": "event",
               "value": "values.quantity",
+              "required": true
+            },
+            {
+              "field": "urgency",
+              "source": "event",
+              "value": "values.urgency",
+              "required": false
+            },
+            {
+              "field": "location_json",
+              "source": "event",
+              "value": "values.location_json",
+              "required": false
+            },
+            {
+              "field": "contact_json",
+              "source": "event",
+              "value": "values.contact_json",
+              "required": false
+            },
+            {
+              "field": "request_number",
+              "source": "event",
+              "value": "values.request_number",
               "required": false
             },
             {
@@ -568,5 +590,5 @@
     "path": "plugins/sos-mutual-aid.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:e838efd6ae00b8ccbfe0bcb67984e74f8552a11f6991bb0412f19b7351320dd2"
+  "checksum": "sha256:eb6ee821251873baf50b7555ec9acc818f59c03b90bdcb3ff3f81b61f8a7108e"
 }

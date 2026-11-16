@@ -17,13 +17,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (input: {
-    email: string;
-    password: string;
-    full_name: string;
-    phone?: string;
-  }) => Promise<void>;
+  /** Exchange a Tier-2/DX workspace bearer for a short-lived SOS session. */
+  connectTier2Token: (tier2Token: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -57,26 +52,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await saveSession(next);
   }, []);
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      await applyAuth(await sosApi.login(email, password));
-    },
-    [applyAuth],
-  );
-
-  const register = useCallback(
-    async (input: { email: string; password: string; full_name: string; phone?: string }) => {
-      await applyAuth(await sosApi.register(input));
+  const connectTier2Token = useCallback(
+    async (tier2Token: string) => {
+      await applyAuth(await sosApi.exchangeTier2Token(tier2Token));
     },
     [applyAuth],
   );
 
   const logout = useCallback(async () => {
-    const current = session;
+    // The local SOS session is stateless; clearing SecureStore is sufficient.
+    // The Tier-2/DX session remains owned by the workspace.
     setSession(null);
     await clearSession();
-    if (current) sosApi.logout(current.accessToken).catch(() => undefined);
-  }, [session]);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -84,11 +72,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: session?.user ?? null,
       token: session?.accessToken ?? null,
       loading,
-      login,
-      register,
+      connectTier2Token,
       logout,
     }),
-    [session, loading, login, register, logout],
+    [session, loading, connectTier2Token, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

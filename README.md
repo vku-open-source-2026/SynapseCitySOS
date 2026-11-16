@@ -130,22 +130,24 @@ SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
 generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
 value in production so sessions survive a restart.
 
-**Tier-3 auth is retired (2026-11-14 workspace contract).**
+**Tier-3 password auth is retired (2026-11-14 workspace contract).**
 `/v1/auth/login`, `/register` and `/refresh` return `410` with
 `{ "error": "workspace_moved", "workspace_url": "https://synapsedx.sbs/workspace" }`
-before credential handling. Legacy `/me`/session paths may answer `401`/`404`
-during the migration but are not a supported client surface. Login,
-registration, session management and role assignment belong to SynapseDX.
-Production ignores `TIER3_AUTH_MODE=legacy`. The historical `SOS_AUTH_MODE` /
-`SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only
-apply to that non-production legacy code path.
+before credential handling. The single supported issuance path is
+`POST /v1/auth/exchange`: send a verified Tier-2 user bearer as
+`Authorization: Bearer <tier2-token>` and receive a short-lived SOS session
+whose role is mapped locally. Login, registration, session management and role
+assignment belong to SynapseDX. The historical `SOS_AUTH_MODE` /
+`SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only apply to that non-production
+legacy/demo code path.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SOS_AUTH_MODE` | `tier2` | `tier2` = Tier-2 auth capability; `demo` = development-only shell |
-| `SOS_BOOTSTRAP_ADMIN_EMAILS` | empty | Comma-separated emails that receive `admin` after a verified login/registration |
+| `SOS_BOOTSTRAP_ADMIN_EMAILS` | empty | Comma-separated emails that receive `admin` after a verified exchange |
 | `SOS_AUTH_DEFAULT_ROLE` | `responder` | Fallback role; never `admin` |
-| `SOS_AUTH_EXCHANGE` | `false` | Opt-in delegated token exchange with the `synapsecity-sos` audience |
+| `SOS_HITL_REQUIRED` | `true` in compose | Four-eyes approval for EOP/dispatch; production refuses to start when unset |
+| `SOS_INGEST_SERVICE_TOKEN` | empty | Scoped bearer accepted only by `POST /v1/hazards/ingest` |
 | `ALLOW_DEMO_AUTH` | `false` | Enables the demo shell only with `SOS_AUTH_MODE=demo` and `NODE_ENV != production` |
 | `AUTH_SECRET` | empty | HMAC secret for the SOS session; an ephemeral secret is used when empty |
 
@@ -241,11 +243,13 @@ GET  /v1/sos
 *    /v1/ai
 ```
 
-Every `/v1/auth/*` path returns `410 workspace_moved`. Login, registration,
-sessions, MFA and account lifecycle belong to SynapseDX; SOS stores no password
-and creates no SOS user dataset or City user record. Tokens are accepted only
-from the `Authorization` header, never a query string. Internal emergency
-routes still require a verified principal and the permission matrix below.
+Every `/v1/auth/*` path except `POST /v1/auth/exchange` returns
+`410 workspace_moved`. Exchange verifies a Tier-2 user bearer with the identity
+capability and issues a short-lived SOS session; login, registration, sessions,
+MFA and account lifecycle belong to SynapseDX. SOS stores no password and
+creates no SOS user dataset or City user record. Tokens are accepted only from
+the `Authorization` header, never a query string. Internal emergency routes
+still require a verified principal and the permission matrix below.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: reads need `emergency:read`, event/SITREP writes need
@@ -335,17 +339,18 @@ to the browser.
   `ETag: "<version>"` and `x-record-version`, and updates send `If-Match`
   (body `if_version` is also accepted) so a stale writer receives
   `409 record_version_conflict` instead of silently losing an update. Deploy,
-  approval and submit are idempotent, and only a `409` create conflict is
-  retried as an update — a `400` validation failure is never persisted.
-- **SSE** consumes the Tier-2 event feed (`GET /v1/capabilities/events`,
-  filtered to `sos-hazard-layers`) and resumes from the client's
-  `Last-Event-ID` cursor. A hazard `record.*` event refreshes the public
-  snapshot within the 2-second poll window; only when the feed itself is
-  unavailable does it degrade to a 30-second snapshot poll (counted in
-  `/metrics`). It never converts a Tier-2 failure into an empty snapshot: it
-  emits a named `error` event, keeps the last good snapshot, heartbeats every
-  15 s. The public map shows a degraded banner and never claims an area is safe
-  while data is unavailable.
+  approval and submit are idempotent, and records-create is create-only:
+  POSTing an existing id returns `409 record_exists` instead of overwriting it.
+- **SSE** uses one shared Tier-2 event subscription per process
+  (`GET /v1/capabilities/events/stream`, filtered to `sos-hazard-layers`). A
+  hazard `record.*` event refreshes the authoritative merged snapshot
+  immediately; the only periodic work is a 30-second fallback (configurable by
+  `SOS_STREAM_EVENT_POLL_MS`) and a 15-second heartbeat. Disconnecting clients
+  stop their per-connection stream, and the shared watcher exits shortly after
+  the last subscriber leaves. It never converts a Tier-2 failure into an empty
+  snapshot: it emits a named `error` event with the last good snapshot. The
+  public map shows a degraded banner and never claims an area is safe while
+  data is unavailable.
 - **Health** (`/health`, `/ready`, `/v1/emergency/health`) reports Tier-2
   reachability and per-dataset state; `/ready` returns `503` when Tier-2 is
   unreachable or a dataset is missing. `/v1/ai/status` and
@@ -369,9 +374,9 @@ Remaining blockers are adoption/release/operator steps:
    capability (`dataset.geo`). SOS hazard near/polygon endpoints call it first
    and fall back to the bounded in-memory scan; `x-sos-scan-truncated` is only
    returned on the fallback path.
-2. **SSE adoption.** The hazard stream now subscribes to the Tier-2 SSE feed
-   and re-reads the authoritative snapshot on a hazard event; the periodic
-   ticker remains the fallback when the stream is unavailable. The public frame
+2. **SSE adoption.** The hazard stream uses one shared Tier-2 SSE subscription
+   per process and re-reads the authoritative merged snapshot on a hazard
+   event; the 30-second interval remains the bounded fallback. The public frame
    is still a sanitized snapshot, not a raw record payload.
 3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
    `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
@@ -411,7 +416,8 @@ artifacts live in `plugins/` and are validated/synced with
 source is archived under `plugins/source/` as reference, not built or executed.
 
 `/v1/auth/*` answers `410 workspace_moved` (with `workspace_url`) before any
-credential handling, so no Tier-3 session can be created.
+credential handling, except `POST /v1/auth/exchange`, which verifies a Tier-2
+bearer and issues the only supported short-lived SOS session.
 
 There is no `/admin/assets`, `/admin/incidents`, `/admin/iot`, `/admin/budgets`,
 `/admin/reports`, `/admin/alerts`, `/admin/ingest`, `/admin/users` or

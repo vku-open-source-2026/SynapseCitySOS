@@ -48,6 +48,12 @@ assert(status.response.ok, `GET /emergency/public/status failed (${status.respon
 assert(typeof status.body?.data_available === 'boolean', 'status.data_available missing');
 assert(typeof status.body?.hazard_feed?.stale === 'boolean', 'status.hazard_feed.stale missing');
 assert(typeof status.body?.hazard_feed?.status === 'string', 'status.hazard_feed.status missing');
+assert(typeof status.body?.hazard_feed?.records_visible === 'number', 'status.hazard_feed.records_visible missing');
+assert(typeof status.body?.hazard_feed?.ingest?.stale === 'boolean', 'status.hazard_feed.ingest.stale missing');
+assert(typeof status.body?.hazard_feed?.ingest?.configured === 'boolean', 'status.hazard_feed.ingest.configured missing');
+if (status.body.hazard_feed.stale) {
+  assert(status.body.status !== 'ok', 'a stale feed must not be reported as ok');
+}
 
 const hazards = await get('/hazards?limit=300');
 assert(hazards.response.ok, `GET /hazards failed (${hazards.response.status})`);

@@ -220,7 +220,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-dispatch-start-submit"
       },
@@ -246,30 +246,9 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-dispatch-arrive-submit"
-      },
-      {
-        "id": "dispatch-complete",
-        "type": "form",
-        "title": "Complete a task",
-        "width": "half",
-        "action": "update",
-        "fields": [
-          {
-            "name": "order_id",
-            "type": "text",
-            "label": "Dispatch id",
-            "required": true
-          }
-        ],
-        "resource": "dispatch",
-        "workflowRef": {
-          "name": "sos-dispatch-complete",
-          "checksum": "db4d5752f4615436852703930ec9ec00f78054b79c879be27385b1225edfe9b2"
-        },
-        "onSubmit": "act-dispatch-complete-submit"
       },
       {
         "id": "resource-status",
@@ -287,14 +266,14 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: available, deploy, unavailable or maintain",
+            "label": "Decision: available, unavailable or maintain",
             "required": true
           }
         ],
         "resource": "resources",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-resource-status-submit"
       },
@@ -812,39 +791,6 @@
         }
       },
       {
-        "id": "act-dispatch-complete-submit",
-        "type": "action",
-        "title": "Submit Complete a task",
-        "operation": {
-          "kind": "update",
-          "target": "dispatch-complete",
-          "mappings": [
-            {
-              "field": "order_id",
-              "source": "event",
-              "value": "values.order_id",
-              "required": true
-            }
-          ],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
-        "id": "act-dispatch-complete-open",
-        "type": "action",
-        "title": "Open Complete a task",
-        "operation": {
-          "kind": "openForm",
-          "target": "dispatch-complete",
-          "mappings": [],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
         "id": "act-resource-status-submit",
         "type": "action",
         "title": "Submit Update my resource status",
@@ -890,5 +836,5 @@
     "path": "plugins/sos-rescue-operations.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:c1d50d501074b6804940f720701df432847880258bd4c86fc1d4341fbbbd3cb7"
+  "checksum": "sha256:9cb4107b59131fd513e473e252ad92301e9e3b94accf29d9cf2a6a0187b99d2f"
 }

@@ -98,7 +98,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.port)).await?;
     tracing::info!("[synapsecity-sos] listening on :{}", config.port);
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -124,7 +128,7 @@ async fn headers_middleware(
 
     let is_stream = req.uri().path() == "/v1/emergency/stream/hazards";
     let mut response = next.run(req).await;
-    if !is_stream {
+    if !is_stream && !response.headers().contains_key(CONTENT_TYPE) {
         response.headers_mut().insert(
             CONTENT_TYPE,
             HeaderValue::from_static("application/json; charset=utf-8"),
@@ -138,11 +142,63 @@ async fn headers_middleware(
     response
 }
 
-fn add_security_headers(
-    headers: &mut axum::http::HeaderMap,
-    state: &AppState,
-    correlation: &str,
-) {
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::Request as HttpRequest;
+    use axum::routing::get;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn app() -> Router {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let client =
+            synapsedx::Client::new("http://127.0.0.1:1", synapsedx::Credentials::none()).unwrap();
+        let state = AppState::new(config, client);
+        Router::new()
+            .route(
+                "/metrics",
+                get(|| async { ([(CONTENT_TYPE, "text/plain; version=0.0.4")], "ok") }),
+            )
+            .route(
+                "/tile",
+                get(|| async { ([(CONTENT_TYPE, "image/png")], vec![0x89u8]) }),
+            )
+            .route("/plain", get(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                headers_middleware,
+            ))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn middleware_preserves_non_json_content_types_and_defaults_only_missing_ones() {
+        for (path, expected) in [
+            ("/metrics", "text/plain; version=0.0.4"),
+            ("/tile", "image/png"),
+            ("/plain", "application/json; charset=utf-8"),
+        ] {
+            let response = app()
+                .oneshot(
+                    HttpRequest::builder()
+                        .uri(path)
+                        .body(axum::body::Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.headers().get(CONTENT_TYPE).unwrap(),
+                expected,
+                "{path}"
+            );
+            let _ = response.into_body().collect().await;
+        }
+    }
+}
+
+fn add_security_headers(headers: &mut axum::http::HeaderMap, state: &AppState, correlation: &str) {
     if let Ok(value) = HeaderValue::from_str(&state.config.cors_origin) {
         headers.insert("access-control-allow-origin", value);
     }
@@ -154,7 +210,10 @@ fn add_security_headers(
         "access-control-allow-methods",
         HeaderValue::from_static("GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"),
     );
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
     headers.insert(
         "strict-transport-security",

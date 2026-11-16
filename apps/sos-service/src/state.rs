@@ -3,7 +3,7 @@
 //! Shared process state, RED metrics and in-process rate limiting.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -12,6 +12,13 @@ use serde_json::Value;
 use synapsedx::Client;
 
 use crate::config::Config;
+
+#[derive(Clone, Debug, Default)]
+pub struct HazardFeedStatus {
+    pub last_attempt_at: Option<String>,
+    pub last_success_at: Option<String>,
+    pub last_error: Option<String>,
+}
 
 pub struct Metrics {
     started: Instant,
@@ -54,7 +61,10 @@ impl Metrics {
         if status >= 500 {
             self.errors.fetch_add(1, Ordering::Relaxed);
         }
-        let mut routes = self.routes.lock().unwrap_or_else(|poison| poison.into_inner());
+        let mut routes = self
+            .routes
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let metric = routes.entry(route.to_string()).or_default();
         metric.count += 1;
         metric.total_ms += duration_ms;
@@ -65,12 +75,18 @@ impl Metrics {
     }
 
     pub fn increment(&self, name: &str) {
-        let mut counters = self.counters.lock().unwrap_or_else(|poison| poison.into_inner());
+        let mut counters = self
+            .counters
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         *counters.entry(name.to_string()).or_insert(0) += 1;
     }
 
     pub fn dependency(&self, ok: bool, duration_ms: u64, error: Option<String>) {
-        let mut samples = self.dependencies.lock().unwrap_or_else(|poison| poison.into_inner());
+        let mut samples = self
+            .dependencies
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         samples.push(DependencySample {
             ok,
             duration_ms,
@@ -83,15 +99,27 @@ impl Metrics {
     }
 
     pub fn render(&self) -> String {
-        let routes = self.routes.lock().unwrap_or_else(|poison| poison.into_inner());
-        let counters = self.counters.lock().unwrap_or_else(|poison| poison.into_inner());
-        let dependencies = self.dependencies.lock().unwrap_or_else(|poison| poison.into_inner());
+        let routes = self
+            .routes
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let counters = self
+            .counters
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let dependencies = self
+            .dependencies
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let mut lines = Vec::new();
         lines.push("# HELP sos_request_total Total HTTP requests.".into());
         lines.push("# TYPE sos_request_total counter".into());
         for (route, metric) in routes.iter() {
             let label = sanitize(route);
-            lines.push(format!("sos_request_total{{route=\"{label}\"}} {}", metric.count));
+            lines.push(format!(
+                "sos_request_total{{route=\"{label}\"}} {}",
+                metric.count
+            ));
             lines.push(format!(
                 "sos_request_errors_total{{route=\"{label}\"}} {}",
                 metric.errors
@@ -116,7 +144,10 @@ impl Metrics {
             "sos_tier2_calls_total{{dependency=\"synapsedx\",result=\"error\"}} {failed}"
         ));
         if !dependencies.is_empty() {
-            let durations: Vec<u64> = dependencies.iter().map(|sample| sample.duration_ms).collect();
+            let durations: Vec<u64> = dependencies
+                .iter()
+                .map(|sample| sample.duration_ms)
+                .collect();
             lines.push("# HELP sos_tier2_duration_ms Recent Tier-2 call latency.".into());
             lines.push("# TYPE sos_tier2_duration_ms gauge".into());
             lines.push(format!(
@@ -137,7 +168,10 @@ impl Metrics {
         }
         lines.push("# HELP sos_uptime_seconds Process uptime.".into());
         lines.push("# TYPE sos_uptime_seconds gauge".into());
-        lines.push(format!("sos_uptime_seconds {}", self.started.elapsed().as_secs()));
+        lines.push(format!(
+            "sos_uptime_seconds {}",
+            self.started.elapsed().as_secs()
+        ));
         lines.join("\n") + "\n"
     }
 }
@@ -171,24 +205,44 @@ impl RateLimiter {
         }
     }
 
-    pub fn check(&self, disabled: bool, name: &str, headers: &HeaderMap, window: Duration, max: u32) -> Option<u64> {
+    pub fn check(
+        &self,
+        disabled: bool,
+        name: &str,
+        headers: &HeaderMap,
+        window: Duration,
+        max: u32,
+    ) -> Option<u64> {
         if disabled {
             return None;
         }
         let key = format!("{name}:{}", client_key(headers));
         let now = Instant::now();
-        let mut buckets = self.buckets.lock().unwrap_or_else(|poison| poison.into_inner());
-        let bucket = buckets.entry(key.clone()).or_insert_with(|| Bucket { hits: Vec::new() });
+        let mut buckets = self
+            .buckets
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let bucket = buckets
+            .entry(key.clone())
+            .or_insert_with(|| Bucket { hits: Vec::new() });
         bucket.hits.retain(|hit| now.duration_since(*hit) < window);
         if bucket.hits.len() >= max as usize {
             let oldest = bucket.hits.first().copied().unwrap_or(now);
-            let retry = window.saturating_sub(now.duration_since(oldest)).as_secs().max(1);
+            let retry = window
+                .saturating_sub(now.duration_since(oldest))
+                .as_secs()
+                .max(1);
             return Some(retry);
         }
         bucket.hits.push(now);
         if buckets.len() > 10_000 {
             let cutoff = window;
-            buckets.retain(|_, value| value.hits.iter().any(|hit| now.duration_since(*hit) < cutoff));
+            buckets.retain(|_, value| {
+                value
+                    .hits
+                    .iter()
+                    .any(|hit| now.duration_since(*hit) < cutoff)
+            });
         }
         None
     }
@@ -212,11 +266,20 @@ pub struct AppState {
     pub ai_status_cache: Arc<Mutex<Option<(Instant, Value)>>>,
     pub hazard_cache: Arc<Mutex<HashMap<i64, (Instant, Vec<Value>)>>>,
     pub hazard_status_cache: Arc<Mutex<Option<(Instant, Value)>>>,
+    pub ingest_run_cache: Arc<Mutex<Option<(Instant, Option<serde_json::Map<String, Value>>)>>>,
+    pub hazard_feed_status: Arc<Mutex<HazardFeedStatus>>,
+    pub hazard_last_good: Arc<Mutex<Option<(String, Vec<Value>)>>>,
+    pub hazard_stream_tx: tokio::sync::broadcast::Sender<String>,
+    pub hazard_watcher_active: Arc<AtomicBool>,
+    pub public_events_cache:
+        Arc<Mutex<Option<(Instant, Vec<serde_json::Map<String, Value>>, bool)>>>,
+    pub public_hazards_cache: Arc<Mutex<HashMap<i64, (Instant, Vec<Value>)>>>,
     pub brief_cache: Arc<Mutex<Option<(Instant, String, Value)>>>,
 }
 
 impl AppState {
     pub fn new(config: Config, tier2: Client) -> Self {
+        let (hazard_stream_tx, _) = tokio::sync::broadcast::channel(32);
         Self {
             config: Arc::new(config),
             tier2: Arc::new(tier2),
@@ -225,6 +288,13 @@ impl AppState {
             ai_status_cache: Arc::new(Mutex::new(None)),
             hazard_cache: Arc::new(Mutex::new(HashMap::new())),
             hazard_status_cache: Arc::new(Mutex::new(None)),
+            ingest_run_cache: Arc::new(Mutex::new(None)),
+            hazard_feed_status: Arc::new(Mutex::new(HazardFeedStatus::default())),
+            hazard_last_good: Arc::new(Mutex::new(None)),
+            hazard_stream_tx,
+            hazard_watcher_active: Arc::new(AtomicBool::new(false)),
+            public_events_cache: Arc::new(Mutex::new(None)),
+            public_hazards_cache: Arc::new(Mutex::new(HashMap::new())),
             brief_cache: Arc::new(Mutex::new(None)),
         }
     }

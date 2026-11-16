@@ -100,10 +100,7 @@ fn object_or_empty(value: Option<&Value>) -> Data {
 }
 
 /// Optimistic-concurrency guard used by the accept route.
-pub fn assert_request_version(
-    request: &Data,
-    expected: Option<f64>,
-) -> Result<(), DomainError> {
+pub fn assert_request_version(request: &Data, expected: Option<f64>) -> Result<(), DomainError> {
     let Some(expected) = expected else {
         return Ok(());
     };
@@ -122,10 +119,7 @@ pub fn assert_request_version(
 }
 
 /// Stable duplicate detection for partner retries.
-pub fn duplicate_request<'a>(
-    rows: &'a [Data],
-    request_number: &str,
-) -> Option<&'a Data> {
+pub fn duplicate_request<'a>(rows: &'a [Data], request_number: &str) -> Option<&'a Data> {
     rows.iter().find(|row| {
         let candidate = row
             .get("request_number")
@@ -254,7 +248,13 @@ pub fn validate_accept(
         .or_else(|| non_null(unit, "capacity"))
         .or_else(|| non_null(unit, "quantity"))
         .and_then(|value| js_number(Some(value)))
-        .unwrap_or(accepted);
+        .ok_or_else(|| {
+            DomainError::conflict(
+                "capacity_metadata_required",
+                "capacity_metadata_required",
+                None,
+            )
+        })?;
     if accepted > available {
         return Err(DomainError::conflict(
             "insufficient_capacity",
@@ -278,7 +278,11 @@ fn string_or_status(unit: &Data) -> String {
 /// Public status projection: no contact, agency detail or precise coordinates.
 pub fn public_mutual_aid_projection(request: &MutualAidRequest) -> Data {
     let mut location = Data::new();
-    if let Some(city) = request.location.get("city").filter(|value| js_truthy(value)) {
+    if let Some(city) = request
+        .location
+        .get("city")
+        .filter(|value| js_truthy(value))
+    {
         location.insert("city".to_string(), city.clone());
     }
     if let Some(address) = request
@@ -386,7 +390,9 @@ mod tests {
             Err("resource_type_required".to_string())
         );
         assert_eq!(
-            validate_request(&row(json!({"resource_type": "ambulance", "quantity": 0, "requesting_agency": "x"}))),
+            validate_request(&row(
+                json!({"resource_type": "ambulance", "quantity": 0, "requesting_agency": "x"})
+            )),
             Err("invalid_quantity".to_string())
         );
         assert_eq!(
@@ -395,7 +401,10 @@ mod tests {
         );
 
         let rows = vec![request_to_data(&request())];
-        assert_eq!(duplicate_request(&rows, "MA-1").unwrap()["id"], json!("ma-1"));
+        assert_eq!(
+            duplicate_request(&rows, "MA-1").unwrap()["id"],
+            json!("ma-1")
+        );
         assert!(duplicate_request(&rows, "MA-2").is_none());
     }
 
@@ -465,6 +474,20 @@ mod tests {
         )
         .expect_err("insufficient capacity");
         assert_eq!(capacity.code, "insufficient_capacity");
+
+        let missing = validate_accept(
+            &request,
+            &MutualAidAccept {
+                unit_id: "unit-1".to_string(),
+                accepted_quantity: 1.0,
+                eta_minutes: None,
+                contact: None,
+                expected_version: None,
+            },
+            &row(json!({"status": "available"})),
+        )
+        .expect_err("missing capacity metadata");
+        assert_eq!(missing.code, "capacity_metadata_required");
 
         let mut filled = request.clone();
         filled.status = MutualAidStatus::Filled;

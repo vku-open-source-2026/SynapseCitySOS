@@ -85,15 +85,18 @@ through `/v1/emergency/resources`. They are **not** City user records:
   The canonical field is `assigned_resource_unit_id`; `assigned_user_id` is a
   deprecated wire mirror of the same opaque resource-unit id.
 - Login/register/profile settings belong to SynapseDX. SOS `/v1/auth/*` is
-  retired and never makes a responder a City user.
+  retired except for the exchange endpoint and never makes a responder a City
+  user.
 
-## Auth retired
+## Auth delegated to SynapseDX
 
-Tier-3 login/session management is retired. Every `/v1/auth/*` path returns
-`410 workspace_moved`; there is no supported legacy session surface. Login,
-registration, sessions, MFA and account lifecycle belong to SynapseDX. SOS
-stores no password or identity table and never creates City users. Tokens are
-accepted only from the `Authorization` header, never a URL query.
+Tier-3 login/session management is retired. Every `/v1/auth/*` path except
+`POST /v1/auth/exchange` returns `410 workspace_moved`; exchange verifies a
+Tier-2 bearer and issues a short-lived SOS session. There is no password or
+legacy session surface. Login, registration, sessions, MFA and account
+lifecycle belong to SynapseDX. SOS stores no password or identity table and
+never creates City users. Tokens are accepted only from the `Authorization`
+header, never a URL query.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: `emergency:read`, `emergency:write`,
@@ -179,8 +182,9 @@ Redirected to `https://synapsedx.sbs/workspace`:
 /workspace/**
 ```
 
-`/v1/auth/*` returns `410 workspace_moved` before credential handling. The
-portable SOS plugin bundles that replace the retired pages live in `plugins/`.
+`/v1/auth/*` returns `410 workspace_moved` before credential handling, except
+`POST /v1/auth/exchange`. The portable SOS plugin bundles that replace the
+retired pages live in `plugins/`.
 
 Never add:
 

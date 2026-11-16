@@ -24,8 +24,9 @@ home-screen widget uses the same warm light visual language.
   fallback and last-good snapshot retention.
 - **Local notifications** when a new hazard crosses the chosen severity
   threshold; the widget worker can also notify for a new high/critical hazard.
-- **Optional responder login** (email) and a read-only summary of emergency
-  events the account may read.
+- **Optional responder session** exchanged from a verified SynapseDX/Tier-2
+  bearer (`POST /v1/auth/exchange`) and a read-only summary of emergency events
+  the account may read. There is no dead local email/password form.
 - **Home-screen widget** (4×3): latest hazard, severity/distance, active event
   count, mini map, SOS and refresh actions, explicit stale/unknown labels.
 

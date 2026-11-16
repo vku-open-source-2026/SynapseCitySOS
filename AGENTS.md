@@ -58,11 +58,12 @@ are not City users. Do not add `/v1/users`, read `city-users`, or resolve City
 operator IDs. Dispatch assignment references an SOS resource unit under
 `assigned_resource_unit_id`; `assigned_user_id` is a deprecated mirror.
 
-Tier-3 login/session management is retired. Every `/v1/auth/*` path returns
-`410 workspace_moved`; there is no supported legacy session surface. Login,
-registration, sessions and roles belong to SynapseDX. Do not add a new local
-session store, password table or demo administrator path. Tokens are accepted
-only from `Authorization: Bearer`, never a query string.
+Tier-3 login/session management is retired. Every `/v1/auth/*` path except
+`POST /v1/auth/exchange` returns `410 workspace_moved`; exchange verifies a
+Tier-2 user bearer and issues the only supported short-lived SOS session.
+Login, registration, sessions and roles belong to SynapseDX. Do not add a new
+local session store, password table or demo administrator path. Tokens are
+accepted only from `Authorization: Bearer`, never a query string.
 
 Internal emergency routes still require a verified principal and the
 role-derived permission described below. The public projection and hazard feed
@@ -132,7 +133,7 @@ Retired work surfaces redirect to `https://synapsedx.sbs/workspace`:
 `apps/console/nginx.conf` and `infra/nginx/`, and the root route redirects
 client-side. Route modules are redirect stubs/notices — never mount a local
 command-centre dashboard or login form again. `/v1/auth/*` answers
-`410 workspace_moved` before auth handling.
+`410 workspace_moved` before auth handling, except `POST /v1/auth/exchange`.
 
 **Release gate:** do not deploy the public-only redirects or retire the
 production command-centre pages until the DX workflow binding for event/dispatch

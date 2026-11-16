@@ -44,7 +44,8 @@ Keep a Changelog format and version tags use Semantic Versioning.
   `/technician/**` and `/workspace/**` return `308` (nginx and client root
   route). The public hazard map stays.
 - `/v1/auth/*` answers `410 workspace_moved` with `workspace_url` before any
-  credential handling; production ignores `TIER3_AUTH_MODE=legacy`.
+  credential handling, except `POST /v1/auth/exchange` (verified Tier-2 bearer
+  to short-lived SOS session); production ignores `TIER3_AUTH_MODE=legacy`.
 - Mobile app: new Synapse logo system (app icon, adaptive/monochrome icon,
   splash, notification icon); Android version 0.1.1 (versionCode 2).
 - SOS brand mark switched to the orange/amber emergency palette; Android
@@ -53,6 +54,37 @@ Keep a Changelog format and version tags use Semantic Versioning.
   with the same product-boundary, proxy, CORS, correlation-ID, timeout,
   metrics, binary and SSE behavior. The Docker image builds the release binary
   and uses `--healthcheck` instead of Node.js.
+
+### Fixed
+- Generic `PUT` rejects lifecycle/provenance fields and immutable records;
+  workspace workflows enforce initial statuses, allowed transitions and
+  draft-only deletes instead of publishing or deleting evidence directly.
+- POST/records-create is create-only and returns `409 record_exists`; server
+  owned idempotent drafts explicitly read-or-create instead of upserting.
+- HITL is required in production (`SOS_HITL_REQUIRED` unset refuses boot), EOP
+  approve/publish/submit require the approved approval id, and submit never
+  demotes a published plan.
+- Dispatch assignment requires four-eyes approval, CAS-reserves an available
+  resource unit, appends assignment history and releases the unit on terminal
+  transitions; terminal orders cannot be reopened.
+- Mutual-aid accepts honor `If-Match`/`expected_version`, require explicit
+  capacity, compensate the unit on request-update failure, and the workspace
+  mutual-aid schema now matches the SOS domain record.
+- One shared Tier-2 hazard watcher per process; SSE is event-driven with a 30 s
+  fallback, disconnects cleanly and retains the last-good merged snapshot.
+- Supported session issuance via `POST /v1/auth/exchange` (verified Tier-2
+  bearer) plus a scoped `SOS_INGEST_SERVICE_TOKEN` for scheduled hazard ingest;
+  mobile no longer shows a dead email/password form.
+- Public status counts the merged Tier-2 feed and exposes VNDMS ingest
+  freshness; stale/unconfigured/failed ingest is `degraded`, never `ready`.
+  Public reads are rate-limited and served from bounded short-TTL caches.
+- The console splash/service-worker bootstrap moved to `/splash.js`, with
+  matching edge/container CSP (`script-src 'self'`) and a regression test.
+- Hazard deploy now persists an EOP draft and links it idempotently; hazard
+  lifecycle transitions have an explicit versioned endpoint.
+- Map tiles and `/metrics` keep their own content types; the Android download
+  link is derived from the mobile `0.1.2` release and tested against
+  `mobile/app.json`.
 
 ## [0.2.2] - 2026-11-10
 

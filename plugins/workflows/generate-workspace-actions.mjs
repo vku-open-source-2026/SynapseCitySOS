@@ -29,7 +29,18 @@ const SCHEMAS = {
     dataset: 'sos-emergency-events', recordType: 'EmergencyEvent', publish: true,
     terminal: ['resolved', 'canceled', 'archived'],
     statuses: ['monitoring', 'active', 'contained', 'resolved', 'canceled', 'archived'],
-    decisionStatus: { monitor: 'monitoring', activate: 'active', contain: 'contained', cancel: 'canceled', archive: 'archived' },
+    // Terminal close/cancel/archive stay in the SOS event lifecycle so an AAR
+    // is created first; the workspace can only change the live command state.
+    decisionStatus: { monitor: 'monitoring', activate: 'active', contain: 'contained' },
+    allowedFrom: {
+      monitoring: ['monitoring', 'active', 'contained'],
+      active: ['monitoring'],
+      contained: ['monitoring', 'active'],
+      resolved: ['active', 'contained'],
+      canceled: ['monitoring', 'active', 'contained'],
+      archived: ['resolved', 'canceled'],
+    },
+    deleteFrom: ['monitoring'],
     fields: {
       event_code: S(120), title: S(200), description: S(4000), event_type: S(40), severity: S(40),
       status: S(40), source: S(40), address: S(300), ward: S(120), district: S(120), city: S(120),
@@ -43,12 +54,22 @@ const SCHEMAS = {
     dataset: 'sos-dispatch-orders', recordType: 'DispatchOrder', publish: false,
     terminal: ['completed', 'canceled', 'rejected'],
     statuses: ['pending', 'assigned', 'in_transit', 'on_scene', 'completed', 'canceled', 'rejected'],
-    decisionStatus: { assign: 'assigned', start: 'in_transit', arrive: 'on_scene', complete: 'completed', reject: 'rejected', cancel: 'canceled' },
+    // Assignment/start/arrive/complete require SOS resource reservation and
+    // release; only a still-pending order may be rejected/canceled here.
+    decisionStatus: { start: 'in_transit', arrive: 'on_scene', reject: 'rejected', cancel: 'canceled' },
+    allowedFrom: {
+      assigned: ['pending'],
+      in_transit: ['assigned'],
+      on_scene: ['assigned', 'in_transit'],
+      completed: ['assigned', 'in_transit', 'on_scene'],
+      canceled: ['pending'],
+      rejected: ['pending'],
+    },
+    deleteFrom: ['pending'],
     fields: {
       emergency_event_id: S(128), eop_plan_id: S(128), task_title: S(200), task_description: S(4000),
-      priority: S(40), status: S(40), assigned_resource_unit_id: S(128), assigned_user_id: S(128),
-      eta_minutes: N(), started_at: DATE(), completed_at: DATE(), assignments_json: JSONV(),
-      metadata_json: JSONV(), target_location_json: JSONV(),
+      priority: S(40), status: S(40), eta_minutes: N(), metadata_json: JSONV(),
+      target_location_json: JSONV(),
     },
     required: ['emergency_event_id', 'task_title'],
     defaults: { status: 'pending', priority: 'medium' },
@@ -57,7 +78,19 @@ const SCHEMAS = {
     dataset: 'sos-resource-units', recordType: 'ResourceUnit', publish: false,
     terminal: ['retired'],
     statuses: ['available', 'assigned', 'deployed', 'unavailable', 'maintenance', 'retired'],
-    decisionStatus: { available: 'available', assign: 'assigned', deploy: 'deployed', unavailable: 'unavailable', maintain: 'maintenance', retire: 'retired' },
+    // Assignment/retirement is owned by SOS dispatch (reservation, release and
+    // terminal rules); the workspace may only take an unassigned unit out of
+    // service or put it back.
+    decisionStatus: { available: 'available', unavailable: 'unavailable', maintain: 'maintenance' },
+    allowedFrom: {
+      available: ['unavailable', 'maintenance'],
+      assigned: ['available'],
+      deployed: ['available', 'assigned'],
+      unavailable: ['available'],
+      maintenance: ['available'],
+      retired: ['available', 'unavailable', 'maintenance'],
+    },
+    deleteFrom: ['available'],
     fields: {
       resource_code: S(120), name: S(200), resource_type: S(60), status: S(40), capacity: N(),
       capacity_unit: S(40), district: S(120), ward: S(120), contact_phone: S(40), skills_json: JSONV(),
@@ -70,7 +103,13 @@ const SCHEMAS = {
     dataset: 'sos-sitreps', recordType: 'Sitrep', publish: false,
     terminal: ['published', 'archived'],
     statuses: ['draft', 'review_pending', 'published', 'archived'],
-    decisionStatus: { submit: 'review_pending', publish: 'published', archive: 'archived' },
+    decisionStatus: { submit: 'review_pending', archive: 'archived' },
+    allowedFrom: {
+      review_pending: ['draft'],
+      published: ['review_pending'],
+      archived: ['draft', 'review_pending', 'published'],
+    },
+    deleteFrom: ['draft'],
     fields: {
       emergency_event_id: S(128), title: S(200), status: S(40), author: S(160), source: S(60),
       reporting_period_start: DATE(), reporting_period_end: DATE(), numbers_json: JSONV(),
@@ -82,8 +121,19 @@ const SCHEMAS = {
   eop: {
     dataset: 'sos-eop-plans', recordType: 'EOPPlan', publish: false,
     terminal: ['published', 'archived', 'rejected'],
+    locked: ['approved'],
     statuses: ['draft', 'review_pending', 'approved', 'published', 'archived', 'rejected'],
-    decisionStatus: { submit: 'review_pending', approve: 'approved', publish: 'published', reject: 'rejected', archive: 'archived' },
+    // Approve/publish require the SOS HITL approval chain; the workspace may
+    // submit a draft for review or reject it, never publish it.
+    decisionStatus: { submit: 'review_pending', reject: 'rejected', archive: 'archived' },
+    allowedFrom: {
+      review_pending: ['draft'],
+      approved: ['review_pending'],
+      published: ['approved'],
+      rejected: ['review_pending'],
+      archived: ['draft', 'review_pending', 'approved', 'published'],
+    },
+    deleteFrom: ['draft'],
     fields: {
       emergency_event_id: S(128), version: N(), title: S(200), summary: S(4000), status: S(40),
       objectives_json: JSONV(), operational_phases_json: JSONV(), actions_json: JSONV(),
@@ -98,7 +148,13 @@ const SCHEMAS = {
     dataset: 'sos-after-action-reports', recordType: 'AfterActionReport', publish: false,
     terminal: ['published', 'archived'],
     statuses: ['draft', 'published', 'archived'],
-    decisionStatus: { publish: 'published', archive: 'archived' },
+    // Publication is an SOS AAR action; the workspace may only archive a draft.
+    decisionStatus: { archive: 'archived' },
+    allowedFrom: {
+      published: ['draft'],
+      archived: ['draft'],
+    },
+    deleteFrom: ['draft'],
     fields: {
       emergency_event_id: S(128), report_code: S(160), title: S(200), summary: S(8000), status: S(40),
       lessons_learned_json: JSONV(), recommendations_json: JSONV(), timeline_json: JSONV(),
@@ -111,7 +167,14 @@ const SCHEMAS = {
     dataset: 'sos-hazard-layers', recordType: 'Hazard', publish: true,
     terminal: ['expired', 'resolved'],
     statuses: ['active', 'monitoring', 'expired', 'resolved'],
-    decisionStatus: { activate: 'active', monitor: 'monitoring', expire: 'expired', resolve: 'resolved' },
+    decisionStatus: { activate: 'active', monitor: 'monitoring' },
+    allowedFrom: {
+      active: ['monitoring'],
+      monitoring: ['active'],
+      expired: ['active', 'monitoring'],
+      resolved: ['active', 'monitoring'],
+    },
+    deleteFrom: ['monitoring'],
     fields: {
       hazard_id: S(160), title: S(200), description: S(4000), event_type: S(40), severity: S(40),
       source: S(40), is_active: BOOL(), district: S(120), ward: S(120), detected_at: DATE(),
@@ -124,7 +187,14 @@ const SCHEMAS = {
     dataset: 'sos-hazard-ingest-runs', recordType: 'HazardIngestRun', publish: false,
     terminal: ['completed', 'failed'],
     statuses: ['queued', 'running', 'completed', 'failed'],
-    decisionStatus: { start: 'running', complete: 'completed', fail: 'failed' },
+    // Ingest runs are written by the ingest API/service, not by operators.
+    decisionStatus: {},
+    allowedFrom: {
+      running: ['queued'],
+      completed: ['running'],
+      failed: ['queued', 'running'],
+    },
+    deleteFrom: [],
     fields: {
       source: S(60), status: S(40), started_at: DATE(), finished_at: DATE(), hazards_seen: N(),
       hazards_ingested: N(), error_message: S(4000), metadata_json: JSONV(),
@@ -134,15 +204,23 @@ const SCHEMAS = {
   },
   mutualAid: {
     dataset: 'sos-mutual-aid-requests', recordType: 'MutualAidRequest', publish: false,
-    terminal: ['completed', 'rejected', 'canceled'],
-    statuses: ['pending', 'approved', 'rejected', 'in_progress', 'completed', 'canceled'],
-    decisionStatus: { approve: 'approved', reject: 'rejected', start: 'in_progress', complete: 'completed', cancel: 'canceled' },
-    fields: {
-      requesting_org: S(160), target_org: S(160), emergency_event_id: S(128), resource_type: S(60),
-      quantity: N(), status: S(40), notes: S(4000), approved_at: DATE(), metadata_json: JSONV(),
+    terminal: ['filled', 'declined', 'handed_off'],
+    statuses: ['open', 'partially_filled', 'filled', 'declined', 'handed_off'],
+    decisionStatus: { decline: 'declined', handoff: 'handed_off' },
+    allowedFrom: {
+      partially_filled: ['open'],
+      filled: ['open', 'partially_filled'],
+      declined: ['open', 'partially_filled'],
+      handed_off: ['open', 'partially_filled'],
     },
-    required: ['requesting_org', 'target_org', 'resource_type'],
-    defaults: { status: 'pending', quantity: 1 },
+    deleteFrom: ['open'],
+    fields: {
+      request_number: S(64), resource_type: S(100), quantity: N(), location_json: JSONV(),
+      urgency: S(20), contact_json: JSONV(), requesting_agency: S(200), status: S(40),
+      notes: S(2000),
+    },
+    required: ['resource_type', 'quantity', 'requesting_agency'],
+    defaults: { status: 'open', quantity: 1, urgency: 'medium' },
   },
 };
 
@@ -167,6 +245,17 @@ if (!['create', 'update', 'delete', 'execute'].includes(action)) throw new Error
 const fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;
 if (!fields) throw new Error('fields_required');
 const SCHEMAS = ${JSON.stringify(SCHEMAS)};
+const INITIAL_STATUSES = ${JSON.stringify({
+    events: ['monitoring', 'active'],
+    dispatch: ['pending'],
+    resources: ['available'],
+    sitrep: ['draft'],
+    eop: ['draft'],
+    afterAction: ['draft'],
+    hazards: ['active', 'monitoring'],
+    hazardIngest: ['queued'],
+    mutualAid: ['open'],
+})};
 const schema = SCHEMAS[resource];
 if (!schema) throw new Error('unsupported_resource');
 const audit = {
@@ -209,6 +298,14 @@ if (action === 'create') {
     record[name.endsWith('_json') ? name.slice(0, -5) : name] = parsed;
   }
   if (record.status !== undefined && schema.statuses.length && !schema.statuses.includes(String(record.status))) throw new Error('status_invalid');
+  if (!(INITIAL_STATUSES[resource] || []).includes(String(record.status))) throw new Error('initial_status_invalid');
+  if (resource === 'mutualAid' && record.urgency !== undefined && !['low', 'medium', 'high', 'critical'].includes(String(record.urgency))) throw new Error('urgency_invalid');
+  if (resource === 'mutualAid') {
+    // The SOS domain requires these fields for the public/accept projections.
+    if (!record.request_number) record.request_number = 'MA-' + String($now).replace(/[^0-9]/g, '').slice(0, 14);
+    record.filled_quantity = 0;
+    record.history = [{ action: 'created', at: $now, by: submittedBy }];
+  }
   record.created_at = $now;
   record.updated_at = $now;
   return { mode: 'create', url: base, body: { data: record, publish: schema.publish === true }, audit, operation: resource + '.create' };
@@ -218,6 +315,13 @@ if (action === 'delete') {
 }
 const unknown = Object.keys(fields).filter((key) => key !== 'record_id' && key !== 'id' && key !== 'decision' && key !== 'notes' && !(key in schema.fields));
 if (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));
+const immutable = ['emergency_event_id', 'eop_plan_id', 'version', 'request_number'];
+if (action === 'update') {
+  for (const key of immutable) {
+    const value = fields[key];
+    if (value !== undefined && value !== null && value !== '') throw new Error(key + '_immutable');
+  }
+}
 const patch = {};
 for (const [name, spec] of Object.entries(schema.fields)) {
   const parsed = parseField(name, spec);
@@ -239,13 +343,19 @@ if (action === 'execute') {
   if (patch.status === 'rejected') patch.rejected_at = $now;
 }
 if (!Object.keys(patch).length) throw new Error('nothing_to_update');
+if (action === 'update' && patch.status !== undefined) throw new Error('status_requires_execute');
 if (patch.status !== undefined && schema.statuses.length && !schema.statuses.includes(String(patch.status))) throw new Error('status_invalid');
 return { mode: 'update', url: base + '/' + encodeURIComponent(recordId), patch, audit, operation: resource + '.' + (decision || action) };
 `;
 
 const ref = (name) => ({ node: name, type: 'main', index: 0 });
 const node = (name, type, typeVersion, position, parameters = {}) => ({ name, type, typeVersion, position, parameters });
-const TERMINALS = Object.fromEntries(Object.entries(SCHEMAS).map(([key, value]) => [key, { terminal: value.terminal }]));
+const GUARDS = Object.fromEntries(Object.entries(SCHEMAS).map(([key, value]) => [key, {
+  terminal: value.terminal,
+  locked: value.locked || [],
+  allowedFrom: value.allowedFrom || {},
+  deleteFrom: value.deleteFrom || [],
+}]));
 
 const workflow = {
   name: 'sos-workspace-actions',
@@ -277,10 +387,15 @@ const action = response.input;
 if (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('record_not_found');
 const data = current.data;
 if (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');
-const schema = ${JSON.stringify(TERMINALS)};
-const terminal = schema[action.resource] ? schema[action.resource].terminal : [];
-if (terminal.includes(String(data.status))) throw new Error('record_terminal');
+const guards = ${JSON.stringify(GUARDS)};
+const guard = guards[action.resource] || { terminal: [], locked: [], allowedFrom: {}, deleteFrom: [] };
+if (guard.terminal.includes(String(data.status))) throw new Error('record_terminal');
+if ((guard.locked || []).includes(String(data.status)) && action.patch.status === undefined) throw new Error('record_immutable');
 const next = { ...data, ...action.patch, updated_at: $now };
+if (action.patch.status !== undefined && String(action.patch.status) !== String(data.status)) {
+  const allowed = (guard.allowedFrom || {})[String(action.patch.status)] || [];
+  if (!allowed.includes(String(data.status))) throw new Error('record_status_invalid');
+}
 return { body: { data: next, ifVersion: current.version }, url: action.url, audit: action.audit, operation: action.operation };`,
     }),
     node('Patch full record', 'httpRequest', 4, [1520, 360], {
@@ -292,7 +407,22 @@ return { body: { data: next, ifVersion: current.version }, url: action.url, audi
     node('Delete?', 'if', 1, [1080, 560], {
       conditions: { combinator: 'and', conditions: [{ leftValue: '={{$json.mode}}', rightValue: 'delete', operator: 'equals' }] },
     }),
-    node('Delete record', 'httpRequest', 4, [1300, 500], {
+    node('Read record for delete', 'httpRequest', 4, [1300, 500], {
+      url: '={{ $json.url }}', method: 'GET',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      auth: { credentialRef: 'synapsedx-organization', header: 'X-API-Key', allowedOrigins: [DX] },
+      includeInput: true, timeoutMs: 15000,
+    }),
+    node('Check delete allowed', 'code', 2, [1520, 500], {
+      code: `const response = $input || {};
+const action = response.input;
+if (response.statusCode !== 200 || !response.body || typeof response.body.data !== 'object' || !response.body.data) throw new Error('record_not_found');
+const guards = ${JSON.stringify(GUARDS)};
+const guard = guards[action.resource] || { deleteFrom: [] };
+if (!guard.deleteFrom.includes(String(response.body.data.status))) throw new Error('record_delete_forbidden');
+return { url: action.url, audit: action.audit, operation: action.operation };`,
+    }),
+    node('Delete record', 'httpRequest', 4, [1740, 500], {
       url: '={{ $json.url }}', method: 'DELETE',
       headers: { Accept: 'application/json' },
       auth: { credentialRef: 'synapsedx-organization', header: 'X-API-Key', allowedOrigins: [DX] },
@@ -311,7 +441,9 @@ return { body: { data: next, ifVersion: current.version }, url: action.url, audi
     'Read current record': { main: [[ref('Merge and enforce invariants')]] },
     'Merge and enforce invariants': { main: [[ref('Patch full record')]] },
     'Patch full record': { main: [[]] },
-    'Delete?': { main: [[ref('Delete record')], [ref('Unsupported operation')]] },
+    'Delete?': { main: [[ref('Read record for delete')], [ref('Unsupported operation')]] },
+    'Read record for delete': { main: [[ref('Check delete allowed')]] },
+    'Check delete allowed': { main: [[ref('Delete record')]] },
     'Delete record': { main: [[]] },
     'Unsupported operation': { main: [[]] },
   },

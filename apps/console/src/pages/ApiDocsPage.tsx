@@ -45,8 +45,16 @@ const sections: EndpointSection[] = [
         icon: "🔐",
         title: "Auth đã chuyển sang SynapseDX",
         description:
-            "Tầng 3 chỉ còn giao diện công khai. Mọi yêu cầu /v1/auth/* trả 410 workspace_moved; đăng nhập, đăng ký, phiên và phân quyền làm việc do SynapseDX (https://synapsedx.sbs/workspace) quản lý. Không có luồng tạo phiên tại tầng 3.",
+            "Đăng nhập, đăng ký, phiên và phân quyền làm việc do SynapseDX (https://synapsedx.sbs/workspace) quản lý. Luồng tạo phiên duy nhất tại SOS là đổi một Tier-2 bearer đã xác thực qua POST /v1/auth/exchange; mọi đường dẫn /v1/auth/* khác trả 410 workspace_moved.",
         endpoints: [
+            {
+                method: "POST",
+                path: "/v1/auth/exchange",
+                title: "Đổi Tier-2 bearer lấy phiên SOS",
+                description:
+                    "Gửi Authorization: Bearer <Tier-2 access token> (không đặt token trong body/query). Trả access/refresh token SOS ngắn hạn; vai trò lấy từ bootstrap admin hoặc SOS_AUTH_DEFAULT_ROLE.",
+                requiresAuth: true,
+            },
             {
                 method: "POST",
                 path: "/v1/auth/login",
@@ -230,7 +238,7 @@ const sections: EndpointSection[] = [
                 method: "POST",
                 path: "/v1/hazards/ingest",
                 title: "Nhập lô VNDMS",
-                description: "Chuẩn hóa, validate và upsert theo hazard_id; lịch chạy thuộc dịch vụ nền scheduled work.",
+                description: "Chuẩn hóa, validate và upsert theo hazard_id; lịch chạy thuộc Tier-2. Tier-2 scheduled job dùng bearer SOS_INGEST_SERVICE_TOKEN; người dùng thường cần quyền emergency:dispatch.",
                 requiresAuth: true,
             },
             {
@@ -239,6 +247,14 @@ const sections: EndpointSection[] = [
                 title: "Triển khai cảnh báo",
                 description:
                     "Tạo sự kiện khẩn cấp và bản nháp EOP từ một cảnh báo (idempotent).",
+            },
+            {
+                method: "POST",
+                path: "/v1/hazards/{hazard_id}/status",
+                title: "Chuyển trạng thái cảnh báo",
+                description:
+                    "Chỉ chuyển active↔monitoring hoặc active/monitoring→expired/resolved; ghi status_history và yêu cầu If-Match/if_version.",
+                requiresAuth: true,
             },
             {
                 method: "POST",

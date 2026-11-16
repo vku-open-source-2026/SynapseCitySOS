@@ -256,6 +256,39 @@ test('transition action design is implemented and keeps invariants', () => {
     }
 });
 
+test('workspace lifecycle guards reject invalid transitions and non-draft deletes', () => {
+    const workflow = readWorkflow('plugins/workflows/sos-workspace-actions.workflow.json');
+    const byName = new Map(workflow.nodes.map((node) => [node.name, node]));
+    const validate = byName.get('Validate envelope and select operation').parameters.code;
+    assert.match(validate, /allowedFrom/);
+    assert.match(validate, /deleteFrom/);
+    assert.ok(validate.includes('"requesting_agency"'), 'mutual aid must use the SOS domain schema');
+    assert.ok(!validate.includes('requesting_org'), 'mutual aid must not use the incompatible workspace schema');
+    assert.ok(validate.includes('"open"'));
+    assert.ok(validate.includes('"partially_filled"'));
+    assert.match(validate, /record\.request_number/);
+    assert.match(validate, /record\.filled_quantity = 0/);
+    assert.match(validate, /record\.history =/);
+    assert.match(validate, /initial_status_invalid/);
+    assert.ok(validate.includes('"draft"'), 'controlled records must start in draft');
+    assert.match(validate, /status_requires_execute/);
+    for (const unsafe of ['"publish":"published"', '"approve":"approved"', '"assign":"assigned"']) {
+        assert.ok(!validate.includes(unsafe), `workspace must not bypass ${unsafe}`);
+    }
+    assert.ok(!validate.includes('assigned_resource_unit_id'), 'dispatch assignment must use the SOS reservation API');
+    assert.match(validate, /_immutable/);
+    const merge = byName.get('Merge and enforce invariants').parameters.code;
+    assert.match(merge, /record_immutable/);
+    assert.match(merge, /record_status_invalid/);
+    assert.match(merge, /guard\.allowedFrom/);
+    assert.ok(byName.has('Read record for delete'));
+    assert.ok(byName.has('Check delete allowed'));
+    assert.match(
+        byName.get('Check delete allowed').parameters.code,
+        /record_delete_forbidden/,
+    );
+});
+
 test('product forms bind executable workflows; Common forms retain app-scoped capability actions', () => {
     const workflows = new Set([
         ...manifest.workflows.map((entry) => entry.workflow),

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { sosApi } from '../api/sos';
@@ -28,12 +28,8 @@ export function AccountScreen({
   navigate: (route: AppRoute) => void;
   onBack: () => void;
 }) {
-  const { user, token, login, register, logout } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
+  const { user, token, connectTier2Token, logout } = useAuth();
+  const [tier2Token, setTier2Token] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,11 +45,8 @@ export function AccountScreen({
     setBusy(true);
     setError(null);
     try {
-      if (mode === 'login') {
-        await login(email, password);
-      } else {
-        await register({ email, password, full_name: fullName, phone: phone || undefined });
-      }
+      await connectTier2Token(tier2Token.trim());
+      setTier2Token('');
     } catch (authError) {
       setError(errorMessage(authError));
     } finally {
@@ -132,45 +125,48 @@ export function AccountScreen({
     <Screen>
       <PageHeader
         eyebrow="TÀI KHOẢN"
-        title={mode === 'login' ? 'Đăng nhập responder' : 'Tạo tài khoản'}
-        subtitle="Tài khoản SOS dùng email (Tier-2 identity). Không bắt buộc để xem cảnh báo công khai."
+        title="Kết nối tài khoản responder"
+        subtitle="Đăng nhập tại SynapseDX workspace, sau đó dán access token để mở phiên SOS ngắn hạn. Không bắt buộc để xem cảnh báo công khai."
         onBack={onBack}
       />
       <Card>
+        <Text style={styles.infoTitle}>1. Mở SynapseDX workspace</Text>
+        <Pressable
+          onPress={() => Linking.openURL('https://synapsedx.sbs/workspace').catch(() => undefined)}
+          style={styles.switch}
+        >
+          <Text style={styles.switchText}>Mở https://synapsedx.sbs/workspace</Text>
+        </Pressable>
+        <Text style={styles.infoBody}>
+          SOS không còn nhận email/mật khẩu trực tiếp. Phiên được cấp bằng token Tier-2 đã xác thực qua
+          /v1/auth/exchange.
+        </Text>
+      </Card>
+      <Card>
+        <Text style={styles.infoTitle}>2. Dán access token Tier-2</Text>
         <TextField
-          label="Email"
-          value={email}
-          onChangeText={setEmail}
+          label="Access token"
+          value={tier2Token}
+          onChangeText={setTier2Token}
           autoCapitalize="none"
-          keyboardType="email-address"
           autoCorrect={false}
-          placeholder="responder@example.com"
+          secureTextEntry
+          placeholder="eyJ..."
         />
-        {mode === 'register' ? (
-          <>
-            <TextField label="Họ và tên" value={fullName} onChangeText={setFullName} placeholder="Nguyễn Văn A" />
-            <TextField label="Số điện thoại (tuỳ chọn)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="09xx xxx xxx" />
-          </>
-        ) : null}
-        <TextField label="Mật khẩu" value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" />
         {error ? <ErrorNotice message={error} /> : null}
         <PrimaryButton
-          label={mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
-          icon={mode === 'login' ? 'log-in' : 'person-add'}
+          label="Kết nối"
+          icon="log-in"
           loading={busy}
           onPress={() => submit().catch(() => undefined)}
         />
-        <Pressable onPress={() => setMode(mode === 'login' ? 'register' : 'login')} style={styles.switch}>
-          <Text style={styles.switchText}>
-            {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
-          </Text>
-        </Pressable>
       </Card>
       <Card>
         <Text style={styles.infoTitle}>Quyền được kiểm tra phía máy chủ</Text>
         <Text style={styles.infoBody}>
-          Tài khoản mới mặc định là responder. Các thao tác dispatch/EOP/SITREP yêu cầu quyền do quản
-          trị viên cấp; app này chỉ hiển thị phần đọc và hướng dẫn công khai.
+          Vai trò SOS được ánh xạ từ chính sách quản trị viên/bootstrap và mặc định responder. Các thao
+          tác dispatch/EOP/SITREP yêu cầu quyền tương ứng; app này chỉ hiển thị phần đọc và hướng dẫn
+          công khai.
         </Text>
       </Card>
       <MenuRow icon="settings-outline" label="Cài đặt ứng dụng" onPress={() => navigate({ name: 'settings' })} />
