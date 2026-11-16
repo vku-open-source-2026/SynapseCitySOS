@@ -1,0 +1,637 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Situation report desk",
+    "slug": "sos-sitrep-desk",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Capture reporting periods, casualty and resource numbers, and publish a reviewed situation report. The reporting period and event id are required.",
+        "type": "heading",
+        "title": "SITREP drafting and publication",
+        "width": "full"
+      },
+      {
+        "id": "workspace-navigation",
+        "type": "navigation",
+        "title": "Quick access",
+        "width": "full",
+        "links": [
+          {
+            "label": "Overview",
+            "target": "page:sos-command-overview",
+            "actionId": "act-workspace-navigation-link1"
+          },
+          {
+            "label": "Hazard watch",
+            "target": "page:sos-hazard-watch",
+            "actionId": "act-workspace-navigation-link2"
+          },
+          {
+            "label": "Dispatch",
+            "target": "page:sos-dispatch-board",
+            "actionId": "act-workspace-navigation-link3"
+          },
+          {
+            "label": "Resources",
+            "target": "page:sos-resource-registry",
+            "actionId": "act-workspace-navigation-link4"
+          },
+          {
+            "label": "Team tasks",
+            "target": "module:tasks",
+            "actionId": "act-workspace-navigation-link5"
+          }
+        ]
+      },
+      {
+        "id": "sitrep-metric",
+        "type": "metric",
+        "title": "Situation reports",
+        "width": "half",
+        "resource": "sitrep",
+        "onLoad": "act-sitrep-metric-load"
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Events",
+        "width": "half",
+        "resource": "events",
+        "onLoad": "act-events-metric-load"
+      },
+      {
+        "id": "records-section",
+        "type": "divider",
+        "title": "Operational picture",
+        "width": "full"
+      },
+      {
+        "id": "sitrep-table",
+        "type": "table",
+        "title": "Situation reports",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "title",
+          "status",
+          "reporting_period_start",
+          "reporting_period_end",
+          "author",
+          "published_at"
+        ],
+        "resource": "sitrep",
+        "onLoad": "act-sitrep-table-load",
+        "onRowClick": "act-sitrep-table-row",
+        "onExport": "act-sitrep-table-export"
+      },
+      {
+        "id": "actions-section",
+        "type": "divider",
+        "title": "Take action",
+        "width": "full"
+      },
+      {
+        "id": "sitrep-create",
+        "type": "form",
+        "title": "Create a SITREP",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Event id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "reporting_period_start",
+            "type": "text",
+            "label": "Period start",
+            "required": true
+          },
+          {
+            "name": "reporting_period_end",
+            "type": "text",
+            "label": "Period end",
+            "required": true
+          },
+          {
+            "name": "numbers_json",
+            "type": "json",
+            "label": "Numbers (JSON object)",
+            "selectionPath": "numbers"
+          },
+          {
+            "name": "snapshot_json",
+            "type": "json",
+            "label": "Snapshot (JSON object)",
+            "selectionPath": "snapshot"
+          },
+          {
+            "name": "source",
+            "type": "text",
+            "label": "Source"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-sitrep-create-submit"
+      },
+      {
+        "id": "sitrep-update",
+        "type": "form",
+        "title": "Update a SITREP",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title"
+          },
+          {
+            "name": "numbers_json",
+            "type": "json",
+            "label": "Numbers (JSON object)",
+            "selectionPath": "numbers"
+          },
+          {
+            "name": "snapshot_json",
+            "type": "json",
+            "label": "Snapshot (JSON object)",
+            "selectionPath": "snapshot"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-sitrep-update-submit"
+      },
+      {
+        "id": "sitrep-decision",
+        "type": "form",
+        "title": "Submit or publish a SITREP",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "decision",
+            "type": "text",
+            "label": "Decision: submit, publish or archive",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-sitrep-decision-submit"
+      },
+      {
+        "id": "sitrep-delete",
+        "type": "form",
+        "title": "Delete a SITREP draft",
+        "width": "half",
+        "action": "delete",
+        "fields": [
+          {
+            "name": "record_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-workspace-actions",
+          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+        },
+        "onSubmit": "act-sitrep-delete-submit"
+      },
+      {
+        "id": "act-workspace-navigation-link1",
+        "type": "action",
+        "title": "Navigate Overview",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-command-overview"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link2",
+        "type": "action",
+        "title": "Navigate Hazard watch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-hazard-watch"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link3",
+        "type": "action",
+        "title": "Navigate Dispatch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-dispatch-board"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link4",
+        "type": "action",
+        "title": "Navigate Resources",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-resource-registry"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link5",
+        "type": "action",
+        "title": "Navigate Team tasks",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "module:tasks"
+        }
+      },
+      {
+        "id": "act-sitrep-metric-load",
+        "type": "action",
+        "title": "Read Situation reports",
+        "operation": {
+          "kind": "query",
+          "target": "sitrep-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "sitrep"
+        }
+      },
+      {
+        "id": "act-events-metric-load",
+        "type": "action",
+        "title": "Read Events",
+        "operation": {
+          "kind": "query",
+          "target": "events-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-sitrep-table-load",
+        "type": "action",
+        "title": "Read Situation reports",
+        "operation": {
+          "kind": "query",
+          "target": "sitrep-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "sitrep"
+        }
+      },
+      {
+        "id": "act-sitrep-table-row",
+        "type": "action",
+        "title": "Inspect Situation reports",
+        "operation": {
+          "kind": "showRecord",
+          "target": "sitrep-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-table-export",
+        "type": "action",
+        "title": "Export Situation reports",
+        "operation": {
+          "kind": "export",
+          "target": "sitrep-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-create-submit",
+        "type": "action",
+        "title": "Submit Create a SITREP",
+        "operation": {
+          "kind": "create",
+          "target": "sitrep-create",
+          "mappings": [
+            {
+              "field": "emergency_event_id",
+              "source": "event",
+              "value": "values.emergency_event_id",
+              "required": true
+            },
+            {
+              "field": "title",
+              "source": "event",
+              "value": "values.title",
+              "required": true
+            },
+            {
+              "field": "reporting_period_start",
+              "source": "event",
+              "value": "values.reporting_period_start",
+              "required": true
+            },
+            {
+              "field": "reporting_period_end",
+              "source": "event",
+              "value": "values.reporting_period_end",
+              "required": true
+            },
+            {
+              "field": "numbers_json",
+              "source": "event",
+              "value": "values.numbers_json",
+              "required": false
+            },
+            {
+              "field": "snapshot_json",
+              "source": "event",
+              "value": "values.snapshot_json",
+              "required": false
+            },
+            {
+              "field": "source",
+              "source": "event",
+              "value": "values.source",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-create-open",
+        "type": "action",
+        "title": "Open Create a SITREP",
+        "operation": {
+          "kind": "openForm",
+          "target": "sitrep-create",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-update-submit",
+        "type": "action",
+        "title": "Submit Update a SITREP",
+        "operation": {
+          "kind": "update",
+          "target": "sitrep-update",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "title",
+              "source": "event",
+              "value": "values.title",
+              "required": false
+            },
+            {
+              "field": "numbers_json",
+              "source": "event",
+              "value": "values.numbers_json",
+              "required": false
+            },
+            {
+              "field": "snapshot_json",
+              "source": "event",
+              "value": "values.snapshot_json",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-update-open",
+        "type": "action",
+        "title": "Open Update a SITREP",
+        "operation": {
+          "kind": "openForm",
+          "target": "sitrep-update",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-decision-submit",
+        "type": "action",
+        "title": "Submit Submit or publish a SITREP",
+        "operation": {
+          "kind": "execute",
+          "target": "sitrep-decision",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            },
+            {
+              "field": "decision",
+              "source": "event",
+              "value": "values.decision",
+              "required": true
+            },
+            {
+              "field": "notes",
+              "source": "event",
+              "value": "values.notes",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-decision-open",
+        "type": "action",
+        "title": "Open Submit or publish a SITREP",
+        "operation": {
+          "kind": "openForm",
+          "target": "sitrep-decision",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-delete-submit",
+        "type": "action",
+        "title": "Submit Delete a SITREP draft",
+        "operation": {
+          "kind": "delete",
+          "target": "sitrep-delete",
+          "mappings": [
+            {
+              "field": "record_id",
+              "source": "event",
+              "value": "values.record_id",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-delete-open",
+        "type": "action",
+        "title": "Open Delete a SITREP draft",
+        "operation": {
+          "kind": "openForm",
+          "target": "sitrep-delete",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-sitrep-desk.plugin.json",
+    "revision": "2026-11-15.business"
+  },
+  "checksum": "sha256:bb659fd936d24209e1d8fca8b39a0bdebb8037b6f3201c349634ac5d59d022c9"
+}

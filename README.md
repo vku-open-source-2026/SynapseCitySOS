@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/console/public/brand/logo-lockup-dark.png">
+    <img src="apps/console/public/brand/logo-lockup-light.png" width="420" alt="SynapseCity SOS">
+  </picture>
+</p>
+
 # SynapseCitySOS — emergency operations (Tier 3)
 
 ## OLP 2026 demo
@@ -38,7 +45,7 @@ root. The repo-local summary is [`PRODUCT_BOUNDARY.md`](PRODUCT_BOUNDARY.md).
 ## Architecture
 
 ```text
-apps/gateway        public HTTPS API boundary and console proxy (port 8080)
+apps/gateway        public HTTPS API boundary and console proxy (Rust/Axum, port 8080)
 apps/sos-service    emergency operations domain backend (port 8084)
 apps/console        emergency operations console
 infra/              public-edge snippets and deployment material
@@ -96,11 +103,11 @@ npm run build:android
 ```
 
 Release APK (public, served from Tier-1 SynapseOCS through Tier-2):
-<https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content>
+<https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.2-arm64-x86_64/content>
 
-GitHub release: <https://github.com/vku-open-source-2026/SynapseCitySOS/releases/tag/mobile-v0.1.0>
+GitHub release: <https://github.com/vku-open-source-2026/SynapseCitySOS/releases/tag/mobile-v0.1.2>
 
-SHA-256: `51cb3bd072c09ffce70a9e42c67165cc2a1a545d92a83853065ef0e97bf707f2`
+SHA-256: `f8c6621ad94b2edc8ccdac0352d7d592458d4c6aa848722fe4362c76c7bcd584`
 
 CI builds an unsigned APK; the production release job signs it with the
 protected keystore and publishes it through the Tier-2 files capability. See
@@ -123,13 +130,15 @@ SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
 generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
 value in production so sessions survive a restart.
 
-Identity is verified by the Tier-2 auth capability by default
-(`SOS_AUTH_MODE=tier2`, Tier-1 IAM backed). Operators log in with the email and
-password of their Tier-2 account; the Tier-2 access/refresh token is kept inside
-the signed SOS session and is never returned to the browser. A verified identity
-is a `responder`, unless its email is listed in `SOS_BOOTSTRAP_ADMIN_EMAILS`
-(comma-separated, lower-cased), which grants `admin`. A client-supplied `role`
-is always ignored.
+**Tier-3 auth is retired (2026-11-14 workspace contract).**
+`/v1/auth/login`, `/register` and `/refresh` return `410` with
+`{ "error": "workspace_moved", "workspace_url": "https://synapsedx.sbs/workspace" }`
+before credential handling. Legacy `/me`/session paths may answer `401`/`404`
+during the migration but are not a supported client surface. Login,
+registration, session management and role assignment belong to SynapseDX.
+Production ignores `TIER3_AUTH_MODE=legacy`. The historical `SOS_AUTH_MODE` /
+`SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only
+apply to that non-production legacy code path.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -194,7 +203,8 @@ The gateway is bound to loopback; terminate TLS at your own edge and proxy
 
 ### 2. Build from source
 
-Requirements: Node.js 20+, Docker Engine 24+ and Compose v2.24+.
+Requirements: Node.js 20+, Rust 1.82+ (only for building the gateway
+locally), Docker Engine 24+ and Compose v2.24+.
 
 ```bash
 git clone https://github.com/vku-open-source-2026/SynapseCitySOS.git
@@ -231,21 +241,11 @@ GET  /v1/sos
 *    /v1/ai
 ```
 
-`/v1/auth/*` is a stateless HMAC-SHA256 session shell for the console:
-login/register/refresh/logout/change-password/me/verify. Credentials are
-verified by the Tier-2 auth capability (`auth.login`, `auth.register`,
-`auth.refresh`, `auth.logout`, `auth.me`, `auth.changePassword`, optional
-`auth.exchange`); SOS stores no password and creates no SOS user dataset or City
-user record. The Tier-1/Tier-2 token stays inside the signed SOS session and is
-forwarded only to Tier-2 — it is never returned as a response field. Tokens are
-accepted only from the `Authorization` header, never a query string. Demo mode
-is an explicit development shell (see Run).
-
-Roles are always server-assigned: `SOS_BOOTSTRAP_ADMIN_EMAILS` grants `admin`,
-everything else gets `SOS_AUTH_DEFAULT_ROLE` (`responder`). Registration through
-Tier-2 creates a responder account (or `admin` for a bootstrap email). Password
-changes are delegated to Tier-2 when the session carries a Tier-2 token and
-return `503 identity_not_configured` otherwise.
+Every `/v1/auth/*` path returns `410 workspace_moved`. Login, registration,
+sessions, MFA and account lifecycle belong to SynapseDX; SOS stores no password
+and creates no SOS user dataset or City user record. Tokens are accepted only
+from the `Authorization` header, never a query string. Internal emergency
+routes still require a verified principal and the permission matrix below.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: reads need `emergency:read`, event/SITREP writes need
@@ -357,18 +357,23 @@ to the browser.
 
 ## Known lower-tier dependencies
 
-Tier 2 now provides everything this product needs at runtime: the AI capability
-(`/v1/capabilities/ai/*`), the event feed (`/v1/capabilities/events`), record
-versions with `If-Match` (`/v1/capabilities/datasets/:id/records/:recordId`),
-and scheduled jobs with run history (`/v1/capabilities/jobs`). SOS uses them
-directly and returns explicit degraded/unavailable states when a call fails.
+Tier 2 provides the runtime capabilities: AI (`/v1/capabilities/ai/*`), the
+cursor and SSE event feeds (`/v1/capabilities/events[/stream]`), record
+versions with `If-Match`, spatial dataset queries, assignment optimization and
+scheduled jobs with run history. SOS uses the capabilities it has adopted and
+returns explicit degraded/unavailable states when a call fails.
 
-Remaining blockers are release/operator steps, not SOS work:
+Remaining blockers are adoption/release/operator steps:
 
-1. **Spatial query.** Tier 2 has no spatial predicate yet, so SOS pages records
-   and filters geo predicates in memory with a bounded scan
-   (`x-sos-scan-truncated` is returned when the bound is hit).
-2. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
+1. **Spatial adoption.** Tier 2 has a PostGIS `near`/`bbox`/`within`
+   capability (`dataset.geo`). SOS hazard near/polygon endpoints call it first
+   and fall back to the bounded in-memory scan; `x-sos-scan-truncated` is only
+   returned on the fallback path.
+2. **SSE adoption.** The hazard stream now subscribes to the Tier-2 SSE feed
+   and re-reads the authoritative snapshot on a hazard event; the periodic
+   ticker remains the fallback when the stream is unavailable. The public frame
+   is still a sanitized snapshot, not a raw record payload.
+3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
    `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
    a Tier-2 service credential (`SYNAPSEDX_API_KEY`/`SYNAPSEDX_TOKEN`) to read
    the job/run status and the event feed. Until it exists, ingest status is
@@ -376,19 +381,37 @@ Remaining blockers are release/operator steps, not SOS work:
 
 ## Console
 
-The SOS console serves these owned routes:
+The SOS console is **public presentation only** (2026-11-14 workspace
+contract). Login, registration and every emergency operations dashboard moved
+to the Tier-2 SynapseDX workspace at `https://synapsedx.sbs/workspace`. The
+console serves these public routes:
 
 ```text
 /                              SOS landing
 /about /docs                   product and API docs
 /map                           public hazard/emergency map
-/login /register               auth shell
-/admin                         emergency operations dashboard
-/admin/emergency-center        command centre
-/admin/emergency-center/before during after
-/admin/emergency-center/operations/$eventId
-/admin/settings                self-service profile
 ```
+
+The retired paths `/login`, `/register`, `/admin/**`, `/technician/**` and
+`/workspace/**` return `308` to `https://synapsedx.sbs/workspace` from the
+console nginx and the public edge, and the console root route redirects
+client-side. No local command-centre dashboard can be mounted from a deep link.
+
+**Release gate (closed for representative operations, 2026-11-14):** all 28
+workspace pages across City and SOS loaded in production DX with zero page,
+console or HTTP errors; SOS event, dispatch and generic resource create/update
+executed and the records were removed. Every individual form was not submitted;
+the remaining action gap is tracked in `plugins/workflows/README.md`. EOP
+approval/publication, SITREP deltas and the other unmigrated operation families
+still require their reviewed workflows.
+
+Tier-3 work interfaces are product plugins in DX; their portable source
+artifacts live in `plugins/` and are validated/synced with
+`npm run plugins:check` and `docs/PLUGIN_SYNC.md`. The exact pre-migration route
+source is archived under `plugins/source/` as reference, not built or executed.
+
+`/v1/auth/*` answers `410 workspace_moved` (with `workspace_url`) before any
+credential handling, so no Tier-3 session can be created.
 
 There is no `/admin/assets`, `/admin/incidents`, `/admin/iot`, `/admin/budgets`,
 `/admin/reports`, `/admin/alerts`, `/admin/ingest`, `/admin/users` or
@@ -421,7 +444,15 @@ matrix, HITL contract and OLP evidence checklist are in
 ## PoF project checklist
 
 - License: Apache-2.0 (`LICENSE`) with per-source SPDX headers and attribution in `NOTICE`.
-- Build from source: `npm ci && npm run build` using Node.js 20+; Docker builds are reproducible with `docker compose build`.
+- Build from source: `npm ci && npm run build` using Node.js 20+; the Rust
+  gateway is covered by `(cd apps/gateway && cargo test)`. Docker builds are
+  reproducible with `docker compose build`.
 - Issue tracker: [GitHub Issues](https://github.com/vku-open-source-2026/SynapseCitySOS/issues).
 - Change history: [`CHANGELOG.md`](CHANGELOG.md). Versioned release tags are published on GitHub.
 - Dependency inventory: [`THIRD-PARTY.md`](THIRD-PARTY.md); dependencies are not modified or bundled into the repository.
+
+## Brand
+
+Logo, icon and social-preview assets live in [`apps/console/public/brand`](apps/console/public/brand). The console serves the favicon, web app manifest and icons from `apps/console/public`.
+
+To set the GitHub repository social preview, upload [`apps/console/public/brand/social-preview.png`](apps/console/public/brand/social-preview.png) in **Settings → Social preview**.

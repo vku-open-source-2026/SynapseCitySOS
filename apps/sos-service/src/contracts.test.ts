@@ -269,6 +269,8 @@ before(async () => {
   // This file exercises the explicit development-only demo shell; Tier-2
   // identity has its own suite in identity.test.ts.
   process.env.SOS_AUTH_MODE = 'demo';
+  // Non-production test only: keep the pre-migration auth routes reachable.
+  process.env.TIER3_AUTH_MODE = 'legacy';
   process.env.ALLOW_DEMO_AUTH = 'true';
   app.locals.createClient = () => fake.asClient();
   server = app.listen(0);

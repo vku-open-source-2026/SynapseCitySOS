@@ -56,8 +56,8 @@ Current release artefact (public, served from Tier-1 SynapseOCS through
 Tier-2; CI builds unsigned and the production release job signs it):
 
 ```text
-https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.0-arm64-x86_64/content
-SHA-256 51cb3bd072c09ffce70a9e42c67165cc2a1a545d92a83853065ef0e97bf707f2
+https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.2-arm64-x86_64/content
+SHA-256 f8c6621ad94b2edc8ccdac0352d7d592458d4c6aa848722fe4362c76c7bcd584
 ```
 
 On Windows the generated CMake paths can exceed `MAX_PATH`. The included

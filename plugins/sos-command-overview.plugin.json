@@ -1,0 +1,1065 @@
+{
+  "format": "synapsedx-plugin",
+  "formatVersion": 1,
+  "plugin": {
+    "product": "sos",
+    "name": "Emergency command overview",
+    "slug": "sos-command-overview",
+    "audience": "admin",
+    "roles": [
+      "admin",
+      "manager",
+      "operator"
+    ],
+    "widgets": [
+      {
+        "id": "intro",
+        "text": "Live command picture across emergency events, dispatch orders, resource units, situation reports, EOP plans, after-action reports, hazard layers and mutual-aid requests. Reads use Tier-2 SOS datasets; actions are reviewed SOS workflows.",
+        "type": "heading",
+        "title": "Emergency operations at a glance",
+        "width": "full"
+      },
+      {
+        "id": "workspace-navigation",
+        "type": "navigation",
+        "title": "Quick access",
+        "width": "full",
+        "links": [
+          {
+            "label": "Overview",
+            "target": "page:sos-command-overview",
+            "actionId": "act-workspace-navigation-link1"
+          },
+          {
+            "label": "Hazard watch",
+            "target": "page:sos-hazard-watch",
+            "actionId": "act-workspace-navigation-link2"
+          },
+          {
+            "label": "Dispatch",
+            "target": "page:sos-dispatch-board",
+            "actionId": "act-workspace-navigation-link3"
+          },
+          {
+            "label": "Resources",
+            "target": "page:sos-resource-registry",
+            "actionId": "act-workspace-navigation-link4"
+          },
+          {
+            "label": "Team tasks",
+            "target": "module:tasks",
+            "actionId": "act-workspace-navigation-link5"
+          }
+        ]
+      },
+      {
+        "id": "events-metric",
+        "type": "metric",
+        "title": "Emergency events",
+        "width": "half",
+        "resource": "events",
+        "onLoad": "act-events-metric-load"
+      },
+      {
+        "id": "dispatch-metric",
+        "type": "metric",
+        "title": "Dispatch orders",
+        "width": "half",
+        "resource": "dispatch",
+        "onLoad": "act-dispatch-metric-load"
+      },
+      {
+        "id": "resources-metric",
+        "type": "metric",
+        "title": "Resource units",
+        "width": "half",
+        "resource": "resources",
+        "onLoad": "act-resources-metric-load"
+      },
+      {
+        "id": "sitrep-metric",
+        "type": "metric",
+        "title": "Situation reports",
+        "width": "half",
+        "resource": "sitrep",
+        "onLoad": "act-sitrep-metric-load"
+      },
+      {
+        "id": "eop-metric",
+        "type": "metric",
+        "title": "EOP plans",
+        "width": "half",
+        "resource": "eop",
+        "onLoad": "act-eop-metric-load"
+      },
+      {
+        "id": "aar-metric",
+        "type": "metric",
+        "title": "After-action reports",
+        "width": "half",
+        "resource": "afterAction",
+        "onLoad": "act-aar-metric-load"
+      },
+      {
+        "id": "hazards-metric",
+        "type": "metric",
+        "title": "Hazard layers",
+        "width": "half",
+        "resource": "hazards",
+        "onLoad": "act-hazards-metric-load"
+      },
+      {
+        "id": "mutual-aid-metric",
+        "type": "metric",
+        "title": "Mutual-aid requests",
+        "width": "half",
+        "resource": "mutualAid",
+        "onLoad": "act-mutual-aid-metric-load"
+      },
+      {
+        "id": "events-map",
+        "type": "map",
+        "title": "Events · Live map",
+        "width": "full",
+        "resource": "events",
+        "columns": [
+          "id",
+          "name",
+          "title",
+          "status",
+          "severity",
+          "address",
+          "district",
+          "latitude",
+          "longitude",
+          "geometry",
+          "geometry_json",
+          "location",
+          "current_location",
+          "current_location_json"
+        ],
+        "onLoad": "act-events-map-load",
+        "onRowClick": "act-events-map-row",
+        "onExport": "act-events-map-export"
+      },
+      {
+        "id": "records-section",
+        "type": "divider",
+        "title": "Operational picture",
+        "width": "full"
+      },
+      {
+        "id": "events-table",
+        "type": "table",
+        "title": "Emergency events",
+        "width": "full",
+        "columns": [
+          "id",
+          "event_code",
+          "title",
+          "event_type",
+          "severity",
+          "status",
+          "started_at"
+        ],
+        "resource": "events",
+        "onLoad": "act-events-table-load",
+        "onRowClick": "act-events-table-row",
+        "onExport": "act-events-table-export"
+      },
+      {
+        "id": "dispatch-table",
+        "type": "table",
+        "title": "Dispatch queue",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "task_title",
+          "priority",
+          "status",
+          "assigned_resource_unit_id"
+        ],
+        "resource": "dispatch",
+        "onLoad": "act-dispatch-table-load",
+        "onRowClick": "act-dispatch-table-row",
+        "onExport": "act-dispatch-table-export"
+      },
+      {
+        "id": "resources-table",
+        "type": "table",
+        "title": "Resource availability",
+        "width": "full",
+        "columns": [
+          "id",
+          "resource_code",
+          "name",
+          "resource_type",
+          "status",
+          "district"
+        ],
+        "resource": "resources",
+        "onLoad": "act-resources-table-load",
+        "onRowClick": "act-resources-table-row",
+        "onExport": "act-resources-table-export"
+      },
+      {
+        "id": "sitrep-table",
+        "type": "table",
+        "title": "Situation reports",
+        "width": "full",
+        "columns": [
+          "id",
+          "emergency_event_id",
+          "title",
+          "status",
+          "reporting_period_end",
+          "published_at"
+        ],
+        "resource": "sitrep",
+        "onLoad": "act-sitrep-table-load",
+        "onRowClick": "act-sitrep-table-row",
+        "onExport": "act-sitrep-table-export"
+      },
+      {
+        "id": "actions-section",
+        "type": "divider",
+        "title": "Take action",
+        "width": "full"
+      },
+      {
+        "id": "event-create",
+        "type": "form",
+        "title": "Open an emergency event",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "title",
+            "type": "text",
+            "label": "Title",
+            "required": true
+          },
+          {
+            "name": "event_type",
+            "type": "text",
+            "label": "Event type",
+            "required": true
+          },
+          {
+            "name": "severity",
+            "type": "text",
+            "label": "Severity",
+            "required": true
+          },
+          {
+            "name": "description",
+            "type": "textarea",
+            "label": "Description"
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-event-create",
+          "checksum": "c4cc3147e75398800e3248d19b0c7e6ed2f094b9e6c3122331d93964687dd4ef"
+        },
+        "onSubmit": "act-event-create-submit"
+      },
+      {
+        "id": "dispatch-create",
+        "type": "form",
+        "title": "Create a dispatch order",
+        "width": "full",
+        "action": "create",
+        "fields": [
+          {
+            "name": "emergency_event_id",
+            "type": "text",
+            "label": "Emergency event id",
+            "required": true
+          },
+          {
+            "name": "task_title",
+            "type": "text",
+            "label": "Task",
+            "required": true
+          },
+          {
+            "name": "priority",
+            "type": "text",
+            "label": "Priority"
+          },
+          {
+            "name": "task_description",
+            "type": "textarea",
+            "label": "Instructions"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-create",
+          "checksum": "588826887db9c32c481597efa4323d65e823e32d2ef2f9519f9b1b217f2ac628"
+        },
+        "onSubmit": "act-dispatch-create-submit"
+      },
+      {
+        "id": "event-close",
+        "type": "form",
+        "title": "Close an emergency event",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "event_id",
+            "type": "text",
+            "label": "Emergency event id",
+            "required": true
+          },
+          {
+            "name": "resolution_note",
+            "type": "textarea",
+            "label": "Resolution note"
+          }
+        ],
+        "resource": "events",
+        "workflowRef": {
+          "name": "sos-event-close",
+          "checksum": "61bb9f85be7659ed76a0f9b922a38d5d735e42d2e90081b5d903ba418ccdc225"
+        },
+        "onSubmit": "act-event-close-submit"
+      },
+      {
+        "id": "act-workspace-navigation-link1",
+        "type": "action",
+        "title": "Navigate Overview",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-command-overview"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link2",
+        "type": "action",
+        "title": "Navigate Hazard watch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-hazard-watch"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link3",
+        "type": "action",
+        "title": "Navigate Dispatch",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-dispatch-board"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link4",
+        "type": "action",
+        "title": "Navigate Resources",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "page:sos-resource-registry"
+        }
+      },
+      {
+        "id": "act-workspace-navigation-link5",
+        "type": "action",
+        "title": "Navigate Team tasks",
+        "operation": {
+          "kind": "navigate",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "destination": "module:tasks"
+        }
+      },
+      {
+        "id": "act-events-metric-load",
+        "type": "action",
+        "title": "Read Emergency events",
+        "operation": {
+          "kind": "query",
+          "target": "events-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-dispatch-metric-load",
+        "type": "action",
+        "title": "Read Dispatch orders",
+        "operation": {
+          "kind": "query",
+          "target": "dispatch-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "dispatch"
+        }
+      },
+      {
+        "id": "act-resources-metric-load",
+        "type": "action",
+        "title": "Read Resource units",
+        "operation": {
+          "kind": "query",
+          "target": "resources-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "resources"
+        }
+      },
+      {
+        "id": "act-sitrep-metric-load",
+        "type": "action",
+        "title": "Read Situation reports",
+        "operation": {
+          "kind": "query",
+          "target": "sitrep-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "sitrep"
+        }
+      },
+      {
+        "id": "act-eop-metric-load",
+        "type": "action",
+        "title": "Read EOP plans",
+        "operation": {
+          "kind": "query",
+          "target": "eop-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "eop"
+        }
+      },
+      {
+        "id": "act-aar-metric-load",
+        "type": "action",
+        "title": "Read After-action reports",
+        "operation": {
+          "kind": "query",
+          "target": "aar-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "afterAction"
+        }
+      },
+      {
+        "id": "act-hazards-metric-load",
+        "type": "action",
+        "title": "Read Hazard layers",
+        "operation": {
+          "kind": "query",
+          "target": "hazards-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "hazards"
+        }
+      },
+      {
+        "id": "act-mutual-aid-metric-load",
+        "type": "action",
+        "title": "Read Mutual-aid requests",
+        "operation": {
+          "kind": "query",
+          "target": "mutual-aid-metric",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "mutualAid"
+        }
+      },
+      {
+        "id": "act-events-map-load",
+        "type": "action",
+        "title": "Read Events · Live map",
+        "operation": {
+          "kind": "query",
+          "target": "events-map",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-events-map-row",
+        "type": "action",
+        "title": "Inspect Events · Live map",
+        "operation": {
+          "kind": "showRecord",
+          "target": "events-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-map-export",
+        "type": "action",
+        "title": "Export Events · Live map",
+        "operation": {
+          "kind": "export",
+          "target": "events-map",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-table-load",
+        "type": "action",
+        "title": "Read Emergency events",
+        "operation": {
+          "kind": "query",
+          "target": "events-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "events"
+        }
+      },
+      {
+        "id": "act-events-table-row",
+        "type": "action",
+        "title": "Inspect Emergency events",
+        "operation": {
+          "kind": "showRecord",
+          "target": "events-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-events-table-export",
+        "type": "action",
+        "title": "Export Emergency events",
+        "operation": {
+          "kind": "export",
+          "target": "events-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-table-load",
+        "type": "action",
+        "title": "Read Dispatch queue",
+        "operation": {
+          "kind": "query",
+          "target": "dispatch-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "dispatch"
+        }
+      },
+      {
+        "id": "act-dispatch-table-row",
+        "type": "action",
+        "title": "Inspect Dispatch queue",
+        "operation": {
+          "kind": "showRecord",
+          "target": "dispatch-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-table-export",
+        "type": "action",
+        "title": "Export Dispatch queue",
+        "operation": {
+          "kind": "export",
+          "target": "dispatch-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resources-table-load",
+        "type": "action",
+        "title": "Read Resource availability",
+        "operation": {
+          "kind": "query",
+          "target": "resources-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "resources"
+        }
+      },
+      {
+        "id": "act-resources-table-row",
+        "type": "action",
+        "title": "Inspect Resource availability",
+        "operation": {
+          "kind": "showRecord",
+          "target": "resources-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-resources-table-export",
+        "type": "action",
+        "title": "Export Resource availability",
+        "operation": {
+          "kind": "export",
+          "target": "resources-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-table-load",
+        "type": "action",
+        "title": "Read Situation reports",
+        "operation": {
+          "kind": "query",
+          "target": "sitrep-table",
+          "mappings": [
+            {
+              "field": "limit",
+              "source": "event",
+              "value": "limit"
+            },
+            {
+              "field": "offset",
+              "source": "event",
+              "value": "offset"
+            },
+            {
+              "field": "search",
+              "source": "event",
+              "value": "search"
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": [],
+          "source": "sitrep"
+        }
+      },
+      {
+        "id": "act-sitrep-table-row",
+        "type": "action",
+        "title": "Inspect Situation reports",
+        "operation": {
+          "kind": "showRecord",
+          "target": "sitrep-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-table-export",
+        "type": "action",
+        "title": "Export Situation reports",
+        "operation": {
+          "kind": "export",
+          "target": "sitrep-table",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-event-create-submit",
+        "type": "action",
+        "title": "Submit Open an emergency event",
+        "operation": {
+          "kind": "create",
+          "target": "event-create",
+          "mappings": [
+            {
+              "field": "title",
+              "source": "event",
+              "value": "values.title",
+              "required": true
+            },
+            {
+              "field": "event_type",
+              "source": "event",
+              "value": "values.event_type",
+              "required": true
+            },
+            {
+              "field": "severity",
+              "source": "event",
+              "value": "values.severity",
+              "required": true
+            },
+            {
+              "field": "description",
+              "source": "event",
+              "value": "values.description",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-event-create-open",
+        "type": "action",
+        "title": "Open Open an emergency event",
+        "operation": {
+          "kind": "openForm",
+          "target": "event-create",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-create-submit",
+        "type": "action",
+        "title": "Submit Create a dispatch order",
+        "operation": {
+          "kind": "create",
+          "target": "dispatch-create",
+          "mappings": [
+            {
+              "field": "emergency_event_id",
+              "source": "event",
+              "value": "values.emergency_event_id",
+              "required": true
+            },
+            {
+              "field": "task_title",
+              "source": "event",
+              "value": "values.task_title",
+              "required": true
+            },
+            {
+              "field": "priority",
+              "source": "event",
+              "value": "values.priority",
+              "required": false
+            },
+            {
+              "field": "task_description",
+              "source": "event",
+              "value": "values.task_description",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-create-open",
+        "type": "action",
+        "title": "Open Create a dispatch order",
+        "operation": {
+          "kind": "openForm",
+          "target": "dispatch-create",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-event-close-submit",
+        "type": "action",
+        "title": "Submit Close an emergency event",
+        "operation": {
+          "kind": "update",
+          "target": "event-close",
+          "mappings": [
+            {
+              "field": "event_id",
+              "source": "event",
+              "value": "values.event_id",
+              "required": true
+            },
+            {
+              "field": "resolution_note",
+              "source": "event",
+              "value": "values.resolution_note",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-event-close-open",
+        "type": "action",
+        "title": "Open Close an emergency event",
+        "operation": {
+          "kind": "openForm",
+          "target": "event-close",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      }
+    ]
+  },
+  "source": {
+    "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
+    "path": "plugins/sos-command-overview.plugin.json",
+    "revision": "2026-11-15.business"
+  },
+  "checksum": "sha256:e2c4eca79621793ffbfdaf9aae1be7eccc9daecdbb18873e0e8b81cf3b133965"
+}

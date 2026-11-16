@@ -1,6 +1,6 @@
 # SynapseCitySOS — product boundary
 
-Status: repo-local reference for the 2026-11-03 feature split. The authoritative
+Status: repo-local reference updated 2026-11-16. The authoritative
 workspace contract is `FEATURE_BOUNDARY.md` at the workspace root (outside this
 repository).
 
@@ -84,39 +84,16 @@ through `/v1/emergency/resources`. They are **not** City user records:
 - Dispatch assignment references an SOS resource unit, not a City operator ID.
   The canonical field is `assigned_resource_unit_id`; `assigned_user_id` is a
   deprecated wire mirror of the same opaque resource-unit id.
-- Login/register/profile settings use the SOS `/v1/auth` session shell. They do
-  not make a responder a City user.
+- Login/register/profile settings belong to SynapseDX. SOS `/v1/auth/*` is
+  retired and never makes a responder a City user.
 
-## Auth shell
+## Auth retired
 
-`/v1/auth/*` is reachable through the gateway and implemented by
-`apps/sos-service`. It issues a stateless HS256 session token
-(`event: access | refresh`) signed with `AUTH_SECRET`. The shell stores no
-passwords and creates no SOS user dataset or City user record.
-
-Identity (password verification, MFA, account lifecycle, revocation) is
-delegated to the Tier-1 IAM/API gateway through the Tier-2 auth capability:
-`SOS_AUTH_MODE=tier2` is the default and the production path, and the
-`@synapsedx/capabilities` `auth` namespace supplies login/register/refresh/
-logout/me/changePassword and the optional delegated exchange. The verified
-Tier-2 access/refresh token is carried inside the signed SOS session and is
-forwarded only to Tier-2; it is never exposed to the browser as a response
-field. If `AUTH_SECRET` is unset, the service generates an ephemeral secret at
-start-up and logs a warning.
-
-Roles are assigned by the server after verification: `responder` by default,
-`admin` only when the verified email is listed in `SOS_BOOTSTRAP_ADMIN_EMAILS`.
-(`SOS_AUTH_DEFAULT_ROLE` can adjust the fallback but can never grant `admin`.)
-A client-supplied `role` is ignored. Registration through Tier-2 creates a
-responder account (or `admin` for a bootstrap email); password change is
-delegated to Tier-2 and returns `503 identity_not_configured` without a Tier-2
-token.
-
-The development-only demo shell requires both `SOS_AUTH_MODE=demo` and
-`ALLOW_DEMO_AUTH=true` outside production; `NODE_ENV=production` refuses to
-start with either demo switch enabled. A demo login is always `responder`,
-registration is read-only, and demo sessions never grant `admin`/`manager`.
-Tokens are accepted only from the `Authorization` header, never a URL query.
+Tier-3 login/session management is retired. Every `/v1/auth/*` path returns
+`410 workspace_moved`; there is no supported legacy session surface. Login,
+registration, sessions, MFA and account lifecycle belong to SynapseDX. SOS
+stores no password or identity table and never creates City users. Tokens are
+accepted only from the `Authorization` header, never a URL query.
 
 Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: `emergency:read`, `emergency:write`,
@@ -180,20 +157,30 @@ sos-after-action-reports    sos-hazard-ingest-runs
 
 ## Console route ownership
 
-Owned:
+Tier 3 is public presentation only (2026-11-14 workspace contract). Work,
+login and emergency-command surfaces live in the Tier-2 SynapseDX workspace at
+`https://synapsedx.sbs/workspace`.
+
+Served by this console:
 
 ```text
 /                              SOS landing
 /about                         SOS product
 /docs                          SOS API docs
 /map                           public hazard/emergency map
-/login /register               auth shell
-/admin                         emergency operations dashboard
-/admin/emergency-center        command centre
-/admin/emergency-center/before during after
-/admin/emergency-center/operations/$eventId
-/admin/settings                self-service profile (shared shell; no user administration)
 ```
+
+Redirected to `https://synapsedx.sbs/workspace`:
+
+```text
+/login /register
+/admin/**  (dashboard, emergency command centre and phase boards, settings)
+/technician/**
+/workspace/**
+```
+
+`/v1/auth/*` returns `410 workspace_moved` before credential handling. The
+portable SOS plugin bundles that replace the retired pages live in `plugins/`.
 
 Never add:
 
