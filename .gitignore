@@ -1,6 +1,10 @@
 node_modules/
 /dist/
+**/target/
 .env
 *.log
 .tanstack/
 .notes/
+
+# generated data-plane build output
+**/dist/

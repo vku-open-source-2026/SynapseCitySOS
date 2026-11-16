@@ -1,18 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 VKU.VIC
-FROM node:20-bookworm-slim AS build
-WORKDIR /workspace
-COPY SynapseCitySOS/package*.json ./SynapseCitySOS/
-COPY SynapseCitySOS/apps/sos-service/package*.json SynapseCitySOS/apps/sos-service/tsconfig.json ./SynapseCitySOS/apps/sos-service/
-COPY SynapseCitySOS/apps/sos-service/src ./SynapseCitySOS/apps/sos-service/src
-RUN cd SynapseCitySOS && npm ci && npm run build --workspace=@synapsecity/sos-service
-
-FROM node:20-bookworm-slim
-ENV NODE_ENV=production
+FROM rust:1.100-bookworm AS builder
+ARG CARGO_BUILD_JOBS=1
 WORKDIR /app
-COPY --from=build /workspace/SynapseCitySOS/package*.json ./
-COPY --from=build /workspace/SynapseCitySOS/node_modules ./node_modules
-COPY --from=build /workspace/SynapseCitySOS/apps/sos-service/dist ./apps/sos-service/dist
-COPY --from=build /workspace/SynapseCitySOS/apps/sos-service/package.json ./apps/sos-service/
+COPY SynapseCitySOS/apps/sos-service/Cargo.toml SynapseCitySOS/apps/sos-service/Cargo.lock ./
+COPY SynapseCitySOS/apps/sos-service/src ./src
+RUN cargo build --release --locked --jobs=${CARGO_BUILD_JOBS}
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home app
+COPY --from=builder /app/target/release/synapsecity-sos /usr/local/bin/synapsecity-sos
+ENV PORT=8084
 EXPOSE 8084
-CMD ["node", "apps/sos-service/dist/src/server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/synapsecity-sos", "--healthcheck"]
+USER app
+ENTRYPOINT ["/usr/local/bin/synapsecity-sos"]

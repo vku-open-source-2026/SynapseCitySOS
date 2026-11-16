@@ -41,59 +41,32 @@ interface EndpointSection {
 const sections: EndpointSection[] = [
     {
         id: "auth",
-        label: "Phiên đăng nhập",
+        label: "Phiên làm việc",
         icon: "🔐",
-        title: "Auth shell",
+        title: "Auth đã chuyển sang SynapseDX",
         description:
-            "Phiên đăng nhập dùng token HMAC-SHA256. Đây là shell phiên làm việc, không lưu mật khẩu và không tạo bản ghi người dùng; production phải uỷ quyền danh tính cho dịch vụ định danh.",
+            "Tầng 3 chỉ còn giao diện công khai. Mọi yêu cầu /v1/auth/* trả 410 workspace_moved; đăng nhập, đăng ký, phiên và phân quyền làm việc do SynapseDX (https://synapsedx.sbs/workspace) quản lý. Không có luồng tạo phiên tại tầng 3.",
         endpoints: [
             {
                 method: "POST",
                 path: "/v1/auth/login",
-                title: "Đăng nhập",
+                title: "Đăng nhập đã chuyển",
                 description:
-                    "Nhận username + password (không rỗng) và trả access/refresh token cùng hồ sơ phiên.",
+                    "Trả 410 { error: \"workspace_moved\", workspace_url: \"https://synapsedx.sbs/workspace\" }.",
             },
             {
                 method: "POST",
                 path: "/v1/auth/register",
-                title: "Đăng ký shell",
+                title: "Đăng ký đã chuyển",
                 description:
-                    "Tạo phiên đăng ký shell-only; không tạo bản ghi người dùng SOS hoặc City.",
-            },
-            {
-                method: "POST",
-                path: "/v1/auth/refresh",
-                title: "Làm mới token",
-                description: "Xoay access/refresh token từ refresh token còn hiệu lực.",
-            },
-            {
-                method: "POST",
-                path: "/v1/auth/logout",
-                title: "Đăng xuất",
-                description: "Kết thúc phiên phía client (204).",
-            },
-            {
-                method: "POST",
-                path: "/v1/auth/change-password",
-                title: "Đổi mật khẩu",
-                description:
-                    "Yêu cầu Bearer. Endpoint này xác nhận yêu cầu đổi mật khẩu của phiên hiện tại.",
-                requiresAuth: true,
+                    "Trả 410 workspace_moved; tài khoản và vai trò do tổ chức trên SynapseDX cấp.",
             },
             {
                 method: "GET",
                 path: "/v1/auth/me",
-                title: "Hồ sơ phiên",
-                description: "Trả hồ sơ AuthUser từ Bearer token.",
-                requiresAuth: true,
-            },
-            {
-                method: "GET",
-                path: "/v1/auth/verify",
-                title: "Kiểm tra token",
-                description: "Xác thực Bearer token và trả thời hạn phiên.",
-                requiresAuth: true,
+                title: "Hồ sơ phiên đã chuyển",
+                description:
+                    "Trả 410 workspace_moved; hồ sơ thành viên do SynapseDX trả cho phiên DX.",
             },
         ],
     },

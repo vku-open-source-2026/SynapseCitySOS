@@ -2,7 +2,7 @@
   "expo": {
     "name": "SynapseSOS",
     "slug": "synapsecity-sos",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "synapsecitysos",
@@ -19,11 +19,11 @@
     },
     "android": {
       "package": "sbs.synapsecity.sos",
-      "versionCode": 1,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFF8F3",
-        "monochromeImage": "./assets/adaptive-icon.png"
+        "backgroundColor": "#C2410C",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
@@ -46,7 +46,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#FB7185",
+          "color": "#F59E0B",
           "defaultChannel": "sos-alerts"
         }
       ],

@@ -21,6 +21,7 @@ import { hazardsApi } from "../api/hazards";
 import Footer from "../components/Footer";
 import Header from "../components/Header";
 import { LINKS } from "../lib/site";
+import { WORKSPACE_URL } from "../lib/workspace";
 
 const capabilities = [
     {
@@ -29,47 +30,55 @@ const capabilities = [
         description:
             "Theo dõi lũ, bão, sạt lở và dữ liệu VNDMS đã nhập trên bản đồ nguy cơ công khai.",
         to: "/map" as const,
+        external: false,
         cta: "Mở bản đồ nguy cơ",
     },
+    // Work dashboards are plugins in the Tier-2 DX workspace; Tier 3 keeps the
+    // public hazard map only.
     {
         icon: Siren,
         title: "Sự kiện khẩn cấp",
         description:
             "Tiếp nhận, phân loại và theo dõi sự kiện khẩn cấp theo mức độ và vòng đời xử lý.",
-        to: "/admin/emergency-center" as const,
-        cta: "Vào trung tâm chỉ huy",
+        to: WORKSPACE_URL,
+        external: true,
+        cta: "Vào không gian làm việc",
     },
     {
         icon: ClipboardList,
         title: "Kế hoạch ứng phó (EOP)",
         description:
             "Tạo bản nháp EOP từ mẫu nghiệp vụ, duyệt, xuất bản và sinh nhiệm vụ điều phối.",
-        to: "/admin/emergency-center/before" as const,
-        cta: "Bảng trước thiên tai",
+        to: WORKSPACE_URL,
+        external: true,
+        cta: "Mở không gian làm việc",
     },
     {
         icon: Truck,
         title: "Điều phối & nguồn lực",
         description:
             "Phân công đơn vị ứng cứu, tối ưu lệnh điều phối và theo dõi trạng thái triển khai.",
-        to: "/admin/emergency-center/during" as const,
-        cta: "Bảng điều phối",
+        to: WORKSPACE_URL,
+        external: true,
+        cta: "Mở không gian làm việc",
     },
     {
         icon: Radio,
         title: "SITREP trong sự kiện",
         description:
             "Cập nhật tình hình hiện trường, delta báo cáo và tín hiệu vận hành trong suốt sự kiện.",
-        to: "/admin/emergency-center/during" as const,
-        cta: "Xem SITREP",
+        to: WORKSPACE_URL,
+        external: true,
+        cta: "Mở không gian làm việc",
     },
     {
         icon: FileCheck2,
         title: "Báo cáo sau sự kiện (AAR)",
         description:
             "Tổng hợp KPI từ sự kiện/điều phối/SITREP, bài học kinh nghiệm và xuất bản after-action report.",
-        to: "/admin/emergency-center/after" as const,
-        cta: "Bảng sau thiên tai",
+        to: WORKSPACE_URL,
+        external: true,
+        cta: "Mở không gian làm việc",
     },
 ];
 
@@ -154,13 +163,13 @@ const HomePage = () => {
                                 tâm chỉ huy duy nhất.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                                <Link
-                                    to="/admin/emergency-center"
+                                <a
+                                    href={WORKSPACE_URL}
                                     className="inline-flex items-center justify-center px-6 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-red-600 to-orange-500 shadow-lg hover:shadow-xl transition-shadow"
                                 >
                                     <Siren className="w-4 h-4 mr-2" />
-                                    Vào trung tâm chỉ huy
-                                </Link>
+                                    Vào không gian làm việc
+                                </a>
                                 <Link
                                     to="/map"
                                     className="inline-flex items-center justify-center px-6 py-3 border border-slate-200 text-slate-700 rounded-full hover:border-red-400 hover:text-red-600 transition-colors"
@@ -240,13 +249,13 @@ const HomePage = () => {
                                     <p className="text-slate-600 text-sm flex-1">
                                         {capability.description}
                                     </p>
-                                    <Link
-                                        to={capability.to}
+                                    <a
+                                        href={capability.to}
                                         className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-red-600 hover:text-red-700"
                                     >
                                         {capability.cta}
                                         <ArrowRight className="w-4 h-4" />
-                                    </Link>
+                                    </a>
                                 </div>
                             ))}
                         </div>
@@ -321,12 +330,12 @@ const HomePage = () => {
                             thiên tai xảy ra và khép lại bằng báo cáo sau sự kiện.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-6 justify-center pt-4">
-                            <Link
-                                to="/admin/emergency-center/before"
+                            <a
+                                href={WORKSPACE_URL}
                                 className="inline-flex items-center justify-center px-8 py-4 text-white font-bold text-lg rounded-full bg-gradient-to-r from-red-600 to-orange-500 shadow-lg hover:shadow-xl transition-all"
                             >
-                                Bắt đầu chuẩn bị
-                            </Link>
+                                Mở không gian làm việc
+                            </a>
                             <Link
                                 to="/docs"
                                 className="inline-flex items-center justify-center px-8 py-4 border-2 border-slate-300 text-slate-700 font-bold text-lg rounded-full hover:border-red-400 hover:text-red-600 transition-all"
