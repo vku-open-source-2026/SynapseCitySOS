@@ -172,6 +172,7 @@ fn is_public(path: &str) -> bool {
         || path.starts_with("/v1/emergency/public/")
         || path == "/v1/emergency/stream/hazards"
         || path == "/v1/emergency/resources/shelters/near"
+        || path == "/v1/hazards"
         || path == "/v1/hazards/recent"
         || path == "/v1/hazards/vndms-live"
         || path == "/v1/hazards/ingest/status"
@@ -887,11 +888,17 @@ async fn public_status(ctx: Ctx<'_>) -> ApiResult<Response> {
     .await
     .map(|rows| rows.items.len())
     .unwrap_or(0);
+    let ready = dependency.get("status").and_then(Value::as_str) == Some("ok")
+        && dependency.get("reachable").and_then(Value::as_bool).unwrap_or(false);
     let mut response = web::json_response(json!({
-        "status": if dependency.get("status").and_then(Value::as_str) == Some("ok") { "ok" } else { "degraded" },
+        "status": if ready { "ok" } else { "degraded" },
         "data_available": dependency.get("reachable").and_then(Value::as_bool).unwrap_or(false),
         "checked_at": dependency.get("checked_at"),
-        "hazard_feed": { "status": "ready", "records_visible": hazards },
+        "hazard_feed": {
+            "status": if ready { "ready" } else { "degraded" },
+            "stale": !ready,
+            "records_visible": hazards,
+        },
     }));
     response
         .headers_mut()
