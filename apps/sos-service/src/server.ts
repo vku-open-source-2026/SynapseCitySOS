@@ -3,7 +3,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { CapabilitiesClient, CapabilitiesError } from '@synapsedx/capabilities';
-import { aiChat, aiStatus, jsonObjectFrom, aiUnavailable } from './ai';
+import { aiChat, aiStatus, hazardBrief, jsonObjectFrom, knowledgeAsk, aiUnavailable } from './ai';
 import {
   assertAuthConfiguration,
   installAuthRoutes,
@@ -48,6 +48,8 @@ import {
 import { hazardTtlHours, isHazardStale, sseErrorFrame, sseHazardsFrame, sseHeartbeatFrame } from './hazards';
 import { incrementCounter, metricsMiddleware, recordDependency, renderMetrics } from './metrics';
 import { planOptimization } from './optimizer';
+import { HitlError, assertApproved, buildHandoff, createApproval, decideApproval, hitlRequired, listPendingApprovals } from './hitl';
+import { publicMutualAidProjection, validateAccept, validateRequest, type MutualAidAccept, type MutualAidRequest } from './mutual-aid';
 import { fromNgsiLdList } from './projection';
 import { rateLimiters } from './rate-limit';
 import {
@@ -67,7 +69,9 @@ import {
   toVndmsHazard,
   type IngestConnectorStatus,
 } from './vndms';
-import { proxyVietMapTile, vietMapAutocomplete, vietMapConfigured, vietMapGeocode, vietMapPlace, vietMapReverse, vietMapTileStyle } from './vietmap';
+import { proxyTier2Tile, tier2MapConfigured } from './tier2-map';
+import { fetchTier2HazardStatus, fetchTier2Hazards, mergeHazardFeed } from './tier2-hazards';
+import { workspaceMovedMiddleware } from './workspace-moved';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8084);
@@ -99,6 +103,7 @@ const DATASETS = {
   hazards: { id: 'sos-hazard-layers', name: 'SynapseCitySOS hazard layers', entityType: 'HazardLayer', description: 'Flood, storm and other hazard observations', public: true },
   afterAction: { id: 'sos-after-action-reports', name: 'SynapseCitySOS after action reports', entityType: 'AfterActionReport', description: 'Emergency after action reports' },
   hazardRuns: { id: 'sos-hazard-ingest-runs', name: 'SynapseCitySOS hazard ingest runs', entityType: 'HazardIngestRun', description: 'VNDMS ingest run history' },
+  mutualAid: { id: 'sos-mutual-aid-requests', name: 'SynapseCitySOS mutual aid requests', entityType: 'MutualAidRequest', description: 'Cross-agency resource requests, accepts and handoffs' },
 } as Record<string, Spec>;
 
 // Product-boundary invariant: SOS may only ever touch sos-* datasets. A city-*
@@ -117,6 +122,7 @@ const SOS_METADATA = {
   publicUrl: PUBLIC_URL,
   features: [
     'hazards',
+    'mutual aid',
     'emergency events',
     'public emergency projection',
     'EOP',
@@ -167,7 +173,7 @@ const SOS_METADATA = {
     bootstrapAdminsConfigured: bootstrapAdmins().size > 0,
   },
   limitations: {
-    sdk: 'file: workspace dependency until SynapseDX publishes @synapsedx/capabilities 0.2.0 (operator-blocked release step)',
+    sdk: '@synapsedx/capabilities@^0.3.0 from the public npm registry',
     events: 'hazard SSE consumes the Tier-2 event feed with Last-Event-ID resume and falls back to snapshot polling only when the feed is unavailable',
     ai: 'EOP drafts use the Tier-2 AI capability; an unavailable AI returns a typed 503 unless the caller opts into the labelled deterministic fallback',
     scheduled_ingest: 'VNDMS ingestion is scheduled by the Tier-2 jobs API; SOS validates pushes and reports connector run history, it never runs a local poller',
@@ -574,6 +580,30 @@ async function dependencyHealth(c: CapabilitiesClient) {
  */
 async function vndmsConnectorStatus(c: CapabilitiesClient): Promise<IngestConnectorStatus> {
   const checkedAt = now();
+  // Tier-2 owns the KTTV crawler. When the capabilities SDK exposes its status,
+  // project that directly instead of guessing from the generic jobs API.
+  const feedStatus = await fetchTier2HazardStatus(c);
+  if (feedStatus && feedStatus.configured !== false) {
+    const lastSuccess = feedStatus.last_success_at || null;
+    const failed = feedStatus.status === 'error';
+    return {
+      source: 'tier-2-scheduled-job',
+      available: true,
+      configured: true,
+      job_id: 'kttv-crawler',
+      job_name: 'Tier-2 KTTV crawler (NCHMF/VNDMS)',
+      job_kind: 'interval',
+      enabled: true,
+      schedule: { cron: null, every_seconds: 1800 },
+      last_run_at: feedStatus.last_run_at || lastSuccess,
+      last_run_status: failed ? 'failed' : lastSuccess ? 'succeeded' : null,
+      last_run_error: feedStatus.error || null,
+      last_success_at: lastSuccess,
+      runs_considered: 1,
+      error: failed ? (feedStatus.error || 'tier2_crawler_failed') : null,
+      checked_at: checkedAt,
+    };
+  }
   const jobs = (c as unknown as {
     jobs?: {
       list?: (query?: { limit?: number; offset?: number }) => Promise<{ items?: unknown[] }>;
@@ -707,6 +737,10 @@ app.get('/metrics', (_req, res) => {
 
 app.get('/v1/sos', (_req, res) => res.json(SOS_METADATA));
 
+// Tier-3 auth surface is retired: every /v1/auth request is answered with
+// 410 workspace_moved before rate limiting, credential handling or session
+// code. Work interfaces live in the Tier-2 DX workspace.
+app.use('/v1/auth', workspaceMovedMiddleware('sos'));
 app.use('/v1/auth', rateLimiters.auth.middleware);
 installAuthRoutes(app, { clientForRequest: client });
 
@@ -1030,11 +1064,20 @@ app.post('/v1/emergency/eop/:id/approve', async (req, res, next) => {
       res.json({ ...current, idempotent: true });
       return;
     }
+    const input = body(req);
+    const actor = actorOf(res).username ?? 'sos-operator';
+    const approvalId = String(input.approval_id || input.approvalId || '');
+    let approval: any = null;
+    if (hitlRequired() || approvalId) {
+      if (!approvalId) throw new HitlError(428, 'approval_required', 'create an EOP approval first');
+      approval = await assertApproved(req, approvalId, { entityId: String(req.params.id), action: 'eop.approve', actor });
+    }
     sendRecord(res, await update(c, DATASETS.eop, req.params.id, {
       status: 'approved',
-      review_notes: body(req).review_notes ?? current.review_notes ?? null,
-      approved_by: actorOf(res).username ?? null,
+      review_notes: input.review_notes ?? current.review_notes ?? null,
+      approved_by: actor,
       approved_at: now(),
+      ...(approval ? { approval_id: approval.id, approved_role: approval.approverRoles[0] || null, approval_roles: approval.approverRoles } : {}),
     }, { ifVersion }));
   } catch (error) { next(error); }
 });
@@ -1232,6 +1275,13 @@ for (const [action, patch] of [['complete', { status: 'completed', completed_at:
 async function approveDispatch(req: Request, res: Response): Promise<void> {
   const c = client(req);
   const input = body(req);
+  const actor = actorOf(res).username ?? 'sos-operator';
+  const approvalId = String(input.approval_id || input.approvalId || '');
+  let approval: any = null;
+  if (hitlRequired() || approvalId) {
+    if (!approvalId) throw new HitlError(428, 'approval_required', 'create a dispatch approval first');
+    approval = await assertApproved(req, approvalId, { entityId: String(req.params.id), action: 'dispatch.assign', actor });
+  }
   const resourceUnitId = requestedResourceUnitId(input);
   if (!resourceUnitId) throw badRequest('assigned_resource_unit_id_required', 'approve/assign needs an existing SOS resource unit id');
   const resource = await get(c, DATASETS.resources, resourceUnitId).catch((error) => {
@@ -1256,9 +1306,68 @@ async function approveDispatch(req: Request, res: Response): Promise<void> {
   const patch = normalizeDispatchAssignment(input, current.assignments, { status: 'assigned' });
   sendRecord(res, await update(c, DATASETS.dispatch, dispatchId, {
     ...patch,
-    assigned_by: actorOf(res).username ?? null,
+    assigned_by: actor,
+    ...(approval ? {
+      approval_id: approval.id, approved_by: actor, approval_roles: approval.approverRoles,
+      approved_at: new Date().toISOString(),
+    } : {}),
   }, { ifVersion }));
 }
+
+// ---- shared HITL approvals (#24) ----
+app.get('/v1/emergency/hitl/approvals', async (req, res, next) => {
+  try {
+    const items = await listPendingApprovals(req, req.query.module ? String(req.query.module) : undefined);
+    const now = Date.now();
+    res.json({ items: items.map((item) => ({ ...item, escalated: !!item.dueAt && Date.parse(item.dueAt) < now })), total: items.length });
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/hitl/approvals/:id/decide', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const decision = String(input.decision || '').toLowerCase();
+    if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: 'invalid_decision' });
+    res.json({ approval: await decideApproval(req, req.params.id, decision as 'approve' | 'reject', input.note ? String(input.note) : undefined) });
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/hitl/handoff', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const outgoingRole = String(input.outgoing_role || 'duty-manager');
+    const incomingRole = String(input.incoming_role || 'duty-manager');
+    res.json(await buildHandoff(req, outgoingRole, incomingRole, input.notes ? String(input.notes) : undefined));
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/dispatch/:id/approval', async (req, res, next) => {
+  try {
+    const order = await get(client(req), DATASETS.dispatch, req.params.id);
+    const actor = actorOf(res).username ?? 'sos-operator';
+    const approval = await createApproval(req, {
+      title: `Dispatch approval: ${String(order.title || order.id || req.params.id)}`,
+      module: 'sos.dispatch', action: 'dispatch.assign', entityType: 'dispatch', entityId: String(req.params.id),
+      payload: { incident_id: order.incident_id, priority: order.priority, resource_type: order.resource_type },
+      requester: actor,
+    });
+    res.status(202).json({ approval, hitl_required: true });
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/eop/:id/approval', async (req, res, next) => {
+  try {
+    const plan = await get(client(req), DATASETS.eop, req.params.id);
+    const actor = actorOf(res).username ?? 'sos-operator';
+    const approval = await createApproval(req, {
+      title: `EOP publication approval: ${String(plan.title || plan.id || req.params.id)}`,
+      module: 'sos.eop', action: 'eop.approve', entityType: 'eop', entityId: String(req.params.id),
+      payload: { event_id: plan.emergency_event_id, version: plan.version, status: plan.status },
+      requester: actor,
+    });
+    res.status(202).json({ approval, hitl_required: true });
+  } catch (error) { next(error); }
+});
 
 app.post('/v1/emergency/dispatch/:id/approve', async (req, res, next) => { try { await approveDispatch(req, res); } catch (error) { next(error); } });
 app.post('/v1/emergency/dispatch/:id/assign', async (req, res, next) => { try { await approveDispatch(req, res); } catch (error) { next(error); } });
@@ -1288,6 +1397,110 @@ app.post('/v1/emergency/dispatch', async (req, res, next) => {
 app.put('/v1/emergency/dispatch/:id', async (req, res, next) => { try { sendRecord(res, await update(client(req), DATASETS.dispatch, req.params.id, body(req), { ifVersion: requestedVersion(req) })); } catch (error) { next(error); } });
 
 // ── Resource units ──────────────────────────────────────────────────────────
+
+// ---- mutual aid (#23) ----
+function mutualAidView(row: Data): Data { return row; }
+
+app.get('/v1/emergency/public/mutual-aid/:id', async (req, res, next) => {
+  try {
+    const request = await get(client(req), DATASETS.mutualAid, req.params.id) as unknown as MutualAidRequest;
+    res.json(publicMutualAidProjection(request));
+  } catch (error) {
+    if (notFound(error)) return res.status(404).json({ error: 'mutual_aid_not_found' });
+    next(error);
+  }
+});
+
+app.post('/v1/emergency/mutual-aid/requests', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const validated = validateRequest(input);
+    if (!validated.ok) return res.status(400).json({ error: validated.error });
+    const existing = await listAllRows(client(req), DATASETS.mutualAid);
+    const duplicate = existing.items.find((row) => String(row.request_number || '') === String(validated.value.request_number));
+    if (duplicate) return res.status(409).json({ error: 'duplicate_request', existing_id: duplicate.id });
+    const id = String(input.id || randomUUID());
+    const request = {
+      id, ...validated.value, status: 'open', history: [{ action: 'created', at: now(), by: actorOf(res).username ?? 'sos-operator' }],
+      created_at: now(), updated_at: now(), created_by: actorOf(res).username ?? null,
+    };
+    res.status(201).json(await write(client(req), DATASETS.mutualAid, request, id));
+  } catch (error) { next(error); }
+});
+
+app.get('/v1/emergency/mutual-aid/requests', async (req, res, next) => {
+  try {
+    const { items, truncated } = await listAllRows(client(req), DATASETS.mutualAid);
+    if (truncated) res.setHeader('x-sos-scan-truncated', 'true');
+    res.json(filterRows(items, req.query as Data));
+  } catch (error) { next(error); }
+});
+
+app.get('/v1/emergency/mutual-aid/requests/:id', async (req, res, next) => {
+  try { sendRecord(res, await get(client(req), DATASETS.mutualAid, req.params.id)); } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/mutual-aid/requests/:id/accept', async (req, res, next) => {
+  try {
+    const c = client(req);
+    const current = await get(c, DATASETS.mutualAid, req.params.id) as unknown as MutualAidRequest & { record_version?: number };
+    const input = body(req) as unknown as MutualAidAccept;
+    const unit = await get(c, DATASETS.resources, String(input.unit_id || '')).catch((error) => {
+      if (notFound(error)) throw notFoundError('resource_unit_not_found', `no resource unit ${input.unit_id}`);
+      throw error;
+    });
+    const { remaining, available } = validateAccept(current, input, unit);
+    const accepted = Number(input.accepted_quantity);
+    const nextFilled = current.filled_quantity + accepted;
+    const status = nextFilled >= current.quantity ? 'filled' : 'partially_filled';
+    const unitVersion = Number(unit.record_version) || undefined;
+    const updatedUnit = await update(c, DATASETS.resources, String(input.unit_id), {
+      available_quantity: Math.max(0, available - accepted),
+      updated_at: now(),
+    }, { ifVersion: unitVersion }).catch((error) => {
+      if (error instanceof CapabilitiesError && error.status === 409) throw conflict('resource_version_conflict', 'the resource unit changed; retry the accept');
+      throw error;
+    });
+    try {
+      const updated = await update(c, DATASETS.mutualAid, current.id, {
+        filled_quantity: nextFilled, status, updated_at: now(),
+        history: [...(current.history || []), { action: 'accept', unit_id: input.unit_id, accepted_quantity: accepted, eta_minutes: input.eta_minutes ?? null, at: now(), by: actorOf(res).username ?? 'sos-operator' }],
+      }, { ifVersion: Number(current.record_version) || undefined });
+      res.json({ request: updated, resource_unit: updatedUnit, remaining: Math.max(0, current.quantity - nextFilled) });
+    } catch (error) {
+      // Best-effort rollback keeps capacity consistent if the request update lost a race.
+      await update(c, DATASETS.resources, String(input.unit_id), { available_quantity: available, updated_at: now() }, { ifVersion: Number(updatedUnit.record_version) || undefined }).catch(() => undefined);
+      if (error instanceof CapabilitiesError && error.status === 409) throw conflict('request_version_conflict', 'the request changed; retry the accept');
+      throw error;
+    }
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/mutual-aid/requests/:id/decline', async (req, res, next) => {
+  try {
+    const c = client(req);
+    const current = await get(c, DATASETS.mutualAid, req.params.id) as unknown as MutualAidRequest & { record_version?: number };
+    if (!['open', 'partially_filled'].includes(current.status)) throw conflict('request_not_open', `request is ${current.status}`);
+    const input = body(req);
+    sendRecord(res, await update(c, DATASETS.mutualAid, current.id, {
+      status: 'declined', decline_reason: input.reason ? String(input.reason).slice(0, 500) : null, updated_at: now(),
+      history: [...(current.history || []), { action: 'decline', reason: input.reason ?? null, at: now(), by: actorOf(res).username ?? 'sos-operator' }],
+    }, { ifVersion: Number(current.record_version) || undefined }));
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/emergency/mutual-aid/requests/:id/handoff', async (req, res, next) => {
+  try {
+    const c = client(req);
+    const current = await get(c, DATASETS.mutualAid, req.params.id) as unknown as MutualAidRequest & { record_version?: number };
+    const input = body(req);
+    sendRecord(res, await update(c, DATASETS.mutualAid, current.id, {
+      status: 'handed_off', handed_off_to: String(input.to_agency || '').slice(0, 200), handoff_notes: input.notes ? String(input.notes).slice(0, 2000) : null,
+      updated_at: now(),
+      history: [...(current.history || []), { action: 'handoff', to_agency: input.to_agency ?? null, at: now(), by: actorOf(res).username ?? 'sos-operator' }],
+    }, { ifVersion: Number(current.record_version) || undefined }));
+  } catch (error) { next(error); }
+});
 
 app.get('/v1/emergency/resources/shelters/near', async (req, res, next) => {
   try {
@@ -1548,11 +1761,29 @@ async function allHazards(c: CapabilitiesClient) {
   return listAllRows(c, DATASETS.hazards);
 }
 
+/** Stored SOS hazards plus the live Tier-2 KTTV feed, keyed by hazard_id. */
+async function allHazardsWithFeed(c: CapabilitiesClient, hours = 72) {
+  const [stored, feed] = await Promise.all([
+    allHazards(c),
+    fetchTier2Hazards(c, hours),
+  ]);
+  return { ...stored, items: mergeHazardFeed(stored.items, feed) };
+}
+
+/** Public hazard projection with the live Tier-2 feed merged in. */
+async function publicHazardsWithFeed(c: CapabilitiesClient, hours = 72) {
+  const [stored, feed] = await Promise.all([
+    listAllPublic(c, DATASETS.hazards),
+    fetchTier2Hazards(c, hours),
+  ]);
+  return { ...stored, items: mergeHazardFeed(stored.items, feed) };
+}
+
 app.get('/v1/hazards/recent', async (req, res, next) => {
   try {
     const hours = parseNumber(req.query.hours, { min: 1, max: 24 * 365, fallback: 24 }) ?? 24;
     const cutoff = Date.now() - hours * 60 * 60 * 1000;
-    const { items } = await listAllPublic(client(req), DATASETS.hazards);
+    const { items } = await publicHazardsWithFeed(client(req), hours);
     const hazards = items
       .filter((hazard) => hazard.is_active !== false && hazard.status !== 'expired')
       .filter((hazard) => {
@@ -1572,7 +1803,7 @@ app.get('/v1/hazards/recent', async (req, res, next) => {
 app.get('/v1/hazards/geo/near', async (req, res, next) => {
   try {
     const query = parseNearQuery(req.query as Data);
-    const { items } = await allHazards(client(req));
+    const { items } = await allHazardsWithFeed(client(req));
     res.json(nearHazards(items, query));
   } catch (error) { next(error); }
 });
@@ -1583,7 +1814,7 @@ app.post('/v1/hazards/geo/in-polygon', async (req, res, next) => {
     const area = validatePolygon(input.polygon ?? input.geometry ?? input);
     const limit = Math.min(Math.max(Math.floor(Number(input.limit) || 200), 1), 500);
     const offset = Math.max(Math.floor(Number(input.skip ?? input.offset) || 0), 0);
-    const { items } = await allHazards(client(req));
+    const { items } = await allHazardsWithFeed(client(req));
     res.json(inPolygonHazards(items, area, { limit, offset }));
   } catch (error) { next(error); }
 });
@@ -1657,7 +1888,7 @@ app.post('/v1/hazards/ingest', async (req, res, next) => {
 
 app.get('/v1/hazards/vndms-live', async (req, res, next) => {
   try {
-    const { items } = await listAllPublic(client(req), DATASETS.hazards);
+    const { items } = await publicHazardsWithFeed(client(req));
     const hazards = items
       .filter((hazard) => isVndmsRecord(hazard) && hazard.is_active !== false && hazard.status !== 'expired')
       .map(toVndmsHazard)
@@ -1684,9 +1915,10 @@ app.post('/v1/hazards/expire-stale', async (req, res, next) => {
 
 app.get('/v1/hazards', async (req, res, next) => {
   try {
-    const { items, truncated, scanned } = await allHazards(client(req));
+    const { items, truncated, scanned } = await allHazardsWithFeed(client(req));
     if (truncated) res.setHeader('x-sos-scan-truncated', 'true');
     res.setHeader('x-sos-records-scanned', String(scanned));
+    res.setHeader('cache-control', 'public, max-age=30');
     res.json(filterRows(items, req.query as Data).slice(offsetOf(req), offsetOf(req) + limitOf(req)));
   } catch (error) { next(error); }
 });
@@ -1932,23 +2164,30 @@ app.get('/v1/geo/search-address', async (req, res, next) => {
   try {
     const query = String(req.query.q || '').trim();
     if (query.length < 2) return res.json([]);
-    const suggestions = await vietMapAutocomplete(query);
-    const enriched = await Promise.all(suggestions.slice(0, 5).map(async (item) => {
-      const place = item.ref_id ? await vietMapPlace(item.ref_id).catch(() => null) : null;
-      return { address: item.display || item.address || item.name || query, coordinates: { latitude: Number(place?.lat || 0), longitude: Number(place?.lng || 0) }, city: place?.city || '', country: 'Vietnam', ref_id: item.ref_id };
-    }));
-    res.json(enriched.filter((item) => item.coordinates.latitude !== 0 || item.coordinates.longitude !== 0));
+    const items = await client(req).geo.autocomplete({ q: query, limit: 5 });
+    res.json(items.map((item: any) => ({
+      address: item.address || item.label || item.display || query,
+      coordinates: { latitude: Number(item.lat), longitude: Number(item.lon) },
+      city: String(item.raw?.city || ''),
+      country: String(item.raw?.country || 'Vietnam'),
+      ...(item.id || item.ref_id ? { ref_id: String(item.id || item.ref_id) } : {}),
+      provider: 'synapsedx',
+    })).filter((item: any) => Number.isFinite(item.coordinates.latitude) && Number.isFinite(item.coordinates.longitude)));
   } catch (error) { next(error); }
 });
 app.post('/v1/geo/geocode', async (req, res, next) => {
   try {
     const text = String(req.body?.address || '').trim();
     if (!text) return res.status(400).json({ error: 'address_required' });
-    const [match] = await vietMapGeocode(text);
-    if (!match?.ref_id) return res.status(404).json({ error: 'address_not_found' });
-    const place = await vietMapPlace(match.ref_id);
-    if (!Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return res.status(404).json({ error: 'coordinates_not_found' });
-    res.json({ coordinates: { latitude: place.lat, longitude: place.lng }, geojson: { type: 'Point', coordinates: [place.lng, place.lat] }, display_name: place.display || match.display || text });
+    const items = await client(req).geo.geocode(text) as any[];
+    const hit = items.find((item) => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon)));
+    if (!hit) return res.status(404).json({ error: 'address_not_found' });
+    res.json({
+      coordinates: { latitude: Number(hit.lat), longitude: Number(hit.lon) },
+      geojson: { type: 'Point', coordinates: [Number(hit.lon), Number(hit.lat)] },
+      display_name: hit.address || hit.label || text,
+      provider: 'synapsedx',
+    });
   } catch (error) { next(error); }
 });
 app.post('/v1/geo/reverse-geocode', async (req, res, next) => {
@@ -1956,14 +2195,15 @@ app.post('/v1/geo/reverse-geocode', async (req, res, next) => {
     const latitude = Number(req.body?.latitude);
     const longitude = Number(req.body?.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return res.status(400).json({ error: 'coordinates_required' });
-    const [place] = await vietMapReverse(latitude, longitude);
-    if (!place) return res.status(404).json({ error: 'address_not_found' });
-    res.json({ address: place.display || place.address || '', city: place.city || '', country: 'Vietnam' });
+    const items = await client(req).geo.reverse(latitude, longitude) as any[];
+    const hit = items.find((item) => item.address || item.label || item.display);
+    if (!hit) return res.status(404).json({ error: 'address_not_found' });
+    res.json({ address: hit.address || hit.label || hit.display || '', city: String(hit.raw?.city || ''), country: String(hit.raw?.country || 'Vietnam'), provider: 'synapsedx' });
   } catch (error) { next(error); }
 });
-app.get('/v1/map/config', (_req, res) => res.json(vietMapConfigured() ? { provider: 'vietmap', tileUrl: '/v1/map/tiles/{z}/{x}/{y}.png', attribution: '&copy; VIETMAP', maxZoom: 20, maxNativeZoom: 20, style: vietMapTileStyle() } : { provider: 'openstreetmap', tileUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '&copy; OpenStreetMap contributors', maxZoom: 20, maxNativeZoom: 19 }));
-app.get('/v1/map/tiles/:z/:x/:y.png', async (req, res, next) => { try { await proxyVietMapTile(Number(req.params.z), Number(req.params.x), Number(req.params.y), res); } catch (error) { next(error); } });
-app.get('/v1/map/status', (_req, res) => res.json({ provider: vietMapConfigured() ? 'vietmap' : 'openstreetmap', configured: vietMapConfigured(), service: 'synapsecity-sos' }));
+app.get('/v1/map/config', (_req, res) => res.json({ provider: 'synapsedx', tileUrl: '/v1/map/tiles/{z}/{x}/{y}.png', attribution: '&copy; VIETMAP', maxZoom: 20, maxNativeZoom: 20, style: 'tm' }));
+app.get('/v1/map/tiles/:z/:x/:y.png', async (req, res, next) => { try { await proxyTier2Tile(Number(req.params.z), Number(req.params.x), Number(req.params.y), res); } catch (error) { next(error); } });
+app.get('/v1/map/status', (_req, res) => res.json({ provider: 'synapsedx', configured: tier2MapConfigured(), service: 'synapsecity-sos' }));
 
 app.get('/v1/ai/status', async (req, res, next) => {
   try {
@@ -2014,6 +2254,42 @@ app.post('/v1/ai/chat', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.post('/v1/ai/brief', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const result = await hazardBrief(client(req), {
+      hours: Number(input.hours ?? 24),
+      limit: Number(input.limit ?? 8),
+      ...(typeof input.focus === 'string' ? { focus: input.focus } : {}),
+    });
+    res.setHeader('cache-control', 'public, max-age=60');
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
+app.post('/v1/ai/ask', async (req, res, next) => {
+  try {
+    const input = body(req);
+    const question = typeof input.question === 'string' ? input.question : typeof input.q === 'string' ? input.q : '';
+    const c = client(req);
+    let liveContext = '';
+    try {
+      const sdk = c as unknown as { hazards?: { today?: (query: { hours: number; limit: number }) => Promise<{ hazards?: Array<Record<string, unknown>> }> } };
+      const feed = await sdk.hazards?.today?.({ hours: 24, limit: 6 });
+      const hazards = Array.isArray(feed?.hazards) ? feed.hazards : [];
+      liveContext = hazards.map((hazard) => {
+        const provinces = Array.isArray(hazard.provinces) ? hazard.provinces.join(', ') : '';
+        return `- [${String(hazard.severity ?? 'medium')}] ${String(hazard.title ?? '')} (${provinces || 'không xác định'}) lúc ${String(hazard.published_at ?? '')}`;
+      }).join('\n');
+    } catch {
+      // The RAG answer can proceed without the live feed; it remains grounded.
+    }
+    const result = await knowledgeAsk(c, question, Number(input.topK ?? input.top_k ?? 5), liveContext);
+    res.setHeader('cache-control', 'no-store');
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
 // Final /v1 fallback.
 app.use((req, res, next) => {
   const path = normalizedPath(req.originalUrl);
@@ -2023,6 +2299,10 @@ app.use((req, res, next) => {
 
 app.use((error: any, req: Request, res: Response, _next: NextFunction) => {
   const correlationId = res.getHeader('x-correlation-id')?.toString();
+  if (error instanceof HitlError) {
+    res.status(error.status).json({ error: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) });
+    return;
+  }
   if (error instanceof HttpError) {
     res.status(error.status).json({ error: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) });
     return;

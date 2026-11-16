@@ -158,6 +158,11 @@ function loadSecret(): { secret: string; ephemeral: boolean } {
     }
     return { secret: configured, ephemeral: false };
   }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[synapsecity-sos] AUTH_SECRET must be set in production (an ephemeral secret would invalidate every session on restart)',
+    );
+  }
   console.warn(
     '[synapsecity-sos] AUTH_SECRET is not set. Using an ephemeral session secret; sessions are invalidated on restart. ' +
       'Production identity must be delegated to the Tier-1 IAM gateway.',

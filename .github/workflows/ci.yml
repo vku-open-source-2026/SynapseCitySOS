@@ -29,14 +29,32 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Verify pinned Tier-2 SDK
-        run: sha256sum -c vendor/synapsedx-capabilities-0.3.0.tgz.sha256
+      - name: Verify registry Tier-2 SDK
+        run: node -e "const d=require('./apps/sos-service/package.json').dependencies['@synapsedx/capabilities']; if(!/^[~^]?\d+\.\d+\.\d+/.test(d)) { console.error('expected registry semver, got '+d); process.exit(1); } console.log('@synapsedx/capabilities '+d);"
 
       - name: Build
         run: npm run build
+      - name: Validate git-managed workflows
+        run: npm run workflows:validate
 
       - name: Test
         run: npm test
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust service and gateway tests
+        run: |
+          (cd apps/sos-service && cargo test --locked)
+          (cd apps/gateway && cargo test --locked)
+
+      - name: Plugin, workflow, AAR and public-boundary contracts
+        run: |
+          npm run plugins:check
+          npm run plugins:test
+          npm run test:public-only
+          npm run test:workflow-artifacts
+          npm run test:aar-parity
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=critical

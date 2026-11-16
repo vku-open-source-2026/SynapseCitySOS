@@ -7,18 +7,16 @@ or datasets. When working in the workspace, the workspace-level
 
 The repository is split into product parts:
 
-- `apps/gateway`: public HTTPS API boundary and console proxy;
+- `apps/gateway`: public HTTPS API boundary and console proxy (Rust/Axum);
 - `apps/sos-service`: Tier-3 emergency operations backend;
 - `apps/console`: emergency operations console;
 - `infra`: edge/deployment files.
 
 ## Dependency contract
 
-- Import the Tier-2 `@synapsedx/capabilities` client from
-  `../SynapseDX/sdks/capabilities-js` during this workspace build; releases must
-  resolve the same package from the npm registry (the package is not published
-  yet, so the `file:` dependency and the `prebuild` SDK build stay until the
-  operator publishes it).
+- Import the Tier-2 `@synapsedx/capabilities` client from the public npm
+  registry (`^0.3.0` or later). Do not use a `file:` sibling checkout or a
+  vendored tarball.
 - Default Tier-2 URL is `https://synapsedx.sbs`. Set `SYNAPSEDX_BASE_URL` only
   to another public HTTPS endpoint. Do not call SynapseOne, a private service
   port, localhost or a database from this repository.
@@ -60,28 +58,15 @@ are not City users. Do not add `/v1/users`, read `city-users`, or resolve City
 operator IDs. Dispatch assignment references an SOS resource unit under
 `assigned_resource_unit_id`; `assigned_user_id` is a deprecated mirror.
 
-`/v1/auth/*` is a stateless HMAC session shell for the console. It stores no
-passwords and creates no user dataset. Identity is verified through the Tier-2
-auth capability (`SOS_AUTH_MODE=tier2`, the default in every environment): the
-`auth` namespace (login/register/refresh/logout/me/changePassword/optional
-exchange) proxies Tier-1 IAM. The Tier-2 access/refresh token is kept inside the
-signed SOS session and forwarded only to Tier-2; it is never returned to the
-browser as a field. `AUTH_SECRET` is optional and falls back to an ephemeral
-start-up secret with a warning. Tokens are accepted only from
-`Authorization: Bearer`, never a query string.
+Tier-3 login/session management is retired. Every `/v1/auth/*` path returns
+`410 workspace_moved`; there is no supported legacy session surface. Login,
+registration, sessions and roles belong to SynapseDX. Do not add a new local
+session store, password table or demo administrator path. Tokens are accepted
+only from `Authorization: Bearer`, never a query string.
 
-Roles are always server-assigned and never read from the request body, the
-token or `SOS_AUTH_DEFAULT_ROLE=admin`. A verified identity is a `responder`
-unless its email is in `SOS_BOOTSTRAP_ADMIN_EMAILS` (comma-separated), which
-grants `admin`; registration through Tier-2 creates a responder account (or
-`admin` for a bootstrap email). Password changes call Tier-2 when the session
-carries a Tier-2 token.
-
-Demo mode exists only with `SOS_AUTH_MODE=demo` **and** `ALLOW_DEMO_AUTH=true`
-outside production; `NODE_ENV=production` refuses to start with either demo
-switch enabled. Demo login is `responder`, registration is read-only
-`volunteer`, and demo sessions never grant `admin`/`manager`. `SOS_AUTH_MODE=demo`
-in production is a start-up error.
+Internal emergency routes still require a verified principal and the
+role-derived permission described below. The public projection and hazard feed
+remain anonymous read surfaces.
 
 Internal emergency routes require a session **and** a permission:
 `emergency:read` for reads, `emergency:write` for event/SITREP writes,
@@ -138,9 +123,25 @@ test when adding datasets.
 
 ## Console route ownership
 
-Keep: `/`, `/about`, `/docs`, `/map`, `/login`, `/register`, `/admin`,
-`/admin/emergency-center`, `/admin/emergency-center/before|during|after`,
-`/admin/emergency-center/operations/$eventId`, `/admin/settings`.
+Tier 3 is **public presentation only** (2026-11-14 workspace contract). Keep:
+`/`, `/about`, `/docs`, `/map`.
+
+Retired work surfaces redirect to `https://synapsedx.sbs/workspace`:
+`/login`, `/register`, `/workspace/**`, `/admin/**` (including
+`/admin/emergency-center/**`). They return `308` from
+`apps/console/nginx.conf` and `infra/nginx/`, and the root route redirects
+client-side. Route modules are redirect stubs/notices — never mount a local
+command-centre dashboard or login form again. `/v1/auth/*` answers
+`410 workspace_moved` before auth handling.
+
+**Release gate:** do not deploy the public-only redirects or retire the
+production command-centre pages until the DX workflow binding for event/dispatch
+actions is verified end to end (see `plugins/workflows/README.md`).
+
+Work interfaces are product plugins in DX; portable bundles live in `plugins/`
+with `npm run plugins:check` / `npm run plugins:test` and
+`docs/PLUGIN_SYNC.md`. Pre-migration route source is archived (not built) in
+`plugins/source/`.
 
 Never add `/admin/assets*`, `/admin/incidents*`, `/admin/iot*`,
 `/admin/budgets*`, `/admin/reports*`, `/admin/alerts*`, `/admin/ingest`,
@@ -154,6 +155,7 @@ Never add `/admin/assets*`, `/admin/incidents*`, `/admin/iot*`,
 npm ci
 npm run build
 npm test
+(cd apps/gateway && cargo test)                       # Rust gateway tests
 npm run start --workspace=@synapsecity/sos-service   # SOS service
 npm run dev --workspace=@synapsecity/sos-console     # console dev server
 docker compose up -d --build                         # production stack

@@ -31,12 +31,12 @@ const Footer = () => {
                         Dự án
                     </p>
                     <div className="flex flex-col space-y-3">
-                        <a
-                            href="#about-us"
+                        <Link
+                            to="/about"
                             className="text-sm text-[#6C7580] flex w-fit items-center space-x-2 capitalize hover:underline"
                         >
                             Giới thiệu
-                        </a>
+                        </Link>
                         <a
                             href="https://github.com/vku-open-source-2026/SynapseCitySOS"
                             target="_blank"
@@ -53,7 +53,7 @@ const Footer = () => {
                     </p>
                     <div className="flex flex-col space-y-3">
                         <a
-                            href="https://contribution.sos.synapsecity.sbs/"
+                            href="https://contribution.synapsecity.sbs/"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-sm text-[#6C7580] flex w-fit items-center space-x-2 capitalize hover:underline"
@@ -96,7 +96,7 @@ const Footer = () => {
             </div>
             <div className="flex flex-col items-center mb-6">
                 <p className="text-sm text-[#6C7580]">
-                    © SynapseCity SOS 2025. Mã nguồn theo giấy phép{" "}
+                    © SynapseCity SOS 2026. Mã nguồn theo giấy phép{" "}
                     <a
                         href="https://github.com/vku-open-source-2026/SynapseCitySOS/blob/main/LICENSE"
                         target="_blank"
