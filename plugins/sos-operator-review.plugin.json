@@ -150,10 +150,12 @@
         "width": "full",
         "columns": [
           "id",
-          "requesting_org",
-          "target_org",
+          "request_number",
+          "requesting_agency",
           "resource_type",
           "quantity",
+          "filled_quantity",
+          "urgency",
           "status"
         ],
         "resource": "mutualAid",
@@ -183,7 +185,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: approve, publish or reject",
+            "label": "Decision: submit, reject or archive (approve/publish via SOS HITL)",
             "required": true
           },
           {
@@ -195,7 +197,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-eop-decision-submit"
       },
@@ -215,7 +217,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: publish"
+            "label": "Decision: archive (publish via SOS API)"
           },
           {
             "name": "notes",
@@ -226,7 +228,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-sitrep-decision-submit"
       },
@@ -246,7 +248,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: publish"
+            "label": "Decision: archive (publish via SOS API)"
           },
           {
             "name": "notes",
@@ -257,7 +259,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-aar-decision-submit"
       },
@@ -277,7 +279,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: approve, reject, start or complete",
+            "label": "Decision: decline or handoff",
             "required": true
           },
           {
@@ -289,7 +291,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-mutual-aid-decision-submit"
       },
@@ -889,5 +891,5 @@
     "path": "plugins/sos-operator-review.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:100e07e0ecea4fa489181d5c3b0edf86075664cab2fb0a62b9951f9a3aacb075"
+  "checksum": "sha256:2c4e9073885851732dc7c5f711a8c6ada07bfcaadb52e0cc6af5d050b2bf451d"
 }

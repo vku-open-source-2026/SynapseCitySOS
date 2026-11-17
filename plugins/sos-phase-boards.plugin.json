@@ -222,7 +222,7 @@
       {
         "id": "eop-publish",
         "type": "form",
-        "title": "Publish an EOP plan",
+        "title": "Archive an EOP plan",
         "width": "half",
         "action": "execute",
         "fields": [
@@ -235,7 +235,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: publish"
+            "label": "Decision: archive (publish via SOS API)"
           },
           {
             "name": "notes",
@@ -246,14 +246,14 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-eop-publish-submit"
       },
       {
         "id": "sitrep-publish",
         "type": "form",
-        "title": "Publish a SITREP",
+        "title": "Archive a SITREP",
         "width": "half",
         "action": "execute",
         "fields": [
@@ -266,20 +266,20 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: publish"
+            "label": "Decision: archive (publish via SOS API)"
           }
         ],
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-sitrep-publish-submit"
       },
       {
         "id": "aar-publish",
         "type": "form",
-        "title": "Publish an AAR",
+        "title": "Archive an AAR",
         "width": "half",
         "action": "execute",
         "fields": [
@@ -292,13 +292,13 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: publish"
+            "label": "Decision: archive (publish via SOS API)"
           }
         ],
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-aar-publish-submit"
       },
@@ -957,5 +957,5 @@
     "path": "plugins/sos-phase-boards.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:dfabb82c6918f9b9297fae2ff5d5828ae0704c9a0e5ff7efb5f0346023906080"
+  "checksum": "sha256:591eaac6e50a787241604c5dd134e5371f7948b9e9f8523c2b05f1979cc1ef17"
 }

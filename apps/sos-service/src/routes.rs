@@ -85,9 +85,7 @@ async fn list_and_filter(
 ) -> ApiResult<(Vec<Map<String, Value>>, bool)> {
     let opts = ctx.opts();
     let AllRows {
-        items,
-        truncated,
-        ..
+        items, truncated, ..
     } = tier2::list_all(
         ctx.client(),
         &opts,
@@ -232,7 +230,8 @@ fn rate_limit(state: &AppState, name: &str, headers: &HeaderMap, max: u32) -> Re
             "rate_limited",
             "Too many requests; retry later.",
         );
-        error.details = Some(json!({ "retry_after_seconds": retry, "limit": max, "window_seconds": 60 }));
+        error.details =
+            Some(json!({ "retry_after_seconds": retry, "limit": max, "window_seconds": 60 }));
         return Err(error);
     }
     Ok(())
@@ -260,6 +259,8 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
         rate_limit(&state, "ai", &headers, state.config.ai_rate_max)?;
     } else if path.starts_with("/v1/auth") {
         rate_limit(&state, "auth", &headers, state.config.auth_rate_max)?;
+    } else if is_public(&path) {
+        rate_limit(&state, "public", &headers, state.config.public_rate_max)?;
     }
 
     let body = if matches!(method, "POST" | "PUT" | "PATCH") {
@@ -269,7 +270,10 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
         zero_body()
     };
 
-    let session = auth::session_from_headers(&state.config, &headers);
+    let mut session = auth::session_from_headers(&state.config, &headers);
+    if session.is_none() && path == "/v1/hazards/ingest" {
+        session = auth::service_principal_from_headers(&state.config, &headers);
+    }
     if path.starts_with("/v1")
         && !path.starts_with("/v1/auth")
         && !is_public(&path)
@@ -317,7 +321,10 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
                 .to_string()
         })
         .collect();
-    let keys: Vec<String> = segments.iter().map(|value| value.to_ascii_lowercase()).collect();
+    let keys: Vec<String> = segments
+        .iter()
+        .map(|value| value.to_ascii_lowercase())
+        .collect();
     let key_refs: Vec<&str> = keys.iter().map(String::as_str).collect();
 
     match (method, key_refs.as_slice()) {
@@ -328,10 +335,16 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
             state.metrics.render(),
         )),
         ("GET", ["v1", "sos"]) => Ok(web::json_response(sos_metadata(&ctx))),
+        // The only supported session endpoint: a verified Tier-2 bearer is
+        // exchanged for a short-lived SOS session. Password login/registration
+        // stay retired in the DX workspace.
+        ("POST", ["v1", "auth", "exchange"]) => auth_exchange(ctx).await,
         // Every legacy auth path is retired, including read/session paths that
         // used to answer 401/404. Clients must use the DX workspace login.
         (_, ["v1", "auth", ..]) => Ok(workspace_moved()),
-        ("POST", ["v1", "auth", "login"]) | ("POST", ["v1", "auth", "register"]) => Ok(workspace_moved()),
+        ("POST", ["v1", "auth", "login"]) | ("POST", ["v1", "auth", "register"]) => {
+            Ok(workspace_moved())
+        }
         (_, ["v1", "auth", "refresh"]) => Ok(workspace_moved()),
         ("POST", ["v1", "auth", "logout"]) => auth_logout(ctx).await,
         ("POST", ["v1", "auth", "change-password"]) => auth_change_password(ctx).await,
@@ -355,41 +368,77 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
         ("POST", ["v1", "emergency", "eop", id, "submit"]) => eop_submit(ctx, id).await,
         ("PATCH", ["v1", "emergency", "eop", id, "markdown"]) => eop_markdown(ctx, id).await,
         ("POST", ["v1", "emergency", "eop", id, "approval"]) => eop_approval(ctx, id).await,
-        ("GET", ["v1", "emergency", "dispatch"]) => list_collection(ctx, tier2::DISPATCH, Some(100)).await,
+        ("GET", ["v1", "emergency", "dispatch"]) => {
+            list_collection(ctx, tier2::DISPATCH, Some(100)).await
+        }
         ("POST", ["v1", "emergency", "dispatch"]) => dispatch_create(ctx).await,
         ("POST", ["v1", "emergency", "dispatch", "optimize"]) => dispatch_optimize(ctx).await,
         ("GET", ["v1", "emergency", "dispatch", id]) => get_record(ctx, tier2::DISPATCH, id).await,
         ("PUT", ["v1", "emergency", "dispatch", id]) => put_record(ctx, tier2::DISPATCH, id).await,
-        ("POST", ["v1", "emergency", "dispatch", id, "approval"]) => dispatch_approval(ctx, id).await,
+        ("POST", ["v1", "emergency", "dispatch", id, "approval"]) => {
+            dispatch_approval(ctx, id).await
+        }
         ("POST", ["v1", "emergency", "dispatch", id, "approve"])
-        | ("POST", ["v1", "emergency", "dispatch", id, "assign"]) => dispatch_approve(ctx, id).await,
-        ("POST", ["v1", "emergency", "dispatch", id, action]) => dispatch_action(ctx, id, action).await,
+        | ("POST", ["v1", "emergency", "dispatch", id, "assign"]) => {
+            dispatch_approve(ctx, id).await
+        }
+        ("POST", ["v1", "emergency", "dispatch", id, action]) => {
+            dispatch_action(ctx, id, action).await
+        }
         ("GET", ["v1", "emergency", "hitl", "approvals"]) => hitl_list(ctx).await,
-        ("POST", ["v1", "emergency", "hitl", "approvals", id, "decide"]) => hitl_decide(ctx, id).await,
+        ("POST", ["v1", "emergency", "hitl", "approvals", id, "decide"]) => {
+            hitl_decide(ctx, id).await
+        }
         ("POST", ["v1", "emergency", "hitl", "handoff"]) => hitl_handoff(ctx).await,
-        ("GET", ["v1", "emergency", "mutual-aid", "requests"]) => list_collection(ctx, tier2::MUTUAL_AID, Some(100)).await,
+        ("GET", ["v1", "emergency", "mutual-aid", "requests"]) => {
+            list_collection(ctx, tier2::MUTUAL_AID, Some(100)).await
+        }
         ("POST", ["v1", "emergency", "mutual-aid", "requests"]) => mutual_aid_create(ctx).await,
-        ("GET", ["v1", "emergency", "mutual-aid", "requests", id]) => get_record(ctx, tier2::MUTUAL_AID, id).await,
-        ("POST", ["v1", "emergency", "mutual-aid", "requests", id, "accept"]) => mutual_aid_accept(ctx, id).await,
-        ("POST", ["v1", "emergency", "mutual-aid", "requests", id, "decline"]) => mutual_aid_decline(ctx, id).await,
-        ("POST", ["v1", "emergency", "mutual-aid", "requests", id, "handoff"]) => mutual_aid_handoff(ctx, id).await,
-        ("GET", ["v1", "emergency", "public", "mutual-aid", id]) => mutual_aid_public(ctx, id).await,
+        ("GET", ["v1", "emergency", "mutual-aid", "requests", id]) => {
+            get_record(ctx, tier2::MUTUAL_AID, id).await
+        }
+        ("POST", ["v1", "emergency", "mutual-aid", "requests", id, "accept"]) => {
+            mutual_aid_accept(ctx, id).await
+        }
+        ("POST", ["v1", "emergency", "mutual-aid", "requests", id, "decline"]) => {
+            mutual_aid_decline(ctx, id).await
+        }
+        ("POST", ["v1", "emergency", "mutual-aid", "requests", id, "handoff"]) => {
+            mutual_aid_handoff(ctx, id).await
+        }
+        ("GET", ["v1", "emergency", "public", "mutual-aid", id]) => {
+            mutual_aid_public(ctx, id).await
+        }
         ("GET", ["v1", "emergency", "resources", "shelters", "near"]) => shelters_near(ctx).await,
-        ("GET", ["v1", "emergency", "resources"]) => list_collection(ctx, tier2::RESOURCES, Some(100)).await,
+        ("GET", ["v1", "emergency", "resources"]) => {
+            list_collection(ctx, tier2::RESOURCES, Some(100)).await
+        }
         ("POST", ["v1", "emergency", "resources"]) => resource_create(ctx).await,
-        ("GET", ["v1", "emergency", "resources", id]) => get_record(ctx, tier2::RESOURCES, id).await,
-        ("PUT", ["v1", "emergency", "resources", id]) => put_record(ctx, tier2::RESOURCES, id).await,
+        ("GET", ["v1", "emergency", "resources", id]) => {
+            get_record(ctx, tier2::RESOURCES, id).await
+        }
+        ("PUT", ["v1", "emergency", "resources", id]) => {
+            put_record(ctx, tier2::RESOURCES, id).await
+        }
         ("POST", ["v1", "emergency", "resources", id, "status"]) => resource_status(ctx, id).await,
-        ("GET", ["v1", "emergency", "sitrep"]) => list_collection(ctx, tier2::SITREP, Some(100)).await,
+        ("GET", ["v1", "emergency", "sitrep"]) => {
+            list_collection(ctx, tier2::SITREP, Some(100)).await
+        }
         ("POST", ["v1", "emergency", "sitrep"]) => sitrep_create(ctx).await,
         ("GET", ["v1", "emergency", "sitrep", id]) => get_record(ctx, tier2::SITREP, id).await,
         ("PUT", ["v1", "emergency", "sitrep", id]) => sitrep_update(ctx, id).await,
         ("POST", ["v1", "emergency", "sitrep", id, "delta"]) => sitrep_delta(ctx, id).await,
         ("POST", ["v1", "emergency", "sitrep", id, "publish"]) => sitrep_publish(ctx, id).await,
-        ("GET", ["v1", "emergency", "after-action"]) => list_collection(ctx, tier2::AFTER_ACTION, Some(100)).await,
+        ("GET", ["v1", "emergency", "after-action"]) => {
+            list_collection(ctx, tier2::AFTER_ACTION, Some(100)).await
+        }
         ("POST", ["v1", "emergency", "after-action", "generate"]) => aar_generate(ctx).await,
-        ("GET", ["v1", "emergency", "after-action", id]) => get_record(ctx, tier2::AFTER_ACTION, id).await,
-        ("PUT", ["v1", "emergency", "after-action", id]) => put_record(ctx, tier2::AFTER_ACTION, id).await,
+        ("GET", ["v1", "emergency", "after-action", id]) => {
+            get_record(ctx, tier2::AFTER_ACTION, id).await
+        }
+        ("PUT", ["v1", "emergency", "after-action", id]) => {
+            put_record(ctx, tier2::AFTER_ACTION, id).await
+        }
         ("POST", ["v1", "emergency", "after-action", id, "publish"]) => aar_publish(ctx, id).await,
         ("POST", ["v1", "emergency", id, "resolve"]) => event_resolve(ctx, id).await,
         ("GET", ["v1", "emergency", id]) => get_record(ctx, tier2::EVENTS, id).await,
@@ -406,6 +455,7 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
         ("GET", ["v1", "hazards", id]) => get_record(ctx, tier2::HAZARDS, id).await,
         ("PUT", ["v1", "hazards", id]) => put_record(ctx, tier2::HAZARDS, id).await,
         ("POST", ["v1", "hazards", id, "deploy"]) => hazard_deploy(ctx, id).await,
+        ("POST", ["v1", "hazards", id, "status"]) => hazard_status(ctx, id).await,
         ("GET", ["v1", "emergency", "stream", "hazards"]) => hazard_stream(ctx).await,
         ("GET", ["v1", "geo", "search-address"]) => geo_search(ctx).await,
         ("POST", ["v1", "geo", "geocode"]) => geo_geocode(ctx).await,
@@ -482,7 +532,11 @@ async fn health(ctx: Ctx<'_>, ready: bool) -> ApiResult<Response> {
         "tier2Url": ctx.config().tier2_url,
     });
     Ok(web::status_json(
-        if ok { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE },
+        if ok {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
         body,
     ))
 }
@@ -542,6 +596,57 @@ fn workspace_moved() -> Response {
     )
 }
 
+/// Exchange a verified Tier-2 user bearer for an SOS session.
+///
+/// This is the only supported SOS session issuance path after the local login
+/// and registration surfaces were retired. The Tier-2 token is verified with
+/// the identity capability (`auth/me`), never trusted from the body, and the
+/// SOS role is derived from local policy (bootstrap admin or default role).
+async fn auth_exchange(ctx: Ctx<'_>) -> ApiResult<Response> {
+    let token = auth::bearer_token(ctx.headers).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "tier2_token_required",
+            "Send the verified Tier-2 access token as Authorization: Bearer.",
+        )
+    })?;
+    if auth::verify_token(ctx.config(), &token, "access").is_some() {
+        return Err(ApiError::bad_request(
+            "tier2_token_required",
+            "The exchange endpoint expects a Tier-2 access token, not an SOS session.",
+        ));
+    }
+    let header_key = ctx
+        .headers
+        .get("x-api-key")
+        .and_then(|value| value.to_str().ok());
+    let opts = tier2::request_options_from(
+        ctx.config().tier2_api_key.as_deref(),
+        ctx.config().tier2_token.as_deref(),
+        header_key,
+        Some(&token),
+    );
+    let me = ctx
+        .client()
+        .auth()
+        .me(&opts)
+        .await
+        .map_err(auth::identity_error)?;
+    let identity = auth::identity_from_me(&me)?;
+    let role = auth::role_for_identity(ctx.config(), &identity.email);
+    let user = user_from_identity(&identity, &role);
+    let issued = auth::issue_session(
+        ctx.config(),
+        &user,
+        SessionExtras {
+            auth_source: Some("tier2".into()),
+            tier2_token: Some(token),
+            tier2_refresh_token: None,
+        },
+    )?;
+    Ok(web::json_response(issued.json()))
+}
+
 async fn auth_login(ctx: Ctx<'_>) -> ApiResult<Response> {
     return Ok(workspace_moved());
     #[allow(unreachable_code)]
@@ -575,7 +680,10 @@ async fn auth_login(ctx: Ctx<'_>) -> ApiResult<Response> {
         return Ok(web::json_response(session.json()));
     }
     if identifier.is_empty() {
-        return Err(ApiError::bad_request("email_required", "email and password are required"));
+        return Err(ApiError::bad_request(
+            "email_required",
+            "email and password are required",
+        ));
     }
     if !identifier.contains('@') {
         return Err(ApiError::bad_request(
@@ -584,7 +692,10 @@ async fn auth_login(ctx: Ctx<'_>) -> ApiResult<Response> {
         ));
     }
     if password.is_empty() {
-        return Err(ApiError::bad_request("password_required", "email and password are required"));
+        return Err(ApiError::bad_request(
+            "password_required",
+            "email and password are required",
+        ));
     }
     let org_slug = web::string_value(ctx.body.get("org_slug"));
     let opts = ctx.opts();
@@ -630,7 +741,10 @@ async fn auth_register(ctx: Ctx<'_>) -> ApiResult<Response> {
         .or_else(|| web::string_value(ctx.body.get("display_name")))
         .unwrap_or_default();
     if email.is_empty() {
-        return Err(ApiError::bad_request("email_required", "email, password and full_name are required"));
+        return Err(ApiError::bad_request(
+            "email_required",
+            "email, password and full_name are required",
+        ));
     }
     if !email.contains('@') {
         return Err(ApiError::bad_request("email_invalid", "email is not valid"));
@@ -642,7 +756,10 @@ async fn auth_register(ctx: Ctx<'_>) -> ApiResult<Response> {
         ));
     }
     if full_name.is_empty() {
-        return Err(ApiError::bad_request("full_name_required", "full_name is required"));
+        return Err(ApiError::bad_request(
+            "full_name_required",
+            "full_name is required",
+        ));
     }
     if ctx.config().demo_auth_allowed() {
         let role = auth::demo_session_role("register");
@@ -668,7 +785,13 @@ async fn auth_register(ctx: Ctx<'_>) -> ApiResult<Response> {
     let session = ctx
         .client()
         .auth()
-        .register(&email, &password, Some(&full_name), org_slug.as_deref(), &opts)
+        .register(
+            &email,
+            &password,
+            Some(&full_name),
+            org_slug.as_deref(),
+            &opts,
+        )
         .await
         .map_err(auth::identity_error)?;
     let value = serde_json::to_value(session).unwrap_or(Value::Null);
@@ -693,8 +816,13 @@ async fn auth_register(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 async fn auth_refresh(ctx: Ctx<'_>) -> ApiResult<Response> {
     let token = web::string_value(ctx.body.get("refresh_token")).unwrap_or_default();
-    let claims = auth::verify_token(ctx.config(), &token, "refresh")
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_refresh_token", "invalid_refresh_token"))?;
+    let claims = auth::verify_token(ctx.config(), &token, "refresh").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_refresh_token",
+            "invalid_refresh_token",
+        )
+    })?;
     if claims.auth_source.as_deref() == Some("tier2") {
         let refresh = claims.tier2_refresh_token.clone().ok_or_else(|| {
             ApiError::new(
@@ -754,7 +882,10 @@ async fn auth_logout(ctx: Ctx<'_>) -> ApiResult<Response> {
     let claims = auth::verify_token(ctx.config(), &refresh, "refresh");
     let refresh_token = claims
         .and_then(|claims| claims.tier2_refresh_token)
-        .or_else(|| ctx.session.and_then(|claims| claims.tier2_refresh_token.clone()));
+        .or_else(|| {
+            ctx.session
+                .and_then(|claims| claims.tier2_refresh_token.clone())
+        });
     if let Some(token) = refresh_token {
         let opts = ctx.opts();
         let _ = ctx.client().auth().logout(&token, &opts).await;
@@ -764,7 +895,11 @@ async fn auth_logout(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 async fn auth_change_password(ctx: Ctx<'_>) -> ApiResult<Response> {
     let session = ctx.session.ok_or_else(|| {
-        ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "A valid SOS session is required.")
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "A valid SOS session is required.",
+        )
     })?;
     let current = web::string_value(ctx.body.get("current_password")).unwrap_or_default();
     let new_password = web::string_value(ctx.body.get("new_password")).unwrap_or_default();
@@ -800,14 +935,24 @@ async fn auth_change_password(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 fn auth_me(ctx: Ctx<'_>) -> ApiResult<Response> {
     let session = ctx.session.ok_or_else(|| {
-        ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "A valid SOS session is required.")
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "A valid SOS session is required.",
+        )
     })?;
-    Ok(web::json_response(auth::user_json(&auth::user_from_claims(session))))
+    Ok(web::json_response(auth::user_json(
+        &auth::user_from_claims(session),
+    )))
 }
 
 fn auth_verify(ctx: Ctx<'_>) -> ApiResult<Response> {
     let session = ctx.session.ok_or_else(|| {
-        ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "A valid SOS session is required.")
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "A valid SOS session is required.",
+        )
     })?;
     let expires = chrono::DateTime::<chrono::Utc>::from_timestamp(session.exp, 0)
         .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
@@ -824,7 +969,11 @@ fn auth_verify(ctx: Ctx<'_>) -> ApiResult<Response> {
 // Generic collections and events
 // ---------------------------------------------------------------------------
 
-async fn list_collection(ctx: Ctx<'_>, spec: DatasetSpec, fallback: Option<i64>) -> ApiResult<Response> {
+async fn list_collection(
+    ctx: Ctx<'_>,
+    spec: DatasetSpec,
+    fallback: Option<i64>,
+) -> ApiResult<Response> {
     let (rows, truncated) = list_and_filter(&ctx, spec, None).await?;
     let fallback = fallback.unwrap_or(100);
     let values = data_to_values(paginate(rows, ctx.query, fallback));
@@ -843,9 +992,91 @@ async fn get_record(ctx: Ctx<'_>, spec: DatasetSpec, id: &str) -> ApiResult<Resp
     Ok(web::send_record(row))
 }
 
+/// Lifecycle and provenance fields are never writable through a generic PUT.
+/// They belong to the transition endpoints, which enforce permissions,
+/// approvals, optimistic versions and audit metadata.
+const CONTROLLED_FIELDS: &[&str] = &[
+    "status",
+    "created_by",
+    "created_at",
+    "updated_by",
+    "updated_at",
+    "record_version",
+    "approved_by",
+    "approved_at",
+    "approved_role",
+    "approval_id",
+    "approval_roles",
+    "published_by",
+    "published_at",
+    "submitted_by",
+    "submitted_at",
+    "order_ids",
+    "resolution_note",
+    "resolution",
+    "resolved_by",
+    "resolved_at",
+    "ended_at",
+    "closed_at",
+    "completed_at",
+    "canceled_at",
+    "cancelled_at",
+    "rejected_at",
+    "expired_at",
+    "after_action_report_id",
+    "approved",
+    "published",
+    "assigned_resource_unit_id",
+    "assigned_user_id",
+    "assigned_at",
+    "assigned_by",
+    "assignments",
+    "linked_event_id",
+    "linked_eop_plan_id",
+    "emergency_event_id",
+    "filled_quantity",
+    "history",
+];
+
+fn controlled_field(body: &Map<String, Value>) -> Option<&'static str> {
+    CONTROLLED_FIELDS
+        .iter()
+        .copied()
+        .find(|field| body.get(*field).is_some())
+}
+
+fn immutable_status(spec: DatasetSpec, status: &str) -> bool {
+    match spec.id {
+        "sos-eop-plans" => matches!(status, "approved" | "published" | "archived" | "rejected"),
+        "sos-sitreps" => matches!(status, "published" | "archived"),
+        "sos-after-action-reports" => matches!(status, "published" | "archived"),
+        "sos-emergency-events" => matches!(status, "resolved" | "canceled" | "archived"),
+        "sos-dispatch-orders" => matches!(status, "completed" | "canceled" | "rejected"),
+        "sos-hazard-layers" => matches!(status, "expired" | "resolved"),
+        "sos-resource-units" => status == "retired",
+        "sos-mutual-aid-requests" => matches!(status, "filled" | "declined" | "handed_off"),
+        _ => false,
+    }
+}
+
 async fn put_record(ctx: Ctx<'_>, spec: DatasetSpec, id: &str) -> ApiResult<Response> {
-    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
+    if let Some(field) = controlled_field(ctx.body) {
+        return Err(ApiError::forbidden(
+            "controlled_field_forbidden",
+            format!("{field} cannot be changed through a generic update."),
+        )
+        .with_details(json!({ "field": field })));
+    }
     let opts = ctx.opts();
+    let current = tier2::get(ctx.client(), &opts, spec, id).await?;
+    let status = current.get("status").and_then(Value::as_str).unwrap_or("");
+    if immutable_status(spec, status) {
+        return Err(ApiError::conflict(
+            "record_immutable",
+            format!("record {id} is {status} and is immutable"),
+        ));
+    }
+    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let row = tier2::update(ctx.client(), &opts, spec, id, ctx.body.clone(), version).await?;
     Ok(web::send_record(row))
 }
@@ -867,9 +1098,7 @@ async fn create_event(ctx: Ctx<'_>) -> ApiResult<Response> {
     }
     input.insert(
         "created_by".into(),
-        ctx.actor()
-            .map(Value::String)
-            .unwrap_or(Value::Null),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
     );
     let opts = ctx.opts();
     let row = tier2::write(ctx.client(), &opts, tier2::EVENTS, input, None).await?;
@@ -879,17 +1108,40 @@ async fn create_event(ctx: Ctx<'_>) -> ApiResult<Response> {
 async fn public_status(ctx: Ctx<'_>) -> ApiResult<Response> {
     let opts = ctx.opts();
     let dependency = tier2::dependency_health(ctx.client(), &opts).await;
-    let hazards = tier2::list_all_public(
-        ctx.client(),
-        &opts,
-        tier2::HAZARDS,
-        ctx.config().max_scan_records,
-    )
-    .await
-    .map(|rows| rows.items.len())
-    .unwrap_or(0);
-    let ready = dependency.get("status").and_then(Value::as_str) == Some("ok")
-        && dependency.get("reachable").and_then(Value::as_bool).unwrap_or(false);
+    let dependency_ready = dependency.get("status").and_then(Value::as_str) == Some("ok")
+        && dependency
+            .get("reachable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+    let merged = public_hazards_with_feed(&ctx, 72).await;
+    let (records_visible, merge_error) = match merged {
+        Ok(items) => (items.len(), None),
+        Err(error) => (0usize, Some(error.code.clone())),
+    };
+    let feed = ctx
+        .state
+        .hazard_feed_status
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .clone();
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let last_success_ms = feed
+        .last_success_at
+        .as_deref()
+        .and_then(domain::filters::parse_timestamp);
+    let feed_age_minutes = last_success_ms
+        .map(|stamp| ((now_ms - stamp).max(0) as f64 / 60_000.0).round())
+        .unwrap_or(0.0);
+    let feed_stale = merge_error.is_some()
+        || feed.last_error.is_some()
+        || last_success_ms.is_none()
+        || feed_age_minutes > ctx.config().hazard_feed_stale_minutes as f64;
+    let ingest = compute_ingest_status(&ctx).await;
+    let ingest_json = serde_json::to_value(&ingest).unwrap_or(Value::Null);
+    let vndms_stale = ingest.stale
+        || !ingest.configured
+        || matches!(ingest.status.as_str(), "failed" | "error" | "unconfigured");
+    let ready = dependency_ready && !feed_stale && !vndms_stale;
     let mut response = web::json_response(json!({
         "status": if ready { "ok" } else { "degraded" },
         "data_available": dependency.get("reachable").and_then(Value::as_bool).unwrap_or(false),
@@ -897,32 +1149,73 @@ async fn public_status(ctx: Ctx<'_>) -> ApiResult<Response> {
         "hazard_feed": {
             "status": if ready { "ready" } else { "degraded" },
             "stale": !ready,
-            "records_visible": hazards,
+            "records_visible": records_visible,
+            "last_success_at": feed.last_success_at,
+            "last_fetch_at": feed.last_attempt_at,
+            "last_fetch_error": feed.last_error,
+            "merge_error": merge_error,
+            "age_minutes": feed_age_minutes,
+            "stale_after_minutes": ctx.config().hazard_feed_stale_minutes,
+            "ingest": ingest_json,
+            "ingest_status": ingest.status,
+            "ingest_stale": ingest.stale,
+            "configured": ingest.configured,
         },
+        "dependencies": [dependency],
     }));
-    response
-        .headers_mut()
-        .insert("cache-control", HeaderValue::from_static("public, max-age=30"));
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("public, max-age=30"),
+    );
     Ok(response)
 }
 
 async fn public_events(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let opts = ctx.opts();
-    let rows = tier2::list_all_public(
-        ctx.client(),
-        &opts,
-        tier2::EVENTS,
-        ctx.config().max_scan_records,
-    )
-    .await?;
+    let cached = {
+        let cache = ctx
+            .state
+            .public_events_cache
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        cache
+            .as_ref()
+            .filter(|(at, _, _)| at.elapsed() < Duration::from_secs(15))
+            .map(|(_, items, truncated)| (items.clone(), *truncated))
+    };
+    let (rows, truncated) = match cached {
+        Some((items, truncated)) => (items, truncated),
+        None => {
+            let opts = ctx.opts();
+            let rows = tier2::list_all_public(
+                ctx.client(),
+                &opts,
+                tier2::EVENTS,
+                ctx.config().max_scan_records,
+            )
+            .await?;
+            let mut cache = ctx
+                .state
+                .public_events_cache
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            *cache = Some((
+                std::time::Instant::now(),
+                rows.items.clone(),
+                rows.truncated,
+            ));
+            (rows.items, rows.truncated)
+        }
+    };
     let status = ctx.query.get("status").cloned();
     let events: Vec<Value> = rows
-        .items
         .into_iter()
         .filter(|event| {
             let event_status = event.get("status").and_then(Value::as_str).unwrap_or("");
             !["resolved", "canceled", "archived"].contains(&event_status)
-                && status.as_deref().map(|value| value == event_status).unwrap_or(true)
+                && status
+                    .as_deref()
+                    .map(|value| value == event_status)
+                    .unwrap_or(true)
         })
         .map(|event| {
             json!({
@@ -941,10 +1234,11 @@ async fn public_events(ctx: Ctx<'_>) -> ApiResult<Response> {
         .collect();
     let events = paginate(events, ctx.query, 500);
     let mut response = json_array(events);
-    response
-        .headers_mut()
-        .insert("cache-control", HeaderValue::from_static("public, max-age=30"));
-    if rows.truncated {
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("public, max-age=30"),
+    );
+    if truncated {
         response
             .headers_mut()
             .insert("x-sos-scan-truncated", HeaderValue::from_static("true"));
@@ -984,17 +1278,31 @@ async fn sosconn_status(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 async fn sos_timeline(ctx: Ctx<'_>) -> ApiResult<Response> {
     let opts = ctx.opts();
-    let events = tier2::list_all(ctx.client(), &opts, tier2::EVENTS, ctx.config().max_scan_records).await?;
-    let dispatch = tier2::list_all(ctx.client(), &opts, tier2::DISPATCH, ctx.config().max_scan_records)
-        .await
-        .unwrap_or(AllRows {
-            items: Vec::new(),
-            scanned: 0,
-            truncated: false,
-        });
+    let events = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::EVENTS,
+        ctx.config().max_scan_records,
+    )
+    .await?;
+    let dispatch = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::DISPATCH,
+        ctx.config().max_scan_records,
+    )
+    .await
+    .unwrap_or(AllRows {
+        items: Vec::new(),
+        scanned: 0,
+        truncated: false,
+    });
     let mut first_assignment: HashMap<String, i64> = HashMap::new();
     for order in &dispatch.items {
-        let event_id = order.get("emergency_event_id").and_then(Value::as_str).unwrap_or("");
+        let event_id = order
+            .get("emergency_event_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         if event_id.is_empty() {
             continue;
         }
@@ -1035,7 +1343,10 @@ async fn sos_timeline(ctx: Ctx<'_>) -> ApiResult<Response> {
             let event_data = to_data(event);
             let event_id = event.get("id").and_then(Value::as_str).unwrap_or("");
             let first = first_assignment.get(event_id).copied();
-            let severity = event.get("severity").and_then(Value::as_str).unwrap_or("medium");
+            let severity = event
+                .get("severity")
+                .and_then(Value::as_str)
+                .unwrap_or("medium");
             let sla_minutes = match severity {
                 "critical" => 30,
                 "high" => 60,
@@ -1069,7 +1380,12 @@ async fn sos_timeline(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 async fn dispatch_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     let mut input = ctx.body.clone();
-    if input.get("emergency_event_id").and_then(Value::as_str).unwrap_or("").is_empty() {
+    if input
+        .get("emergency_event_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .is_empty()
+    {
         return Err(ApiError::bad_request(
             "emergency_event_id_required",
             "emergency_event_id is required",
@@ -1094,8 +1410,20 @@ async fn dispatch_create(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
     let opts = ctx.opts();
-    let orders = tier2::list_all(ctx.client(), &opts, tier2::DISPATCH, ctx.config().max_scan_records).await?;
-    let resources = tier2::list_all(ctx.client(), &opts, tier2::RESOURCES, ctx.config().max_scan_records).await?;
+    let orders = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::DISPATCH,
+        ctx.config().max_scan_records,
+    )
+    .await?;
+    let resources = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::RESOURCES,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let plan = domain::optimizer::plan_optimization(
         &maps_to_data(&orders.items),
         &maps_to_data(&resources.items),
@@ -1103,20 +1431,68 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
     );
     let mut auto_assigned = 0usize;
     let mut stale_flagged = 0usize;
+    let mut reservation_failed = 0usize;
+    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
     for decision in &plan.assignments {
-        let Some(current) = orders
-            .items
-            .iter()
-            .find(|order| order.get("id").and_then(Value::as_str) == Some(decision.order_id.as_str()))
-        else {
+        let Some(current) = orders.items.iter().find(|order| {
+            order.get("id").and_then(Value::as_str) == Some(decision.order_id.as_str())
+        }) else {
             continue;
+        };
+        let current_status = current
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("pending");
+        if !["pending", "approved"].contains(&current_status)
+            || current
+                .get("assigned_resource_unit_id")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .is_some()
+        {
+            continue;
+        }
+        let Some(resource) = resources.items.iter().find(|resource| {
+            resource.get("id").and_then(Value::as_str) == Some(decision.resource_unit_id.as_str())
+        }) else {
+            reservation_failed += 1;
+            continue;
+        };
+        if resource.get("status").and_then(Value::as_str) != Some("available") {
+            reservation_failed += 1;
+            continue;
+        }
+        let now = crate::now_iso();
+        let mut resource_patch = Map::new();
+        resource_patch.insert("status".into(), json!("assigned"));
+        resource_patch.insert(
+            "assigned_dispatch_order_id".into(),
+            json!(decision.order_id),
+        );
+        resource_patch.insert("assigned_at".into(), json!(now));
+        resource_patch.insert("assigned_by".into(), json!(actor));
+        let resource_version = resource.get("record_version").and_then(Value::as_i64);
+        let reserved = match tier2::update(
+            ctx.client(),
+            &opts,
+            tier2::RESOURCES,
+            &decision.resource_unit_id,
+            resource_patch,
+            resource_version,
+        )
+        .await
+        {
+            Ok(row) => row,
+            Err(_) => {
+                reservation_failed += 1;
+                continue;
+            }
         };
         let existing_assignments = current
             .get("assignments")
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        let now = crate::now_iso();
         let mut assignments: Vec<Value> = existing_assignments
             .into_iter()
             .filter(|assignment| {
@@ -1129,6 +1505,7 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
             })
             .collect();
         assignments.push(json!({
+            "dispatch_order_id": decision.order_id,
             "resource_unit_id": decision.resource_unit_id,
             "assigned_resource_unit_id": decision.resource_unit_id,
             "assigned_user_id": decision.resource_unit_id,
@@ -1138,12 +1515,20 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
         }));
         let mut patch = Map::new();
         patch.insert("status".into(), json!("assigned"));
-        patch.insert("assigned_resource_unit_id".into(), json!(decision.resource_unit_id));
+        patch.insert(
+            "assigned_resource_unit_id".into(),
+            json!(decision.resource_unit_id),
+        );
         patch.insert("assigned_user_id".into(), json!(decision.resource_unit_id));
         patch.insert("assigned_at".into(), json!(now));
         patch.insert("eta_minutes".into(), json!(decision.eta_minutes));
         patch.insert("assignments".into(), Value::Array(assignments));
-        let metadata = current.get("metadata").and_then(Value::as_object).cloned().unwrap_or_default();
+        patch.insert("assigned_by".into(), json!(actor));
+        let metadata = current
+            .get("metadata")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
         let mut optimizer = Map::new();
         optimizer.insert("algorithm".into(), json!("sos-capability-match-v2"));
         optimizer.insert("distance_km".into(), json!(decision.distance_km));
@@ -1153,8 +1538,34 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
         metadata.insert("optimizer".into(), Value::Object(optimizer));
         patch.insert("metadata".into(), Value::Object(metadata));
         let version = current.get("record_version").and_then(Value::as_i64);
-        let _ = tier2::update(ctx.client(), &opts, tier2::DISPATCH, &decision.order_id, patch, version).await?;
-        auto_assigned += 1;
+        match tier2::update(
+            ctx.client(),
+            &opts,
+            tier2::DISPATCH,
+            &decision.order_id,
+            patch,
+            version,
+        )
+        .await
+        {
+            Ok(_) => auto_assigned += 1,
+            Err(_) => {
+                let mut release = Map::new();
+                release.insert("status".into(), json!("available"));
+                release.insert("assigned_dispatch_order_id".into(), Value::Null);
+                let reserved_version = reserved.get("record_version").and_then(Value::as_i64);
+                let _ = tier2::update(
+                    ctx.client(),
+                    &opts,
+                    tier2::RESOURCES,
+                    &decision.resource_unit_id,
+                    release,
+                    reserved_version,
+                )
+                .await;
+                reservation_failed += 1;
+            }
+        }
     }
     for order_id in &plan.stale {
         let Some(current) = orders
@@ -1174,13 +1585,22 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
         let mut patch = Map::new();
         patch.insert("metadata".into(), Value::Object(metadata));
         let version = current.get("record_version").and_then(Value::as_i64);
-        let _ = tier2::update(ctx.client(), &opts, tier2::DISPATCH, order_id, patch, version).await?;
+        let _ = tier2::update(
+            ctx.client(),
+            &opts,
+            tier2::DISPATCH,
+            order_id,
+            patch,
+            version,
+        )
+        .await?;
         stale_flagged += 1;
     }
     Ok(web::json_response(json!({
         "optimized": plan.assignments.len(),
         "auto_assigned": auto_assigned,
         "stale_flagged": stale_flagged,
+        "reservation_failed": reservation_failed,
         "eta_reestimated": auto_assigned,
         "unassignable": plan.unassignable.len(),
         "candidates": orders.items.iter().filter(|order| {
@@ -1194,25 +1614,117 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
 }
 
 async fn dispatch_action(ctx: Ctx<'_>, id: &str, action: &str) -> ApiResult<Response> {
-    let mut patch = ctx.body.clone();
-    match action {
-        "complete" => {
-            patch.insert("status".into(), json!("completed"));
-            patch.insert("completed_at".into(), json!(crate::now_iso()));
-        }
-        "reject" => {
-            patch.insert("status".into(), json!("canceled"));
-        }
+    let opts = ctx.opts();
+    let current = tier2::get(ctx.client(), &opts, tier2::DISPATCH, id).await?;
+    let status = current.get("status").and_then(Value::as_str).unwrap_or("");
+    let assignment = current
+        .get("assigned_resource_unit_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let (next, allowed_from, terminal_at) = match action {
+        "complete" => (
+            "completed",
+            &["assigned", "in_transit", "on_scene"][..],
+            "completed_at",
+        ),
+        "reject" => ("rejected", &["pending", "assigned"][..], "rejected_at"),
+        "cancel" => (
+            "canceled",
+            &["pending", "assigned", "in_transit", "on_scene"][..],
+            "canceled_at",
+        ),
         _ => {
             return Ok(web::status_json(
                 StatusCode::NOT_FOUND,
                 json!({ "error": "not_found", "product": "synapsecity-sos" }),
             ))
         }
+    };
+    if status == next {
+        let mut response = current;
+        response.insert("idempotent".into(), json!(true));
+        return Ok(web::json_response(Value::Object(response)));
     }
-    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
-    let opts = ctx.opts();
+    if matches!(status, "completed" | "canceled" | "rejected") {
+        return Err(ApiError::conflict(
+            "order_terminal",
+            format!("dispatch order {id} is already {status}"),
+        ));
+    }
+    if !allowed_from.contains(&status) {
+        return Err(ApiError::conflict(
+            "invalid_dispatch_transition",
+            format!("cannot {action} a dispatch order in status {status}"),
+        )
+        .with_details(json!({ "allowedFrom": allowed_from, "current": status })));
+    }
+    if action == "complete" && assignment.is_none() {
+        return Err(ApiError::conflict(
+            "dispatch_assignment_required",
+            "complete requires an assigned resource unit",
+        ));
+    }
+    let now = crate::now_iso();
+    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
+    let mut history = current
+        .get("status_history")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    history.push(json!({
+        "from": status,
+        "to": next,
+        "action": action,
+        "at": now,
+        "by": actor,
+        "note": ctx.body.get("note").cloned().unwrap_or(Value::Null),
+    }));
+    let mut patch = Map::new();
+    patch.insert("status".into(), json!(next));
+    patch.insert(terminal_at.into(), json!(now));
+    patch.insert("status_history".into(), Value::Array(history));
+    if let Some(note) = ctx.body.get("resolution_note").cloned() {
+        patch.insert("resolution_note".into(), note);
+    }
+    if let Some(assignment) = current.get("assignments").cloned() {
+        patch.insert("assignments".into(), assignment);
+    }
+    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?
+        .or_else(|| current.get("record_version").and_then(Value::as_i64));
     let row = tier2::update(ctx.client(), &opts, tier2::DISPATCH, id, patch, version).await?;
+    if let Some(resource_id) = assignment {
+        if let Ok(resource) = tier2::get(ctx.client(), &opts, tier2::RESOURCES, &resource_id).await
+        {
+            let reserved_for = resource
+                .get("assigned_dispatch_order_id")
+                .and_then(Value::as_str);
+            if reserved_for == Some(id) {
+                let mut release = Map::new();
+                release.insert("status".into(), json!("available"));
+                release.insert("assigned_dispatch_order_id".into(), Value::Null);
+                release.insert("released_at".into(), json!(crate::now_iso()));
+                let resource_version = resource.get("record_version").and_then(Value::as_i64);
+                if let Err(error) = tier2::update(
+                    ctx.client(),
+                    &opts,
+                    tier2::RESOURCES,
+                    &resource_id,
+                    release,
+                    resource_version,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        resource_unit = %resource_id,
+                        dispatch_order = %id,
+                        error = %error.message,
+                        "dispatch order became terminal but the resource unit could not be released"
+                    );
+                }
+            }
+        }
+    }
     Ok(web::send_record(row))
 }
 
@@ -1238,7 +1750,9 @@ async fn dispatch_approval(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
         &actor,
     )
     .await?;
-    Ok(web::accepted(json!({ "approval": approval, "hitl_required": true })))
+    Ok(web::accepted(
+        json!({ "approval": approval, "hitl_required": true }),
+    ))
 }
 
 async fn dispatch_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
@@ -1247,99 +1761,211 @@ async fn dispatch_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let approval_id = web::string_value(ctx.body.get("approval_id"))
         .or_else(|| web::string_value(ctx.body.get("approvalId")))
         .unwrap_or_default();
-    let mut approval = None;
-    if ctx.config().hitl_required || !approval_id.is_empty() {
-        if approval_id.is_empty() {
-            return Err(ApiError::new(
-                StatusCode::PRECONDITION_REQUIRED,
-                "approval_required",
-                "create a dispatch approval first",
-            ));
-        }
-        approval = Some(assert_approved(&ctx, &approval_id, id, "dispatch.assign", &actor).await?);
+    if approval_id.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_REQUIRED,
+            "approval_required",
+            "create a dispatch approval first and supply approval_id",
+        ));
     }
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "dispatch.assign").await?;
     let resource_id = requested_resource_unit_id(ctx.body).ok_or_else(|| {
         ApiError::bad_request(
             "assigned_resource_unit_id_required",
             "approve/assign needs an existing SOS resource unit id",
         )
     })?;
+    let current = tier2::get(ctx.client(), &opts, tier2::DISPATCH, id).await?;
+    let order_status = current.get("status").and_then(Value::as_str).unwrap_or("");
+    if ["completed", "canceled", "rejected"].contains(&order_status) {
+        return Err(ApiError::conflict(
+            "order_terminal",
+            format!("dispatch order {id} is {order_status}"),
+        ));
+    }
+    let existing_resource = current
+        .get("assigned_resource_unit_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty());
+    if let Some(existing) = existing_resource {
+        if existing != resource_id {
+            return Err(ApiError::conflict(
+                "order_already_assigned",
+                format!("dispatch order {id} is already assigned to {existing}"),
+            ));
+        }
+        if order_status == "assigned" {
+            let mut response = current;
+            response.insert("idempotent".into(), json!(true));
+            return Ok(web::json_response(Value::Object(response)));
+        }
+        return Err(ApiError::conflict(
+            "invalid_dispatch_status",
+            format!("dispatch order {id} is already {order_status}"),
+        ));
+    }
+    if !["pending", "approved"].contains(&order_status) {
+        return Err(ApiError::conflict(
+            "invalid_dispatch_status",
+            format!("cannot assign a dispatch order in status {order_status}"),
+        ));
+    }
     let resource = tier2::get(ctx.client(), &opts, tier2::RESOURCES, &resource_id)
         .await
         .map_err(|error| {
             if error.status == StatusCode::NOT_FOUND {
-                ApiError::not_found("resource_unit_not_found", format!("no resource unit {resource_id}"))
+                ApiError::not_found(
+                    "resource_unit_not_found",
+                    format!("no resource unit {resource_id}"),
+                )
             } else {
                 error
             }
         })?;
-    let status = resource.get("status").and_then(Value::as_str).unwrap_or("");
-    if ["offline", "maintenance"].contains(&status) {
+    let resource_status = resource.get("status").and_then(Value::as_str).unwrap_or("");
+    let already_reserved = resource_status == "assigned"
+        && resource
+            .get("assigned_dispatch_order_id")
+            .and_then(Value::as_str)
+            == Some(id);
+    if !already_reserved && resource_status != "available" {
         return Err(ApiError::conflict(
             "resource_unit_unavailable",
-            format!("resource unit {resource_id} is {status}"),
+            format!("resource unit {resource_id} is {resource_status}"),
         ));
     }
-    let current = tier2::get(ctx.client(), &opts, tier2::DISPATCH, id).await?;
-    let version = current.get("record_version").and_then(Value::as_i64);
-    let assignments = current
+    let now = crate::now_iso();
+    let reserved = if already_reserved {
+        resource.clone()
+    } else {
+        let mut resource_patch = Map::new();
+        resource_patch.insert("status".into(), json!("assigned"));
+        resource_patch.insert("assigned_dispatch_order_id".into(), json!(id));
+        resource_patch.insert("assigned_at".into(), json!(now));
+        resource_patch.insert("assigned_by".into(), json!(actor));
+        let resource_version = resource.get("record_version").and_then(Value::as_i64);
+        tier2::update(
+            ctx.client(),
+            &opts,
+            tier2::RESOURCES,
+            &resource_id,
+            resource_patch,
+            resource_version,
+        )
+        .await
+        .map_err(|error| {
+            if error.status == StatusCode::CONFLICT {
+                ApiError::conflict(
+                    "resource_unit_conflict",
+                    format!("resource unit {resource_id} was assigned concurrently"),
+                )
+            } else {
+                error
+            }
+        })?
+    };
+    let mut assignments = current
         .get("assignments")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let already = current.get("status").and_then(Value::as_str) == Some("assigned")
-        && current.get("assigned_resource_unit_id").and_then(Value::as_str) == Some(resource_id.as_str())
-        && assignments.iter().any(|assignment| {
-            assignment.get("assigned_resource_unit_id").and_then(Value::as_str) == Some(resource_id.as_str())
-        });
-    if already {
-        return Ok(web::json_response(Value::Object(current)));
+    let duplicate = assignments.iter().any(|assignment| {
+        assignment.get("dispatch_order_id").and_then(Value::as_str) == Some(id)
+            && assignment
+                .get("assigned_resource_unit_id")
+                .or_else(|| assignment.get("resource_unit_id"))
+                .and_then(Value::as_str)
+                == Some(resource_id.as_str())
+    });
+    if !duplicate {
+        assignments.push(json!({
+            "dispatch_order_id": id,
+            "resource_unit_id": resource_id,
+            "assigned_resource_unit_id": resource_id,
+            "assigned_user_id": resource_id,
+            "assigned_at": now,
+            "assigned_by": actor,
+        }));
     }
-    let mut patch = ctx.body.clone();
-    for key in [
-        "assigned_resource_unit_id",
-        "resource_unit_id",
-        "assigned_user_id",
-        "user_id",
-        "if_version",
-        "ifVersion",
-    ] {
-        patch.remove(key);
+    let mut patch = Map::new();
+    if let Some(eta) = ctx.body.get("eta_minutes").and_then(Value::as_f64) {
+        patch.insert("eta_minutes".into(), json!(eta));
+    }
+    if let Some(notes) = ctx.body.get("notes").cloned() {
+        patch.insert("notes".into(), notes);
     }
     patch.insert("status".into(), json!("assigned"));
     patch.insert("assigned_resource_unit_id".into(), json!(resource_id));
     patch.insert("assigned_user_id".into(), json!(resource_id));
-    patch.insert("assigned_at".into(), json!(crate::now_iso()));
+    patch.insert("assigned_at".into(), json!(now));
     patch.insert("assigned_by".into(), json!(actor));
+    patch.insert("assignments".into(), Value::Array(assignments));
+    patch.insert("approval_id".into(), json!(approval.get("id")));
+    patch.insert("approved_by".into(), json!(actor));
     patch.insert(
-        "assignments".into(),
-        json!([{
-            "resource_unit_id": resource_id,
-            "assigned_resource_unit_id": resource_id,
-            "assigned_user_id": resource_id,
-            "assigned_at": crate::now_iso(),
-        }]),
+        "approval_roles".into(),
+        approval
+            .get("approverRoles")
+            .cloned()
+            .unwrap_or(Value::Null),
     );
-    if let Some(approval) = approval {
-        patch.insert("approval_id".into(), json!(approval.get("id")));
-        patch.insert("approved_by".into(), json!(actor));
-        patch.insert("approval_roles".into(), approval.get("approverRoles").cloned().unwrap_or(Value::Null));
-        patch.insert("approved_at".into(), json!(crate::now_iso()));
-    }
-    let row = tier2::update(ctx.client(), &opts, tier2::DISPATCH, id, patch, version).await?;
+    patch.insert("approved_at".into(), json!(crate::now_iso()));
+    let version = current.get("record_version").and_then(Value::as_i64);
+    let row = match tier2::update(ctx.client(), &opts, tier2::DISPATCH, id, patch, version).await {
+        Ok(row) => row,
+        Err(error) => {
+            // Compensate the reservation so a failed order update cannot
+            // permanently strand a resource unit.
+            if !already_reserved {
+                let mut release = Map::new();
+                release.insert("status".into(), json!("available"));
+                release.insert("assigned_dispatch_order_id".into(), Value::Null);
+                let reserved_version = reserved.get("record_version").and_then(Value::as_i64);
+                let _ = tier2::update(
+                    ctx.client(),
+                    &opts,
+                    tier2::RESOURCES,
+                    &resource_id,
+                    release,
+                    reserved_version,
+                )
+                .await;
+            }
+            return Err(error);
+        }
+    };
     Ok(web::send_record(row))
 }
 
 fn requested_resource_unit_id(body: &Map<String, Value>) -> Option<String> {
-    ["assigned_resource_unit_id", "resource_unit_id", "assigned_user_id", "user_id"]
-        .iter()
-        .find_map(|key| body.get(*key).and_then(Value::as_str).map(str::trim).filter(|value| !value.is_empty()).map(str::to_string))
+    [
+        "assigned_resource_unit_id",
+        "resource_unit_id",
+        "assigned_user_id",
+        "user_id",
+    ]
+    .iter()
+    .find_map(|key| {
+        body.get(*key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
 }
 
 async fn resource_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     let mut input = ctx.body.clone();
-    if input.get("name").and_then(Value::as_str).unwrap_or("").is_empty()
-        || input.get("resource_type").and_then(Value::as_str).unwrap_or("").is_empty()
+    if input
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .is_empty()
+        || input
+            .get("resource_type")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .is_empty()
     {
         return Err(ApiError::bad_request(
             "name_and_resource_type_required",
@@ -1349,9 +1975,7 @@ async fn resource_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     input
         .entry("resource_code")
         .or_insert_with(|| json!(format!("RU-{}", chrono::Utc::now().timestamp_millis())));
-    input
-        .entry("status")
-        .or_insert_with(|| json!("available"));
+    input.entry("status").or_insert_with(|| json!("available"));
     input.entry("skills").or_insert_with(|| json!([]));
     input.entry("metadata").or_insert_with(|| json!({}));
     let opts = ctx.opts();
@@ -1375,7 +1999,13 @@ async fn shelters_near(ctx: Ctx<'_>) -> ApiResult<Response> {
     let data = query_data(ctx.query);
     let near = domain::geo::parse_near_query(&data).map_err(domain_error)?;
     let opts = ctx.opts();
-    let resources = tier2::list_all(ctx.client(), &opts, tier2::RESOURCES, ctx.config().max_scan_records).await?;
+    let resources = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::RESOURCES,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let mut shelters: Vec<(f64, Value)> = Vec::new();
     for resource in resources.items {
         if resource.get("resource_type").and_then(Value::as_str) != Some("shelter") {
@@ -1420,7 +2050,11 @@ async fn shelters_near(ctx: Ctx<'_>) -> ApiResult<Response> {
             }),
         ));
     }
-    shelters.sort_by(|left, right| left.0.partial_cmp(&right.0).unwrap_or(std::cmp::Ordering::Equal));
+    shelters.sort_by(|left, right| {
+        left.0
+            .partial_cmp(&right.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let items: Vec<Value> = shelters
         .into_iter()
         .skip(near.offset)
@@ -1456,11 +2090,10 @@ async fn sitrep_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     };
     let validation = domain::sitrep::validate_sitrep_create(&input, &actor);
     if !validation.errors.is_empty() {
-        return Err(ApiError::bad_request(
-            "sitrep_validation_failed",
-            "SITREP payload is invalid",
-        )
-        .with_details(serde_json::to_value(validation.errors).unwrap_or(Value::Null)));
+        return Err(
+            ApiError::bad_request("sitrep_validation_failed", "SITREP payload is invalid")
+                .with_details(serde_json::to_value(validation.errors).unwrap_or(Value::Null)),
+        );
     }
     let event_id = validation
         .value
@@ -1484,10 +2117,24 @@ async fn sitrep_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     let mut value = validation.value;
     value.insert("version".into(), json!(1));
     value.insert("deltas".into(), json!([]));
-    value.entry("snapshot".to_string()).or_insert_with(|| json!({}));
-    value.entry("metadata".to_string()).or_insert_with(|| json!({}));
-    value.insert("created_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
-    let row = tier2::write(ctx.client(), &opts, tier2::SITREP, value.into_iter().collect(), None).await?;
+    value
+        .entry("snapshot".to_string())
+        .or_insert_with(|| json!({}));
+    value
+        .entry("metadata".to_string())
+        .or_insert_with(|| json!({}));
+    value.insert(
+        "created_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
+    let row = tier2::write(
+        ctx.client(),
+        &opts,
+        tier2::SITREP,
+        value.into_iter().collect(),
+        None,
+    )
+    .await?;
     Ok(web::created(Value::Object(row)))
 }
 
@@ -1498,11 +2145,10 @@ async fn sitrep_update(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let validation = domain::sitrep::validate_sitrep_update(&to_data(ctx.body), &current_data)
         .map_err(domain_error)?;
     if !validation.errors.is_empty() {
-        return Err(ApiError::bad_request(
-            "sitrep_validation_failed",
-            "SITREP payload is invalid",
-        )
-        .with_details(serde_json::to_value(validation.errors).unwrap_or(Value::Null)));
+        return Err(
+            ApiError::bad_request("sitrep_validation_failed", "SITREP payload is invalid")
+                .with_details(serde_json::to_value(validation.errors).unwrap_or(Value::Null)),
+        );
     }
     let mut patch: Map<String, Value> = validation.value.into_iter().collect();
     patch.insert(
@@ -1529,7 +2175,11 @@ async fn sitrep_delta(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             &actor,
             Some(crate::now_iso()),
         );
-        let revision_id = revision.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+        let revision_id = revision
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let row = tier2::write(
             ctx.client(),
             &opts,
@@ -1568,8 +2218,14 @@ async fn sitrep_publish(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let mut patch = Map::new();
     patch.insert("status".into(), json!("published"));
     patch.insert("published_at".into(), json!(crate::now_iso()));
-    patch.insert("published_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
-    patch.insert("reviewed_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
+    patch.insert(
+        "published_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
+    patch.insert(
+        "reviewed_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
     let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let row = tier2::update(ctx.client(), &opts, tier2::SITREP, id, patch, version).await?;
     Ok(web::json_response(Value::Object(row)))
@@ -1579,7 +2235,13 @@ async fn mutual_aid_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     let validated = domain::mutual_aid::validate_request(&to_data(ctx.body))
         .map_err(|error| ApiError::bad_request(error.clone(), error))?;
     let opts = ctx.opts();
-    let existing = tier2::list_all(ctx.client(), &opts, tier2::MUTUAL_AID, ctx.config().max_scan_records).await?;
+    let existing = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::MUTUAL_AID,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     if let Some(duplicate) = existing.items.iter().find(|row| {
         row.get("request_number").and_then(Value::as_str) == Some(validated.request_number.as_str())
     }) {
@@ -1607,22 +2269,32 @@ async fn mutual_aid_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     );
     value.insert("created_at".into(), json!(crate::now_iso()));
     value.insert("updated_at".into(), json!(crate::now_iso()));
-    value.insert("created_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
+    value.insert(
+        "created_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
     let row = tier2::write(ctx.client(), &opts, tier2::MUTUAL_AID, value, Some(&id)).await?;
     Ok(web::created(Value::Object(row)))
 }
 
 async fn mutual_aid_public(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
-    let row = tier2::get(ctx.client(), &opts, tier2::MUTUAL_AID, id).await.map_err(|error| {
-        if error.status == StatusCode::NOT_FOUND {
-            ApiError::not_found("mutual_aid_not_found", "Mutual-aid request was not found.")
-        } else {
-            error
-        }
-    })?;
+    let row = tier2::get(ctx.client(), &opts, tier2::MUTUAL_AID, id)
+        .await
+        .map_err(|error| {
+            if error.status == StatusCode::NOT_FOUND {
+                ApiError::not_found("mutual_aid_not_found", "Mutual-aid request was not found.")
+            } else {
+                error
+            }
+        })?;
     let request: domain::mutual_aid::MutualAidRequest = serde_json::from_value(Value::Object(row))
-        .map_err(|_| ApiError::bad_gateway("invalid_mutual_aid_record", "Stored mutual-aid record is invalid."))?;
+        .map_err(|_| {
+            ApiError::bad_gateway(
+                "invalid_mutual_aid_record",
+                "Stored mutual-aid record is invalid.",
+            )
+        })?;
     Ok(web::json_response(Value::Object(
         domain::mutual_aid::public_mutual_aid_projection(&request),
     )))
@@ -1631,24 +2303,51 @@ async fn mutual_aid_public(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
 async fn mutual_aid_accept(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let current = tier2::get(ctx.client(), &opts, tier2::MUTUAL_AID, id).await?;
-    let request: domain::mutual_aid::MutualAidRequest = serde_json::from_value(Value::Object(current.clone()))
-        .map_err(|_| ApiError::bad_gateway("invalid_mutual_aid_record", "Stored mutual-aid record is invalid."))?;
-    let accept: domain::mutual_aid::MutualAidAccept = serde_json::from_value(Value::Object(ctx.body.clone()))
-        .map_err(|_| ApiError::bad_request("invalid_accept_body", "Invalid accept payload."))?;
+    let request: domain::mutual_aid::MutualAidRequest =
+        serde_json::from_value(Value::Object(current.clone())).map_err(|_| {
+            ApiError::bad_gateway(
+                "invalid_mutual_aid_record",
+                "Stored mutual-aid record is invalid.",
+            )
+        })?;
+    let accept: domain::mutual_aid::MutualAidAccept =
+        serde_json::from_value(Value::Object(ctx.body.clone()))
+            .map_err(|_| ApiError::bad_request("invalid_accept_body", "Invalid accept payload."))?;
     let unit_id = accept.unit_id.trim().to_string();
     if unit_id.is_empty() {
-        return Err(ApiError::bad_request("unit_id_required", "unit_id is required"));
+        return Err(ApiError::bad_request(
+            "unit_id_required",
+            "unit_id is required",
+        ));
     }
     let unit = tier2::get(ctx.client(), &opts, tier2::RESOURCES, &unit_id)
         .await
         .map_err(|error| {
             if error.status == StatusCode::NOT_FOUND {
-                ApiError::not_found("resource_unit_not_found", format!("no resource unit {unit_id}"))
+                ApiError::not_found(
+                    "resource_unit_not_found",
+                    format!("no resource unit {unit_id}"),
+                )
             } else {
                 error
             }
         })?;
-    let validation = domain::mutual_aid::validate_accept(&request, &accept, &to_data(&unit)).map_err(domain_error)?;
+    let validation = domain::mutual_aid::validate_accept(&request, &accept, &to_data(&unit))
+        .map_err(domain_error)?;
+    let expected = match (
+        tier2::requested_version(ctx.headers, Some(ctx.body))?,
+        accept.expected_version,
+    ) {
+        (Some(header), Some(body)) if header as f64 != body => {
+            return Err(ApiError::bad_request(
+                "version_precondition_mismatch",
+                "If-Match and expected_version disagree",
+            ))
+        }
+        (Some(header), _) => Some(header as f64),
+        (None, body) => body,
+    };
+    domain::mutual_aid::assert_request_version(&current, expected).map_err(domain_error)?;
     let accepted = accept.accepted_quantity;
     let next_filled = request.filled_quantity + accepted;
     let status = if next_filled >= request.quantity {
@@ -1657,24 +2356,46 @@ async fn mutual_aid_accept(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
         "partially_filled"
     };
     let available = validation.available;
+    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
+    let now = crate::now_iso();
     let unit_version = unit.get("record_version").and_then(Value::as_i64);
     let mut unit_patch = Map::new();
-    unit_patch.insert("available_quantity".into(), json!((available - accepted).max(0.0)));
-    unit_patch.insert("updated_at".into(), json!(crate::now_iso()));
-    let updated_unit = tier2::update(ctx.client(), &opts, tier2::RESOURCES, &unit_id, unit_patch, unit_version).await?;
-    let history = current
+    unit_patch.insert(
+        "available_quantity".into(),
+        json!((available - accepted).max(0.0)),
+    );
+    unit_patch.insert("updated_at".into(), json!(now));
+    let updated_unit = tier2::update(
+        ctx.client(),
+        &opts,
+        tier2::RESOURCES,
+        &unit_id,
+        unit_patch,
+        unit_version,
+    )
+    .await
+    .map_err(|error| {
+        if error.status == StatusCode::CONFLICT {
+            ApiError::conflict(
+                "resource_unit_conflict",
+                format!("resource unit {unit_id} changed while the accept was being processed"),
+            )
+        } else {
+            error
+        }
+    })?;
+    let mut history = current
         .get("history")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let mut history = history;
     history.push(json!({
         "action": "accept",
         "unit_id": unit_id,
         "accepted_quantity": accepted,
         "eta_minutes": accept.eta_minutes,
-        "at": crate::now_iso(),
-        "by": ctx.actor().unwrap_or_else(|| "sos-operator".into()),
+        "at": now,
+        "by": actor,
     }));
     let mut patch = Map::new();
     patch.insert("filled_quantity".into(), json!(next_filled));
@@ -1682,7 +2403,38 @@ async fn mutual_aid_accept(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     patch.insert("updated_at".into(), json!(crate::now_iso()));
     patch.insert("history".into(), Value::Array(history));
     let version = current.get("record_version").and_then(Value::as_i64);
-    let updated = tier2::update(ctx.client(), &opts, tier2::MUTUAL_AID, id, patch, version).await?;
+    let updated =
+        match tier2::update(ctx.client(), &opts, tier2::MUTUAL_AID, id, patch, version).await {
+            Ok(updated) => updated,
+            Err(error) => {
+                // The unit was reserved first to avoid over-commit. If the request
+                // cannot be updated (for example a concurrent accept won the
+                // version race), restore the capacity before returning.
+                let mut restore = Map::new();
+                restore.insert("available_quantity".into(), json!(available));
+                restore.insert("updated_at".into(), json!(crate::now_iso()));
+                let restored_version = updated_unit.get("record_version").and_then(Value::as_i64);
+                if let Err(compensation) = tier2::update(
+                    ctx.client(),
+                    &opts,
+                    tier2::RESOURCES,
+                    &unit_id,
+                    restore,
+                    restored_version,
+                )
+                .await
+                {
+                    return Err(ApiError::bad_gateway(
+                        "mutual_aid_compensation_failed",
+                        format!(
+                            "request update failed ({}) and capacity compensation failed ({})",
+                            error.code, compensation.code
+                        ),
+                    ));
+                }
+                return Err(error);
+            }
+        };
     Ok(web::json_response(json!({
         "request": updated,
         "resource_unit": updated_unit,
@@ -1713,7 +2465,10 @@ async fn mutual_aid_decline(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     }));
     let mut patch = Map::new();
     patch.insert("status".into(), json!("declined"));
-    patch.insert("decline_reason".into(), ctx.body.get("reason").cloned().unwrap_or(Value::Null));
+    patch.insert(
+        "decline_reason".into(),
+        ctx.body.get("reason").cloned().unwrap_or(Value::Null),
+    );
     patch.insert("updated_at".into(), json!(crate::now_iso()));
     patch.insert("history".into(), Value::Array(history));
     let version = current.get("record_version").and_then(Value::as_i64);
@@ -1737,8 +2492,14 @@ async fn mutual_aid_handoff(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     }));
     let mut patch = Map::new();
     patch.insert("status".into(), json!("handed_off"));
-    patch.insert("handed_off_to".into(), ctx.body.get("to_agency").cloned().unwrap_or(Value::Null));
-    patch.insert("handoff_notes".into(), ctx.body.get("notes").cloned().unwrap_or(Value::Null));
+    patch.insert(
+        "handed_off_to".into(),
+        ctx.body.get("to_agency").cloned().unwrap_or(Value::Null),
+    );
+    patch.insert(
+        "handoff_notes".into(),
+        ctx.body.get("notes").cloned().unwrap_or(Value::Null),
+    );
     patch.insert("updated_at".into(), json!(crate::now_iso()));
     patch.insert("history".into(), Value::Array(history));
     let version = current.get("record_version").and_then(Value::as_i64);
@@ -1799,18 +2560,23 @@ async fn get_approval(ctx: &Ctx<'_>, id: &str) -> ApiResult<Value> {
     Ok(response.get("approval").cloned().unwrap_or(response))
 }
 
-async fn assert_approved(
+async fn assert_approval_ready(
     ctx: &Ctx<'_>,
     approval_id: &str,
     entity_id: &str,
     action: &str,
-    actor: &str,
 ) -> ApiResult<Value> {
     let approval = get_approval(ctx, approval_id).await?;
     if approval.get("status").and_then(Value::as_str) != Some("approved") {
         return Err(ApiError::conflict(
             "approval_not_approved",
-            format!("approval is {}", approval.get("status").and_then(Value::as_str).unwrap_or("unknown")),
+            format!(
+                "approval is {}",
+                approval
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+            ),
         ));
     }
     if approval.get("entityId").and_then(Value::as_str) != Some(entity_id) {
@@ -1823,12 +2589,6 @@ async fn assert_approved(
         return Err(ApiError::conflict(
             "approval_action_mismatch",
             "approval belongs to another action",
-        ));
-    }
-    if approval.get("requester").and_then(Value::as_str) == Some(actor) {
-        return Err(ApiError::forbidden(
-            "self_approval_forbidden",
-            "the requester cannot approve their own request",
         ));
     }
     Ok(approval)
@@ -1870,7 +2630,9 @@ async fn hitl_list(ctx: Ctx<'_>) -> ApiResult<Response> {
         })
         .collect();
     let total = values.len();
-    Ok(web::json_response(json!({ "items": values, "total": total })))
+    Ok(web::json_response(
+        json!({ "items": values, "total": total }),
+    ))
 }
 
 async fn hitl_decide(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
@@ -1878,7 +2640,10 @@ async fn hitl_decide(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
         .unwrap_or_default()
         .to_ascii_lowercase();
     if !["approve", "reject"].contains(&decision.as_str()) {
-        return Err(ApiError::bad_request("invalid_decision", "decision must be approve or reject"));
+        return Err(ApiError::bad_request(
+            "invalid_decision",
+            "decision must be approve or reject",
+        ));
     }
     let mut body = json!({ "decision": decision });
     if let Some(note) = web::string_value(ctx.body.get("note")) {
@@ -1887,7 +2652,11 @@ async fn hitl_decide(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let response = ctx
         .client()
-        .post(format!("/v1/capabilities/approvals/{id}/decide"), body, &opts)
+        .post(
+            format!("/v1/capabilities/approvals/{id}/decide"),
+            body,
+            &opts,
+        )
         .await
         .map_err(ApiError::from)?;
     Ok(web::json_response(json!({
@@ -1896,8 +2665,10 @@ async fn hitl_decide(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
 }
 
 async fn hitl_handoff(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let outgoing = web::string_value(ctx.body.get("outgoing_role")).unwrap_or_else(|| "duty-manager".into());
-    let incoming = web::string_value(ctx.body.get("incoming_role")).unwrap_or_else(|| "duty-manager".into());
+    let outgoing =
+        web::string_value(ctx.body.get("outgoing_role")).unwrap_or_else(|| "duty-manager".into());
+    let incoming =
+        web::string_value(ctx.body.get("incoming_role")).unwrap_or_else(|| "duty-manager".into());
     let items = list_pending_approvals(&ctx, None).await?;
     let now = chrono::Utc::now().timestamp_millis();
     let approvals: Vec<Value> = items
@@ -1938,7 +2709,10 @@ fn event_id_of(row: &Map<String, Value>) -> String {
 
 async fn aar_generate(ctx: Ctx<'_>) -> ApiResult<Response> {
     let event_id = web::string_value(ctx.body.get("emergency_event_id")).ok_or_else(|| {
-        ApiError::bad_request("emergency_event_id_required", "emergency_event_id is required")
+        ApiError::bad_request(
+            "emergency_event_id_required",
+            "emergency_event_id is required",
+        )
     })?;
     let opts = ctx.opts();
     let event = tier2::get(ctx.client(), &opts, tier2::EVENTS, &event_id)
@@ -1957,9 +2731,16 @@ async fn aar_generate(ctx: Ctx<'_>) -> ApiResult<Response> {
     let summary_override = web::string_value(ctx.body.get("summary_override"));
     let actor = ctx.actor();
     let report = generate_aar(&ctx, &event, force, summary_override, actor).await?;
-    let idempotent = report.get("idempotent").and_then(Value::as_bool).unwrap_or(false);
+    let idempotent = report
+        .get("idempotent")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     Ok(web::status_json(
-        if idempotent { StatusCode::OK } else { StatusCode::CREATED },
+        if idempotent {
+            StatusCode::OK
+        } else {
+            StatusCode::CREATED
+        },
         Value::Object(report),
     ))
 }
@@ -1972,7 +2753,13 @@ async fn generate_aar(
     actor: Option<String>,
 ) -> ApiResult<Map<String, Value>> {
     let opts = ctx.opts();
-    let aars = tier2::list_all(ctx.client(), &opts, tier2::AFTER_ACTION, ctx.config().max_scan_records).await?;
+    let aars = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::AFTER_ACTION,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let event_id = event.get("id").and_then(Value::as_str).unwrap_or("");
     let mut existing: Vec<Map<String, Value>> = aars
         .items
@@ -1995,15 +2782,39 @@ async fn generate_aar(
         + 1;
     let id = format!("aar-{event_id}-v{version}")
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') { ch } else { '-' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                ch
+            } else {
+                '-'
+            }
+        })
         .take(180)
         .collect::<String>();
     if let Ok(same) = tier2::get(ctx.client(), &opts, tier2::AFTER_ACTION, &id).await {
         return Ok(same);
     }
-    let orders = tier2::list_all(ctx.client(), &opts, tier2::DISPATCH, ctx.config().max_scan_records).await?;
-    let sitreps = tier2::list_all(ctx.client(), &opts, tier2::SITREP, ctx.config().max_scan_records).await?;
-    let resources = tier2::list_all(ctx.client(), &opts, tier2::RESOURCES, ctx.config().max_scan_records).await?;
+    let orders = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::DISPATCH,
+        ctx.config().max_scan_records,
+    )
+    .await?;
+    let sitreps = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::SITREP,
+        ctx.config().max_scan_records,
+    )
+    .await?;
+    let resources = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::RESOURCES,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let orders: Vec<Map<String, Value>> = orders
         .items
         .iter()
@@ -2034,7 +2845,10 @@ async fn generate_aar(
     );
     let title = format!(
         "After-action report — {}",
-        event.get("title").and_then(Value::as_str).unwrap_or(event_id)
+        event
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or(event_id)
     );
     let mut metadata = computed.metadata;
     metadata.insert(
@@ -2058,7 +2872,13 @@ async fn generate_aar(
         "metadata": Value::Object(metadata),
     });
     let input = record.as_object().cloned().unwrap_or_default();
-    let row = tier2::write(ctx.client(), &opts, tier2::AFTER_ACTION, input, Some(&id)).await?;
+    let row = match tier2::write(ctx.client(), &opts, tier2::AFTER_ACTION, input, Some(&id)).await {
+        Ok(row) => row,
+        Err(error) if error.code == "record_exists" => {
+            tier2::get(ctx.client(), &opts, tier2::AFTER_ACTION, &id).await?
+        }
+        Err(error) => return Err(error),
+    };
     Ok(row)
 }
 
@@ -2066,7 +2886,10 @@ async fn aar_publish(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let current = tier2::get(ctx.client(), &opts, tier2::AFTER_ACTION, id).await?;
     if current.get("status").and_then(Value::as_str) == Some("published") {
-        return Err(ApiError::conflict("aar_already_published", "AAR is already published"));
+        return Err(ApiError::conflict(
+            "aar_already_published",
+            "AAR is already published",
+        ));
     }
     if !current.get("kpi").map(Value::is_object).unwrap_or(false) {
         return Err(ApiError::bad_request(
@@ -2077,7 +2900,10 @@ async fn aar_publish(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let mut patch = Map::new();
     patch.insert("status".into(), json!("published"));
     patch.insert("published_at".into(), json!(crate::now_iso()));
-    patch.insert("published_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
+    patch.insert(
+        "published_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
     let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let row = tier2::update(ctx.client(), &opts, tier2::AFTER_ACTION, id, patch, version).await?;
     Ok(web::json_response(Value::Object(row)))
@@ -2086,10 +2912,20 @@ async fn aar_publish(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
 async fn event_resolve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let event = tier2::get(ctx.client(), &opts, tier2::EVENTS, id).await?;
-    let event_id = event.get("id").and_then(Value::as_str).unwrap_or(id).to_string();
+    let event_id = event
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or(id)
+        .to_string();
     if event.get("status").and_then(Value::as_str) == Some("resolved") {
         let mut response = event.clone();
-        let aars = tier2::list_all(ctx.client(), &opts, tier2::AFTER_ACTION, ctx.config().max_scan_records).await?;
+        let aars = tier2::list_all(
+            ctx.client(),
+            &opts,
+            tier2::AFTER_ACTION,
+            ctx.config().max_scan_records,
+        )
+        .await?;
         let latest = aars
             .items
             .iter()
@@ -2128,7 +2964,10 @@ async fn event_resolve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     patch.insert("ended_at".into(), json!(ended_at));
     patch.insert(
         "resolution_note".into(),
-        preview.get("resolution_note").cloned().unwrap_or(Value::Null),
+        preview
+            .get("resolution_note")
+            .cloned()
+            .unwrap_or(Value::Null),
     );
     patch.insert("after_action_report_id".into(), report_id.clone());
     patch.insert(
@@ -2136,7 +2975,8 @@ async fn event_resolve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
         ctx.actor().map(Value::String).unwrap_or(Value::Null),
     );
     let version = event.get("record_version").and_then(Value::as_i64);
-    let mut resolved = tier2::update(ctx.client(), &opts, tier2::EVENTS, id, patch, version).await?;
+    let mut resolved =
+        tier2::update(ctx.client(), &opts, tier2::EVENTS, id, patch, version).await?;
     resolved.insert("after_action_report_id".into(), report_id);
     Ok(web::json_response(Value::Object(resolved)))
 }
@@ -2168,7 +3008,12 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(|| published_at.clone());
-    let source = if row.get("source").and_then(Value::as_str).map(|value| value.eq_ignore_ascii_case("vndms")).unwrap_or(false) {
+    let source = if row
+        .get("source")
+        .and_then(Value::as_str)
+        .map(|value| value.eq_ignore_ascii_case("vndms"))
+        .unwrap_or(false)
+    {
         "vndms"
     } else {
         "nchmf"
@@ -2176,12 +3021,34 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
     let provinces: Vec<String> = row
         .get("provinces")
         .and_then(Value::as_array)
-        .map(|values| values.iter().filter_map(Value::as_str).take(24).map(str::to_string).collect())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .take(24)
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_default();
-    let event_type = row.get("event_type").and_then(Value::as_str).unwrap_or("other");
+    let event_type = row
+        .get("event_type")
+        .and_then(Value::as_str)
+        .unwrap_or("other");
     let event_type = if [
-        "flood", "storm", "rain", "landslide", "fire", "earthquake", "outage", "pollution",
-        "drought", "traffic", "epidemic", "heat", "cold", "other",
+        "flood",
+        "storm",
+        "rain",
+        "landslide",
+        "fire",
+        "earthquake",
+        "outage",
+        "pollution",
+        "drought",
+        "traffic",
+        "epidemic",
+        "heat",
+        "cold",
+        "other",
     ]
     .contains(&event_type)
     {
@@ -2189,7 +3056,10 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
     } else {
         "other"
     };
-    let severity = row.get("severity").and_then(Value::as_str).unwrap_or("medium");
+    let severity = row
+        .get("severity")
+        .and_then(Value::as_str)
+        .unwrap_or("medium");
     let severity = if ["low", "medium", "high", "critical"].contains(&severity) {
         severity
     } else {
@@ -2206,7 +3076,13 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
             .and_then(Value::as_str)
             .unwrap_or(&hazard_id)
             .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') { ch } else { '-' })
+            .map(
+                |ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                    ch
+                } else {
+                    '-'
+                }
+            )
             .take(160)
             .collect::<String>()
     );
@@ -2244,36 +3120,74 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
     }))
 }
 
-async fn fetch_tier2_hazards(ctx: &Ctx<'_>, hours: i64, limit: i64) -> Vec<Value> {
+async fn fetch_tier2_hazards_with_state(
+    state: &AppState,
+    opts: &RequestOptions,
+    hours: i64,
+    limit: i64,
+) -> Vec<Value> {
     let hours = hours.clamp(1, 168);
     {
-        let cache = ctx.state.hazard_cache.lock().unwrap_or_else(|poison| poison.into_inner());
+        let cache = state
+            .hazard_cache
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         if let Some((at, value)) = cache.get(&hours) {
             if at.elapsed() < Duration::from_secs(30) {
                 return value.clone();
             }
         }
     }
-    let opts = ctx.opts();
-    let result = ctx
-        .client()
+    let result = state
+        .tier2
         .hazards()
-        .today(Some(hours), Some(limit.clamp(1, 500)), &opts)
+        .today(Some(hours), Some(limit.clamp(1, 500)), opts)
         .await;
+    let attempted_at = crate::now_iso();
     let values: Vec<Value> = match result {
-        Ok(feed) => feed
-            .get("hazards")
-            .and_then(Value::as_array)
-            .map(|items| items.iter().filter_map(to_sos_hazard).collect())
-            .unwrap_or_default(),
-        Err(_) => {
-            let cache = ctx.state.hazard_cache.lock().unwrap_or_else(|poison| poison.into_inner());
-            return cache.get(&hours).map(|(_, value)| value.clone()).unwrap_or_default();
+        Ok(feed) => {
+            let values: Vec<Value> = feed
+                .get("hazards")
+                .and_then(Value::as_array)
+                .map(|items| items.iter().filter_map(to_sos_hazard).collect())
+                .unwrap_or_default();
+            let mut status = state
+                .hazard_feed_status
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            status.last_attempt_at = Some(attempted_at.clone());
+            status.last_success_at = Some(attempted_at);
+            status.last_error = None;
+            values
+        }
+        Err(error) => {
+            let mut status = state
+                .hazard_feed_status
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            status.last_attempt_at = Some(attempted_at);
+            status.last_error = Some(error.to_string());
+            let cache = state
+                .hazard_cache
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            return cache
+                .get(&hours)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_default();
         }
     };
-    let mut cache = ctx.state.hazard_cache.lock().unwrap_or_else(|poison| poison.into_inner());
+    let mut cache = state
+        .hazard_cache
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     cache.insert(hours, (std::time::Instant::now(), values.clone()));
     values
+}
+
+async fn fetch_tier2_hazards(ctx: &Ctx<'_>, hours: i64, limit: i64) -> Vec<Value> {
+    let opts = ctx.opts();
+    fetch_tier2_hazards_with_state(ctx.state, &opts, hours, limit).await
 }
 
 fn merge_hazard_feed(stored: Vec<Value>, feed: Vec<Value>) -> Vec<Value> {
@@ -2301,12 +3215,15 @@ fn merge_hazard_feed(stored: Vec<Value>, feed: Vec<Value>) -> Vec<Value> {
 
 async fn all_hazards_with_feed(ctx: &Ctx<'_>, hours: i64) -> ApiResult<AllRows> {
     let opts = ctx.opts();
-    let stored = tier2::list_all(ctx.client(), &opts, tier2::HAZARDS, ctx.config().max_scan_records).await?;
+    let stored = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::HAZARDS,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let feed = fetch_tier2_hazards(ctx, hours, 200).await;
-    let items = merge_hazard_feed(
-        stored.items.into_iter().map(Value::Object).collect(),
-        feed,
-    );
+    let items = merge_hazard_feed(stored.items.into_iter().map(Value::Object).collect(), feed);
     let scanned = items.len();
     Ok(AllRows {
         items: items
@@ -2318,14 +3235,42 @@ async fn all_hazards_with_feed(ctx: &Ctx<'_>, hours: i64) -> ApiResult<AllRows> 
     })
 }
 
+async fn public_hazards_with_feed_state(
+    state: &AppState,
+    opts: &RequestOptions,
+    hours: i64,
+) -> ApiResult<Vec<Value>> {
+    {
+        let cache = state
+            .public_hazards_cache
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if let Some((at, items)) = cache.get(&hours) {
+            if at.elapsed() < Duration::from_secs(15) {
+                return Ok(items.clone());
+            }
+        }
+    }
+    let stored = tier2::list_all_public(
+        &state.tier2,
+        opts,
+        tier2::HAZARDS,
+        state.config.max_scan_records,
+    )
+    .await?;
+    let feed = fetch_tier2_hazards_with_state(state, opts, hours, 200).await;
+    let merged = merge_hazard_feed(stored.items.into_iter().map(Value::Object).collect(), feed);
+    let mut cache = state
+        .public_hazards_cache
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    cache.insert(hours, (std::time::Instant::now(), merged.clone()));
+    Ok(merged)
+}
+
 async fn public_hazards_with_feed(ctx: &Ctx<'_>, hours: i64) -> ApiResult<Vec<Value>> {
     let opts = ctx.opts();
-    let stored = tier2::list_all_public(ctx.client(), &opts, tier2::HAZARDS, ctx.config().max_scan_records).await?;
-    let feed = fetch_tier2_hazards(ctx, hours, 200).await;
-    Ok(merge_hazard_feed(
-        stored.items.into_iter().map(Value::Object).collect(),
-        feed,
-    ))
+    public_hazards_with_feed_state(ctx.state, &opts, hours).await
 }
 
 async fn hazards_recent(ctx: Ctx<'_>) -> ApiResult<Response> {
@@ -2354,12 +3299,8 @@ async fn hazards_recent(ctx: Ctx<'_>) -> ApiResult<Response> {
         })
         .map(|mut hazard| {
             if let Some(object) = hazard.as_object_mut() {
-                object
-                    .entry("linked_event_id")
-                    .or_insert(Value::Null);
-                object
-                    .entry("linked_eop_plan_id")
-                    .or_insert(Value::Null);
+                object.entry("linked_event_id").or_insert(Value::Null);
+                object.entry("linked_eop_plan_id").or_insert(Value::Null);
             }
             hazard
         })
@@ -2379,8 +3320,7 @@ async fn hazards_vndms_live(ctx: Ctx<'_>) -> ApiResult<Response> {
         })
         .filter_map(|hazard| {
             let row = hazard.as_object().cloned().unwrap_or_default();
-            domain::vndms::to_vndms_hazard(&row)
-                .and_then(|value| serde_json::to_value(value).ok())
+            domain::vndms::to_vndms_hazard(&row).and_then(|value| serde_json::to_value(value).ok())
         })
         .collect();
     Ok(json_array(paginate(values, ctx.query, 200)))
@@ -2412,12 +3352,17 @@ async fn spatial_hazard_rows(ctx: &Ctx<'_>, mut body: Value) -> Option<Vec<Map<S
 async fn hazards_near(ctx: Ctx<'_>) -> ApiResult<Response> {
     let data = query_data(ctx.query);
     let near = domain::geo::parse_near_query(&data).map_err(domain_error)?;
-    let candidates = match spatial_hazard_rows(&ctx, json!({
-        "mode": "near",
-        "lat": near.lat,
-        "lng": near.lng,
-        "radiusMeters": near.radius_m,
-    })).await {
+    let candidates = match spatial_hazard_rows(
+        &ctx,
+        json!({
+            "mode": "near",
+            "lat": near.lat,
+            "lng": near.lng,
+            "radiusMeters": near.radius_m,
+        }),
+    )
+    .await
+    {
         Some(rows) => rows,
         None => all_hazards_with_feed(&ctx, 72).await?.items,
     };
@@ -2453,10 +3398,15 @@ async fn hazards_polygon(ctx: Ctx<'_>) -> ApiResult<Response> {
         .and_then(Value::as_f64)
         .unwrap_or(0.0)
         .max(0.0) as usize;
-    let candidates = match spatial_hazard_rows(&ctx, json!({
-        "mode": "within",
-        "geometry": polygon,
-    })).await {
+    let candidates = match spatial_hazard_rows(
+        &ctx,
+        json!({
+            "mode": "within",
+            "geometry": polygon,
+        }),
+    )
+    .await
+    {
         Some(rows) => rows,
         None => all_hazards_with_feed(&ctx, 72).await?.items,
     };
@@ -2487,15 +3437,26 @@ async fn hazards_list(ctx: Ctx<'_>) -> ApiResult<Response> {
         "x-sos-records-scanned",
         HeaderValue::from_str(&rows.scanned.to_string()).unwrap_or(HeaderValue::from_static("0")),
     );
-    response
-        .headers_mut()
-        .insert("cache-control", HeaderValue::from_static("public, max-age=30"));
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("public, max-age=30"),
+    );
     Ok(response)
 }
 
 async fn hazard_create(ctx: Ctx<'_>) -> ApiResult<Response> {
-    if ctx.body.get("title").and_then(Value::as_str).unwrap_or("").is_empty()
-        || ctx.body.get("event_type").and_then(Value::as_str).unwrap_or("").is_empty()
+    if ctx
+        .body
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .is_empty()
+        || ctx
+            .body
+            .get("event_type")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .is_empty()
     {
         return Err(ApiError::bad_request(
             "title_and_event_type_required",
@@ -2503,33 +3464,40 @@ async fn hazard_create(ctx: Ctx<'_>) -> ApiResult<Response> {
         ));
     }
     let mut input = ctx.body.clone();
-    input
-        .entry("is_active")
-        .or_insert_with(|| json!(true));
-    input
-        .entry("status")
-        .or_insert_with(|| json!("active"));
-    input
-        .entry("severity")
-        .or_insert_with(|| json!("medium"));
-    input
-        .entry("source")
-        .or_insert_with(|| json!("manual"));
+    input.entry("is_active").or_insert_with(|| json!(true));
+    input.entry("status").or_insert_with(|| json!("active"));
+    input.entry("severity").or_insert_with(|| json!("medium"));
+    input.entry("source").or_insert_with(|| json!("manual"));
     input.entry("metadata").or_insert_with(|| json!({}));
-    input
-        .entry("linked_event_id")
-        .or_insert(Value::Null);
-    input
-        .entry("linked_eop_plan_id")
-        .or_insert(Value::Null);
+    input.entry("linked_event_id").or_insert(Value::Null);
+    input.entry("linked_eop_plan_id").or_insert(Value::Null);
     let opts = ctx.opts();
     let row = tier2::write(ctx.client(), &opts, tier2::HAZARDS, input, None).await?;
     Ok(web::created(Value::Object(row)))
 }
 
 async fn latest_ingest_run(ctx: &Ctx<'_>) -> Option<Map<String, Value>> {
+    {
+        let cache = ctx
+            .state
+            .ingest_run_cache
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if let Some((at, value)) = cache.as_ref() {
+            if at.elapsed() < Duration::from_secs(15) {
+                return value.clone();
+            }
+        }
+    }
     let opts = ctx.opts();
-    let rows = tier2::list_all(ctx.client(), &opts, tier2::HAZARD_RUNS, ctx.config().max_scan_records).await.ok()?;
+    let rows = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::HAZARD_RUNS,
+        ctx.config().max_scan_records,
+    )
+    .await
+    .ok()?;
     let mut items = rows.items;
     items.sort_by_key(|run| {
         run.get("finished_at")
@@ -2538,12 +3506,23 @@ async fn latest_ingest_run(ctx: &Ctx<'_>) -> Option<Map<String, Value>> {
             .and_then(domain::filters::parse_timestamp)
             .unwrap_or(0)
     });
-    items.pop()
+    let latest = items.pop();
+    let mut cache = ctx
+        .state
+        .ingest_run_cache
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    *cache = Some((std::time::Instant::now(), latest.clone()));
+    latest
 }
 
 async fn fetch_tier2_hazard_status(ctx: &Ctx<'_>) -> Option<Value> {
     {
-        let cache = ctx.state.hazard_status_cache.lock().unwrap_or_else(|poison| poison.into_inner());
+        let cache = ctx
+            .state
+            .hazard_status_cache
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         if let Some((at, value)) = cache.as_ref() {
             if at.elapsed() < Duration::from_secs(30) {
                 return Some(value.clone());
@@ -2553,27 +3532,41 @@ async fn fetch_tier2_hazard_status(ctx: &Ctx<'_>) -> Option<Value> {
     let opts = ctx.opts();
     match ctx.client().hazards().status(&opts).await {
         Ok(value) => {
-            let mut cache = ctx.state.hazard_status_cache.lock().unwrap_or_else(|poison| poison.into_inner());
+            let mut cache = ctx
+                .state
+                .hazard_status_cache
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             *cache = Some((std::time::Instant::now(), value.clone()));
             Some(value)
         }
         Err(_) => {
-            let cache = ctx.state.hazard_status_cache.lock().unwrap_or_else(|poison| poison.into_inner());
+            let cache = ctx
+                .state
+                .hazard_status_cache
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             cache.as_ref().map(|(_, value)| value.clone())
         }
     }
 }
 
-async fn ingest_status(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let latest = latest_ingest_run(&ctx).await;
-    let feed = fetch_tier2_hazard_status(&ctx).await;
+async fn compute_ingest_status(ctx: &Ctx<'_>) -> domain::vndms::IngestStatus {
+    let latest = latest_ingest_run(ctx).await;
+    let feed = fetch_tier2_hazard_status(ctx).await;
     let connector = if let Some(feed) = feed {
-        let last_success = feed.get("last_success_at").and_then(Value::as_str).map(str::to_string);
+        let last_success = feed
+            .get("last_success_at")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let failed = feed.get("status").and_then(Value::as_str) == Some("error");
         Some(domain::vndms::IngestConnectorStatus {
             source: "tier-2-scheduled-job".into(),
             available: true,
-            configured: feed.get("configured").and_then(Value::as_bool).unwrap_or(true),
+            configured: feed
+                .get("configured")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
             job_id: Some("kttv-crawler".into()),
             job_name: Some("Tier-2 KTTV crawler (NCHMF/VNDMS)".into()),
             job_kind: Some("interval".into()),
@@ -2582,34 +3575,73 @@ async fn ingest_status(ctx: Ctx<'_>) -> ApiResult<Response> {
                 cron: None,
                 every_seconds: Some(1800.0),
             }),
-            last_run_at: feed.get("last_run_at").and_then(Value::as_str).map(str::to_string).or_else(|| last_success.clone()),
-            last_run_status: Some(if failed { "failed" } else if last_success.is_some() { "succeeded" } else { "unknown" }.into()),
-            last_run_error: feed.get("error").and_then(Value::as_str).map(str::to_string),
+            last_run_at: feed
+                .get("last_run_at")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| last_success.clone()),
+            last_run_status: Some(
+                if failed {
+                    "failed"
+                } else if last_success.is_some() {
+                    "succeeded"
+                } else {
+                    "unknown"
+                }
+                .into(),
+            ),
+            last_run_error: feed
+                .get("error")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             last_success_at: last_success,
             runs_considered: 1,
-            error: if failed { feed.get("error").and_then(Value::as_str).map(str::to_string).or_else(|| Some("tier2_crawler_failed".into())) } else { None },
+            error: if failed {
+                feed.get("error")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| Some("tier2_crawler_failed".into()))
+            } else {
+                None
+            },
             checked_at: crate::now_iso(),
         })
     } else {
         None
     };
     let latest_data = latest.as_ref().map(|row| to_data(row));
-    let status = domain::vndms::ingest_status_from_run(
+    domain::vndms::ingest_status_from_run_with_stale(
         latest_data.as_ref(),
         chrono::Utc::now().timestamp_millis(),
         connector.as_ref(),
-    );
-    Ok(web::json_response(serde_json::to_value(status).unwrap_or(Value::Null)))
+        Some(ctx.config().vndms_stale_minutes as f64),
+    )
+}
+
+async fn ingest_status(ctx: Ctx<'_>) -> ApiResult<Response> {
+    let status = compute_ingest_status(&ctx).await;
+    Ok(web::json_response(
+        serde_json::to_value(status).unwrap_or(Value::Null),
+    ))
 }
 
 async fn hazards_ingest(ctx: Ctx<'_>) -> ApiResult<Response> {
     let batch = domain::vndms::normalize_ingest_batch(&Value::Object(ctx.body.clone()), None)
         .map_err(domain_error)?;
     if batch.accepted.is_empty() && batch.rejected.is_empty() {
-        return Err(ApiError::bad_request("empty_ingest_batch", "The ingest batch is empty."));
+        return Err(ApiError::bad_request(
+            "empty_ingest_batch",
+            "The ingest batch is empty.",
+        ));
     }
     let opts = ctx.opts();
-    let existing = tier2::list_all(ctx.client(), &opts, tier2::HAZARDS, ctx.config().max_scan_records).await?;
+    let existing = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::HAZARDS,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let mut by_hazard_id: HashMap<String, Map<String, Value>> = existing
         .items
         .into_iter()
@@ -2633,7 +3665,13 @@ async fn hazards_ingest(ctx: Ctx<'_>) -> ApiResult<Response> {
             .to_string();
         let stable_id = format!("vndms-{hazard_id}")
             .chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') { ch } else { '-' })
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                    ch
+                } else {
+                    '-'
+                }
+            })
             .take(180)
             .collect::<String>();
         let current = by_hazard_id.get(&hazard_id).cloned();
@@ -2648,17 +3686,28 @@ async fn hazards_ingest(ctx: Ctx<'_>) -> ApiResult<Response> {
             merged.insert(key.clone(), value.clone());
         }
         merged.insert("id".into(), json!(record_id));
-        merged
-            .entry("linked_event_id")
-            .or_insert(Value::Null);
-        merged
-            .entry("linked_eop_plan_id")
-            .or_insert(Value::Null);
+        merged.entry("linked_event_id").or_insert(Value::Null);
+        merged.entry("linked_eop_plan_id").or_insert(Value::Null);
         let saved = if let Some(current) = current {
             let version = current.get("record_version").and_then(Value::as_i64);
-            tier2::update(ctx.client(), &opts, tier2::HAZARDS, &record_id, merged, version).await?
+            tier2::update(
+                ctx.client(),
+                &opts,
+                tier2::HAZARDS,
+                &record_id,
+                merged,
+                version,
+            )
+            .await?
         } else {
-            tier2::write(ctx.client(), &opts, tier2::HAZARDS, merged, Some(&record_id)).await?
+            tier2::write(
+                ctx.client(),
+                &opts,
+                tier2::HAZARDS,
+                merged,
+                Some(&record_id),
+            )
+            .await?
         };
         by_hazard_id.insert(hazard_id, saved);
         ingested += 1;
@@ -2694,14 +3743,24 @@ async fn hazards_expire(ctx: Ctx<'_>) -> ApiResult<Response> {
     let ttl = domain::hazards::hazard_ttl_hours(ctx.body.get("ttl_hours"));
     let now = chrono::Utc::now().timestamp_millis();
     let opts = ctx.opts();
-    let rows = tier2::list_all(ctx.client(), &opts, tier2::HAZARDS, ctx.config().max_scan_records).await?;
+    let rows = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::HAZARDS,
+        ctx.config().max_scan_records,
+    )
+    .await?;
     let mut updated = 0usize;
     for hazard in rows.items {
         let data = to_data(&hazard);
         if !domain::hazards::is_hazard_stale(&data, now, Some(ttl)) {
             continue;
         }
-        let id = hazard.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+        let id = hazard
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         let version = hazard.get("record_version").and_then(Value::as_i64);
         let mut patch = Map::new();
         patch.insert("is_active".into(), json!(false));
@@ -2717,123 +3776,273 @@ async fn hazards_expire(ctx: Ctx<'_>) -> ApiResult<Response> {
     })))
 }
 
+/// Explicit hazard lifecycle transition. The generic PUT cannot change
+/// `status`/`is_active`; this route enforces the state machine and records the
+/// audit trail.
+async fn hazard_status(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
+    let next = web::string_value(ctx.body.get("status"))
+        .ok_or_else(|| ApiError::bad_request("status_required", "status is required"))?
+        .to_ascii_lowercase();
+    let allowed_from: &[&str] = match next.as_str() {
+        "active" => &["monitoring"],
+        "monitoring" => &["active"],
+        "expired" => &["active", "monitoring"],
+        "resolved" => &["active", "monitoring"],
+        _ => {
+            return Err(ApiError::bad_request(
+                "invalid_hazard_status",
+                "status must be active, monitoring, expired or resolved",
+            ))
+        }
+    };
+    let opts = ctx.opts();
+    let current = tier2::get(ctx.client(), &opts, tier2::HAZARDS, id).await?;
+    let status = current.get("status").and_then(Value::as_str).unwrap_or("");
+    if status == next {
+        let mut response = current;
+        response.insert("idempotent".into(), json!(true));
+        return Ok(web::json_response(Value::Object(response)));
+    }
+    if !allowed_from.contains(&status) {
+        return Err(ApiError::conflict(
+            "invalid_hazard_transition",
+            format!("cannot move hazard {id} from {status} to {next}"),
+        )
+        .with_details(json!({ "allowedFrom": allowed_from, "current": status })));
+    }
+    let now = crate::now_iso();
+    let mut history = current
+        .get("status_history")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    history.push(json!({
+        "from": status,
+        "to": next.clone(),
+        "at": now.clone(),
+        "by": ctx.actor().unwrap_or_else(|| "sos-operator".into()),
+        "note": ctx.body.get("note").cloned().unwrap_or(Value::Null),
+    }));
+    let mut patch = Map::new();
+    patch.insert("is_active".into(), json!(next == "active"));
+    patch.insert("status".into(), json!(next));
+    patch.insert("status_changed_at".into(), json!(now));
+    patch.insert("status_history".into(), Value::Array(history));
+    if next == "expired" {
+        patch.insert("expired_at".into(), json!(crate::now_iso()));
+    }
+    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?
+        .or_else(|| current.get("record_version").and_then(Value::as_i64));
+    let row = tier2::update(ctx.client(), &opts, tier2::HAZARDS, id, patch, version).await?;
+    Ok(web::send_record(row))
+}
+
 async fn hazard_deploy(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
-    // The deterministic EOP fallback is implemented in the eop module once the
-    // AI capability is unavailable; keep the response shape stable.
     let opts = ctx.opts();
     let hazard = tier2::get(ctx.client(), &opts, tier2::HAZARDS, id).await?;
-    if let Some(event_id) = hazard.get("linked_event_id").and_then(Value::as_str) {
-        let event = tier2::get(ctx.client(), &opts, tier2::EVENTS, event_id).await?;
-        return Ok(web::json_response(json!({
-            "hazard_id": hazard.get("id"),
-            "event_id": event.get("id"),
-            "eop_plan_id": hazard.get("linked_eop_plan_id"),
-            "markdown_body": null,
-            "hazard": hazard,
-            "event": event,
-            "eop_plan": null,
-            "idempotent": true,
-            "generated": false,
-        })));
-    }
     let event_id = format!("event-{id}")
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') { ch } else { '-' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                ch
+            } else {
+                '-'
+            }
+        })
         .take(180)
         .collect::<String>();
-    let event_input = json!({
-        "id": event_id,
-        "title": hazard.get("title"),
-        "description": hazard.get("description"),
-        "event_type": hazard.get("event_type"),
-        "severity": hazard.get("severity"),
-        "source": "forecast",
-        "status": "active",
-        "started_at": crate::now_iso(),
-        "location": { "district": hazard.get("district"), "ward": hazard.get("ward") },
-        "geometry": hazard.get("geometry"),
-        "affected_asset_ids": [],
-        "estimated_impact": {},
-        "instructions": [],
-        "tags": [],
-        "metadata": { "hazard_id": hazard.get("hazard_id").or_else(|| hazard.get("id")) },
-        "created_by": ctx.actor(),
-    });
-    let event = tier2::write(
-        ctx.client(),
-        &opts,
-        tier2::EVENTS,
-        event_input.as_object().cloned().unwrap_or_default(),
-        Some(&event_id),
-    )
-    .await?;
+    let linked_event_id = hazard
+        .get("linked_event_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| event_id.clone());
+    let mut event_existed = true;
+    let event = match tier2::get(ctx.client(), &opts, tier2::EVENTS, &linked_event_id).await {
+        Ok(event) => event,
+        Err(error) if error.status == StatusCode::NOT_FOUND => {
+            event_existed = false;
+            let event_input = json!({
+                "id": linked_event_id,
+                "title": hazard.get("title"),
+                "description": hazard.get("description"),
+                "event_type": hazard.get("event_type"),
+                "severity": hazard.get("severity"),
+                "source": "forecast",
+                "status": "active",
+                "started_at": crate::now_iso(),
+                "location": { "district": hazard.get("district"), "ward": hazard.get("ward") },
+                "geometry": hazard.get("geometry"),
+                "affected_asset_ids": [],
+                "estimated_impact": {},
+                "instructions": [],
+                "tags": [],
+                "metadata": { "hazard_id": hazard.get("hazard_id").or_else(|| hazard.get("id")) },
+                "created_by": ctx.actor(),
+            });
+            match tier2::write(
+                ctx.client(),
+                &opts,
+                tier2::EVENTS,
+                event_input.as_object().cloned().unwrap_or_default(),
+                Some(&linked_event_id),
+            )
+            .await
+            {
+                Ok(event) => event,
+                Err(error) if error.code == "record_exists" => {
+                    tier2::get(ctx.client(), &opts, tier2::EVENTS, &linked_event_id).await?
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Err(error) => return Err(error),
+    };
+    let linked_plan_id = hazard
+        .get("linked_eop_plan_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let mut plan = match linked_plan_id.as_deref() {
+        Some(plan_id) => match tier2::get(ctx.client(), &opts, tier2::EOP, plan_id).await {
+            Ok(plan) => Some(plan),
+            Err(error) if error.status == StatusCode::NOT_FOUND => None,
+            Err(error) => return Err(error),
+        },
+        None => find_plans_for_event(&ctx, &linked_event_id).await.pop(),
+    };
+    let mut generated = false;
+    if plan.is_none() {
+        let correlation = ctx
+            .headers
+            .get("x-correlation-id")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let (created, _) = create_eop_version(
+            &ctx,
+            &event,
+            1,
+            hazard
+                .get("title")
+                .and_then(Value::as_str)
+                .map(|title| format!("EOP — {title}")),
+            Some("Generated automatically when the hazard was deployed.".into()),
+            true,
+            correlation,
+        )
+        .await?;
+        plan = Some(created);
+        generated = true;
+    }
+    let plan = plan
+        .ok_or_else(|| ApiError::internal("hazard deploy could not create or find an EOP draft"))?;
+    let plan_id = plan.get("id").cloned().unwrap_or(Value::Null);
     let mut patch = Map::new();
-    patch.insert("linked_event_id".into(), event.get("id").cloned().unwrap_or(Value::Null));
+    patch.insert(
+        "linked_event_id".into(),
+        event.get("id").cloned().unwrap_or(Value::Null),
+    );
+    patch.insert("linked_eop_plan_id".into(), plan_id.clone());
     let version = hazard.get("record_version").and_then(Value::as_i64);
     let updated = tier2::update(ctx.client(), &opts, tier2::HAZARDS, id, patch, version).await?;
+    let markdown = plan.get("markdown_body").cloned().unwrap_or(Value::Null);
     Ok(web::json_response(json!({
         "hazard_id": updated.get("id"),
         "event_id": event.get("id"),
-        "eop_plan_id": null,
-        "markdown_body": null,
+        "eop_plan_id": plan_id,
+        "markdown_body": markdown,
         "hazard": updated,
         "event": event,
-        "eop_plan": null,
-        "idempotent": false,
-        "generated": false,
+        "eop_plan": plan,
+        "idempotent": event_existed && !generated,
+        "generated": generated,
     })))
 }
 
-/// Snapshot frame shared by the periodic fallback and the live-event trigger.
+/// Snapshot frame shared by the initial read, the Tier-2 event trigger and the
+/// bounded fallback. It always uses the merged public hazard view and retains
+/// the last good payload across dependency errors.
 async fn hazard_snapshot_frame(state: &AppState, opts: &RequestOptions, source: &str) -> String {
-    match tier2::list_all_public(
-        &state.tier2,
-        opts,
-        tier2::HAZARDS,
-        state.config.max_scan_records,
-    )
-    .await
-    {
-        Ok(rows) => {
-            let snapshot: Vec<Value> = rows.items.into_iter().map(Value::Object).collect();
+    match public_hazards_with_feed_state(state, opts, 72).await {
+        Ok(snapshot) => {
+            let at = crate::now_iso();
+            {
+                let mut last_good = state
+                    .hazard_last_good
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                *last_good = Some((at.clone(), snapshot.clone()));
+            }
             domain::hazards::sse_hazards_frame(
                 &json!({
                     "snapshot": snapshot,
+                    "records_visible": snapshot.len(),
                     "degraded": false,
-                    "last_good_at": crate::now_iso(),
-                    "transport": if source == "sse" { "sse-trigger" } else { "snapshot-poll" },
+                    "last_good_at": at,
+                    "transport": match source {
+                        "sse" => "sse-trigger",
+                        "fallback" => "snapshot-fallback",
+                        _ => "snapshot-initial",
+                    },
                     "source": source,
                 }),
                 None,
             )
         }
-        Err(error) => domain::hazards::sse_error_frame(
-            &json!({
-                "error": "hazard_stream_degraded",
-                "message": "Hazard data is temporarily unavailable.",
-                "retry_ms": 5000,
-                "last_good_at": Value::Null,
-                "has_snapshot": false,
-                "transport": "snapshot-poll",
-                "detail": error.to_string(),
-            }),
-            None,
-        ),
+        Err(error) => {
+            let last_good = state
+                .hazard_last_good
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .clone();
+            domain::hazards::sse_error_frame(
+                &json!({
+                    "error": "hazard_stream_degraded",
+                    "message": "Hazard data is temporarily unavailable.",
+                    "retry_ms": 5000,
+                    "last_good_at": last_good.as_ref().map(|(at, _)| at),
+                    "has_snapshot": last_good.is_some(),
+                    "snapshot": last_good.as_ref().map(|(_, items)| items),
+                    "transport": "snapshot-error",
+                    "detail": error.to_string(),
+                }),
+                None,
+            )
+        }
     }
 }
 
-/// Subscribe to Tier-2 capability events and wake the snapshot loop as soon as
-/// a hazard record changes. Retries forever; the periodic ticker remains the
-/// correctness fallback when the stream is unavailable.
-async fn watch_tier2_hazard_events(state: AppState, wake: tokio::sync::mpsc::Sender<()>) {
+async fn broadcast_hazard_snapshot(
+    state: &AppState,
+    opts: &RequestOptions,
+    tx: &tokio::sync::broadcast::Sender<String>,
+    source: &str,
+) {
+    let frame = hazard_snapshot_frame(state, opts, source).await;
+    let _ = tx.send(frame);
+}
+
+/// One Tier-2 subscription per process, shared by every SSE client. The
+/// watcher exits after a short grace period when no subscribers remain, so a
+/// disconnected client cannot leave an upstream stream alive forever.
+async fn watch_tier2_hazard_events(state: AppState, tx: tokio::sync::broadcast::Sender<String>) {
     let Some(api_key) = state
         .config
         .tier2_api_key
         .clone()
         .or_else(|| state.config.tier2_token.clone())
     else {
+        state
+            .hazard_watcher_active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         return;
     };
+    let opts = tier2::request_options_from(
+        state.config.tier2_api_key.as_deref(),
+        state.config.tier2_token.as_deref(),
+        None,
+        None,
+    );
     let url = format!(
         "{}/v1/capabilities/events/stream",
         state.config.tier2_url.trim_end_matches('/')
@@ -2843,9 +4052,25 @@ async fn watch_tier2_hazard_events(state: AppState, wake: tokio::sync::mpsc::Sen
         .build()
     {
         Ok(client) => client,
-        Err(_) => return,
+        Err(_) => {
+            state
+                .hazard_watcher_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            return;
+        }
     };
     loop {
+        if tx.receiver_count() == 0 {
+            // A short grace window avoids a start/stop race for a client that
+            // reconnects immediately after a network blip.
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            if tx.receiver_count() == 0 {
+                state
+                    .hazard_watcher_active
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                return;
+            }
+        }
         let mut request = client
             .get(&url)
             .header("accept", "text/event-stream")
@@ -2859,23 +4084,71 @@ async fn watch_tier2_hazard_events(state: AppState, wake: tokio::sync::mpsc::Sen
             Ok(response) if response.status().is_success() => {
                 let mut body = response.bytes_stream();
                 let mut buffer: Vec<u8> = Vec::new();
-                while let Some(chunk) = body.next().await {
-                    let Ok(chunk) = chunk else { break };
-                    buffer.extend_from_slice(&chunk);
-                    while let Some(position) = buffer.windows(2).position(|pair| pair == b"\n\n") {
-                        let frame = String::from_utf8_lossy(&buffer[..position]).to_string();
-                        buffer.drain(..position + 2);
-                        if frame.lines().any(|line| line.trim() == "event: capability") {
-                            // Capacity one coalesces bursts; the snapshot is
-                            // re-read from Tier-2, never built from the event.
-                            let _ = wake.try_send(());
+                let fallback_period = Duration::from_millis(state.config.stream_poll_ms);
+                let mut fallback = tokio::time::interval_at(
+                    tokio::time::Instant::now() + fallback_period,
+                    fallback_period,
+                );
+                fallback.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tokio::select! {
+                        _ = fallback.tick() => {
+                            broadcast_hazard_snapshot(&state, &opts, &tx, "fallback").await;
+                        }
+                        chunk = body.next() => {
+                            let Some(Ok(chunk)) = chunk else { break };
+                            buffer.extend_from_slice(&chunk);
+                            let mut changed = false;
+                            while let Some(position) = buffer.windows(2).position(|pair| pair == b"\n\n") {
+                                let frame = String::from_utf8_lossy(&buffer[..position]).to_string();
+                                buffer.drain(..position + 2);
+                                if frame.lines().any(|line| line.trim() == "event: capability") {
+                                    changed = true;
+                                }
+                            }
+                            if changed {
+                                // The event is only a wake-up; the payload is
+                                // always the authoritative merged snapshot.
+                                broadcast_hazard_snapshot(&state, &opts, &tx, "sse").await;
+                            }
+                        }
+                        _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                            if tx.receiver_count() == 0 {
+                                break;
+                            }
                         }
                     }
                 }
             }
             _ => {}
         }
+        if tx.receiver_count() == 0 {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            if tx.receiver_count() == 0 {
+                state
+                    .hazard_watcher_active
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                return;
+            }
+        }
         tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+async fn ensure_hazard_watcher(state: &AppState) {
+    if state
+        .hazard_watcher_active
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_ok()
+    {
+        let state = state.clone();
+        let tx = state.hazard_stream_tx.clone();
+        tokio::spawn(watch_tier2_hazard_events(state, tx));
     }
 }
 
@@ -2884,34 +4157,31 @@ async fn hazard_stream(ctx: Ctx<'_>) -> ApiResult<Response> {
     let state = ctx.state.clone();
     let headers = ctx.headers.clone();
     let session = ctx.session.cloned();
-    let interval_ms = state.config.stream_poll_ms;
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(1);
-    tokio::spawn(watch_tier2_hazard_events(state.clone(), event_tx));
+    let opts = tier2::request_options(&state.config, &headers, session.as_ref());
+    let mut broadcast = state.hazard_stream_tx.subscribe();
     tokio::spawn(async move {
-        let opts = tier2::request_options(&state.config, &headers, session.as_ref());
-        let mut ticker = tokio::time::interval(Duration::from_millis(interval_ms));
         let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
-        let _ = tx.send(Ok(Bytes::from(": connected\n\nretry: 5000\n\n"))).await;
-        // Initial snapshot is immediate; the event feed then wakes the same
-        // authoritative read instead of streaming record payloads to browsers.
-        let initial = hazard_snapshot_frame(&state, &opts, "poll").await;
+        let _ = tx
+            .send(Ok(Bytes::from(": connected\n\nretry: 5000\n\n")))
+            .await;
+        // Initial snapshot is immediate; the shared watcher then broadcasts
+        // only event-driven reads plus a 30 s fallback.
+        let initial = hazard_snapshot_frame(&state, &opts, "initial").await;
         if tx.send(Ok(Bytes::from(initial))).await.is_err() {
             return;
         }
+        ensure_hazard_watcher(&state).await;
         loop {
             tokio::select! {
-                _ = ticker.tick() => {
-                    let frame = hazard_snapshot_frame(&state, &opts, "poll").await;
-                    if tx.send(Ok(Bytes::from(frame))).await.is_err() {
-                        return;
-                    }
-                }
-                Some(()) = event_rx.recv(), if !event_rx.is_closed() => {
-                    // Coalesce a burst, then read the authoritative snapshot.
-                    while event_rx.try_recv().is_ok() {}
-                    let frame = hazard_snapshot_frame(&state, &opts, "sse").await;
-                    if tx.send(Ok(Bytes::from(frame))).await.is_err() {
-                        return;
+                frame = broadcast.recv() => {
+                    match frame {
+                        Ok(frame) => {
+                            if tx.send(Ok(Bytes::from(frame))).await.is_err() {
+                                return;
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                     }
                 }
                 _ = heartbeat.tick() => {
@@ -2934,10 +4204,9 @@ async fn hazard_stream(ctx: Ctx<'_>) -> ApiResult<Response> {
         "cache-control",
         HeaderValue::from_static("no-cache, no-transform"),
     );
-    response.headers_mut().insert(
-        "x-accel-buffering",
-        HeaderValue::from_static("no"),
-    );
+    response
+        .headers_mut()
+        .insert("x-accel-buffering", HeaderValue::from_static("no"));
     Ok(response)
 }
 
@@ -2978,7 +4247,10 @@ async fn geo_search(ctx: Ctx<'_>) -> ApiResult<Response> {
 async fn geo_geocode(ctx: Ctx<'_>) -> ApiResult<Response> {
     let text = web::string_value(ctx.body.get("address")).unwrap_or_default();
     if text.is_empty() {
-        return Err(ApiError::bad_request("address_required", "address is required"));
+        return Err(ApiError::bad_request(
+            "address_required",
+            "address is required",
+        ));
     }
     let opts = ctx.opts();
     let items = ctx
@@ -2992,7 +4264,10 @@ async fn geo_geocode(ctx: Ctx<'_>) -> ApiResult<Response> {
             && item.get("lon").and_then(Value::as_f64).is_some()
     });
     let Some(hit) = hit else {
-        return Err(ApiError::not_found("address_not_found", "Address was not found."));
+        return Err(ApiError::not_found(
+            "address_not_found",
+            "Address was not found.",
+        ));
     };
     let lat = hit.get("lat").and_then(Value::as_f64).unwrap_or(0.0);
     let lon = hit.get("lon").and_then(Value::as_f64).unwrap_or(0.0);
@@ -3033,7 +4308,10 @@ async fn geo_reverse(ctx: Ctx<'_>) -> ApiResult<Response> {
             .unwrap_or(false)
     });
     let Some(hit) = hit else {
-        return Err(ApiError::not_found("address_not_found", "Address was not found."));
+        return Err(ApiError::not_found(
+            "address_not_found",
+            "Address was not found.",
+        ));
     };
     Ok(web::json_response(json!({
         "address": hit.get("address").or_else(|| hit.get("label")).or_else(|| hit.get("display")).and_then(Value::as_str).unwrap_or(""),
@@ -3044,7 +4322,12 @@ async fn geo_reverse(ctx: Ctx<'_>) -> ApiResult<Response> {
 }
 
 async fn map_tile(ctx: Ctx<'_>, z: &str, x: &str, y: &str) -> ApiResult<Response> {
-    let Some(api_key) = ctx.config().tier2_api_key.clone().or_else(|| ctx.config().tier2_token.clone()) else {
+    let Some(api_key) = ctx
+        .config()
+        .tier2_api_key
+        .clone()
+        .or_else(|| ctx.config().tier2_token.clone())
+    else {
         return Ok(web::status_json(
             StatusCode::SERVICE_UNAVAILABLE,
             json!({ "error": "map_tiles_unavailable", "dependency": "synapsedx" }),
@@ -3053,7 +4336,10 @@ async fn map_tile(ctx: Ctx<'_>, z: &str, x: &str, y: &str) -> ApiResult<Response
     let y = y.strip_suffix(".png").unwrap_or(y);
     let url = format!(
         "{}/v1/capabilities/geo/tiles/{}/{}/{}.png",
-        ctx.config().tier2_url, z, x, y
+        ctx.config().tier2_url,
+        z,
+        x,
+        y
     );
     let client = reqwest::Client::new();
     let mut request = client.get(url).header("accept", "*/*");
@@ -3070,11 +4356,15 @@ async fn map_tile(ctx: Ctx<'_>, z: &str, x: &str, y: &str) -> ApiResult<Response
                 .and_then(|value| value.to_str().ok())
                 .unwrap_or("image/png")
                 .to_string();
-            let bytes = response.bytes().await.map_err(|error| ApiError::internal(error))?;
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|error| ApiError::internal(error))?;
             let mut response = Response::new(axum::body::Body::from(bytes));
             response.headers_mut().insert(
                 "content-type",
-                HeaderValue::from_str(&content_type).unwrap_or(HeaderValue::from_static("image/png")),
+                HeaderValue::from_str(&content_type)
+                    .unwrap_or(HeaderValue::from_static("image/png")),
             );
             response.headers_mut().insert(
                 "cache-control",
@@ -3146,16 +4436,26 @@ async fn ai_chat(ctx: Ctx<'_>) -> ApiResult<Response> {
     let mut messages = Vec::new();
     for (index, entry) in raw_messages.into_iter().enumerate() {
         let Some(message) = entry.as_object() else {
-            return Err(ApiError::bad_request("invalid_message", format!("messages[{index}] must be an object")));
+            return Err(ApiError::bad_request(
+                "invalid_message",
+                format!("messages[{index}] must be an object"),
+            ));
         };
-        let role = message.get("role").and_then(Value::as_str).unwrap_or("user");
+        let role = message
+            .get("role")
+            .and_then(Value::as_str)
+            .unwrap_or("user");
         if !["system", "user", "assistant"].contains(&role) {
             return Err(ApiError::bad_request(
                 "invalid_message_role",
                 format!("messages[{index}].role must be system|user|assistant"),
             ));
         }
-        let content = message.get("content").and_then(Value::as_str).unwrap_or("").trim();
+        let content = message
+            .get("content")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
         if content.is_empty() {
             return Err(ApiError::bad_request(
                 "invalid_message_content",
@@ -3167,7 +4467,11 @@ async fn ai_chat(ctx: Ctx<'_>) -> ApiResult<Response> {
     let opts = ctx.opts();
     let model = web::string_value(ctx.body.get("model"));
     let temperature = ctx.body.get("temperature").and_then(Value::as_f64);
-    let max_tokens = ctx.body.get("max_tokens").and_then(Value::as_u64).map(|value| value as u32);
+    let max_tokens = ctx
+        .body
+        .get("max_tokens")
+        .and_then(Value::as_u64)
+        .map(|value| value as u32);
     let completion = ai::ai_chat(
         ctx.state,
         &opts,
@@ -3192,9 +4496,10 @@ async fn ai_brief(ctx: Ctx<'_>) -> ApiResult<Response> {
     let opts = ctx.opts();
     let result = ai::hazard_brief(ctx.state, &opts, hours, limit, focus).await?;
     let mut response = web::json_response(result);
-    response
-        .headers_mut()
-        .insert("cache-control", HeaderValue::from_static("public, max-age=60"));
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("public, max-age=60"),
+    );
     Ok(response)
 }
 
@@ -3212,14 +4517,30 @@ async fn ai_ask(ctx: Ctx<'_>) -> ApiResult<Response> {
                     let provinces = hazard
                         .get("provinces")
                         .and_then(Value::as_array)
-                        .map(|values| values.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", "))
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
                         .unwrap_or_default();
                     format!(
                         "- [{}] {} ({}) lúc {}",
-                        hazard.get("severity").and_then(Value::as_str).unwrap_or("medium"),
+                        hazard
+                            .get("severity")
+                            .and_then(Value::as_str)
+                            .unwrap_or("medium"),
                         hazard.get("title").and_then(Value::as_str).unwrap_or(""),
-                        if provinces.is_empty() { "không xác định" } else { &provinces },
-                        hazard.get("published_at").and_then(Value::as_str).unwrap_or(""),
+                        if provinces.is_empty() {
+                            "không xác định"
+                        } else {
+                            &provinces
+                        },
+                        hazard
+                            .get("published_at")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
                     )
                 })
                 .collect();
@@ -3251,16 +4572,29 @@ async fn ai_ask(ctx: Ctx<'_>) -> ApiResult<Response> {
 // EOP
 // ---------------------------------------------------------------------------
 
-async fn load_eop_inputs(ctx: &Ctx<'_>, event: &Map<String, Value>) -> (Vec<Map<String, Value>>, Vec<Map<String, Value>>) {
+async fn load_eop_inputs(
+    ctx: &Ctx<'_>,
+    event: &Map<String, Value>,
+) -> (Vec<Map<String, Value>>, Vec<Map<String, Value>>) {
     let opts = ctx.opts();
-    let hazards = tier2::list_all(ctx.client(), &opts, tier2::HAZARDS, ctx.config().max_scan_records)
-        .await
-        .map(|rows| rows.items)
-        .unwrap_or_default();
-    let resources = tier2::list_all(ctx.client(), &opts, tier2::RESOURCES, ctx.config().max_scan_records)
-        .await
-        .map(|rows| rows.items)
-        .unwrap_or_default();
+    let hazards = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::HAZARDS,
+        ctx.config().max_scan_records,
+    )
+    .await
+    .map(|rows| rows.items)
+    .unwrap_or_default();
+    let resources = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::RESOURCES,
+        ctx.config().max_scan_records,
+    )
+    .await
+    .map(|rows| rows.items)
+    .unwrap_or_default();
     let event_id = event.get("id").and_then(Value::as_str).unwrap_or("");
     let hazard_id = event
         .get("metadata")
@@ -3275,16 +4609,24 @@ async fn load_eop_inputs(ctx: &Ctx<'_>, event: &Map<String, Value>) -> (Vec<Map<
         })
         .map(|hazard| to_data(&hazard))
         .collect();
-    let resources = resources.into_iter().map(|resource| to_data(&resource)).collect();
+    let resources = resources
+        .into_iter()
+        .map(|resource| to_data(&resource))
+        .collect();
     (linked, resources)
 }
 
 async fn find_plans_for_event(ctx: &Ctx<'_>, event_id: &str) -> Vec<Map<String, Value>> {
     let opts = ctx.opts();
-    let rows = tier2::list_all(ctx.client(), &opts, tier2::EOP, ctx.config().max_scan_records)
-        .await
-        .map(|rows| rows.items)
-        .unwrap_or_default();
+    let rows = tier2::list_all(
+        ctx.client(),
+        &opts,
+        tier2::EOP,
+        ctx.config().max_scan_records,
+    )
+    .await
+    .map(|rows| rows.items)
+    .unwrap_or_default();
     let mut plans: Vec<Map<String, Value>> = rows
         .into_iter()
         .filter(|plan| plan.get("emergency_event_id").and_then(Value::as_str) == Some(event_id))
@@ -3302,9 +4644,7 @@ async fn generate_eop_draft(
 ) -> ApiResult<(domain::eop::EopDraft, &'static str)> {
     let opts = ctx.opts();
     let status = ai::ai_status(ctx.state, &opts).await;
-    if status.get("configured").and_then(Value::as_bool) != Some(true)
-        && status.get("reachable").and_then(Value::as_bool) == Some(true)
-    {
+    if status.get("configured").and_then(Value::as_bool) != Some(true) {
         if !allow_fallback {
             return Err(ai::ai_unavailable(
                 "The Tier-2 AI capability is not configured.",
@@ -3319,31 +4659,24 @@ async fn generate_eop_draft(
         .into_iter()
         .map(|message| json!({ "role": message.role, "content": message.content }))
         .collect();
-    let completion = match ai::ai_chat(
-        ctx.state,
-        &opts,
-        Value::Array(messages),
-        None,
-        None,
-        None,
-    )
-    .await
-    {
-        Ok(completion) => completion,
-        Err(error) => {
-            if allow_fallback {
-                let mut draft = domain::eop::build_eop_draft(context, Some(version));
-                draft.metadata.insert(
-                    "ai_error".into(),
-                    json!(error.message),
-                );
-                draft.metadata.insert("ai_error_code".into(), json!(error.code));
-                draft.markdown_body = domain::eop::render_eop_markdown(&draft, context);
-                return Ok((draft, "deterministic-fallback"));
+    let completion =
+        match ai::ai_chat(ctx.state, &opts, Value::Array(messages), None, None, None).await {
+            Ok(completion) => completion,
+            Err(error) => {
+                if allow_fallback {
+                    let mut draft = domain::eop::build_eop_draft(context, Some(version));
+                    draft
+                        .metadata
+                        .insert("ai_error".into(), json!(error.message));
+                    draft
+                        .metadata
+                        .insert("ai_error_code".into(), json!(error.code));
+                    draft.markdown_body = domain::eop::render_eop_markdown(&draft, context);
+                    return Ok((draft, "deterministic-fallback"));
+                }
+                return Err(error);
             }
-            return Err(error);
-        }
-    };
+        };
     let payload = ai::json_object_from(&completion.content).ok_or_else(|| {
         ApiError::bad_gateway(
             "ai_draft_invalid",
@@ -3388,7 +4721,13 @@ async fn create_eop_version(
         event.get("id").and_then(Value::as_str).unwrap_or("event")
     )
     .chars()
-    .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') { ch } else { '-' })
+    .map(|ch| {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+            ch
+        } else {
+            '-'
+        }
+    })
     .take(180)
     .collect::<String>();
     let opts = ctx.opts();
@@ -3401,26 +4740,45 @@ async fn create_eop_version(
             .to_string();
         return Ok((existing, source));
     }
-    let (draft, source) = generate_eop_draft(&ctx, &context, version, allow_fallback, correlation_id).await?;
+    let (draft, source) =
+        generate_eop_draft(&ctx, &context, version, allow_fallback, correlation_id).await?;
     let draft_value = serde_json::to_value(&draft)
         .ok()
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
     let mut input = draft_value;
     input.insert("id".into(), json!(id));
-    input.insert("emergency_event_id".into(), event.get("id").cloned().unwrap_or(Value::Null));
+    input.insert(
+        "emergency_event_id".into(),
+        event.get("id").cloned().unwrap_or(Value::Null),
+    );
     input.insert(
         "priority".into(),
-        event.get("severity").cloned().unwrap_or_else(|| json!("medium")),
+        event
+            .get("severity")
+            .cloned()
+            .unwrap_or_else(|| json!("medium")),
     );
-    input.insert("created_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
-    let row = tier2::write(ctx.client(), &opts, tier2::EOP, input, Some(&id)).await?;
+    input.insert(
+        "created_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
+    let row = match tier2::write(ctx.client(), &opts, tier2::EOP, input, Some(&id)).await {
+        Ok(row) => row,
+        Err(error) if error.code == "record_exists" => {
+            tier2::get(ctx.client(), &opts, tier2::EOP, &id).await?
+        }
+        Err(error) => return Err(error),
+    };
     Ok((row, source.into()))
 }
 
 async fn eop_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     let event_id = web::string_value(ctx.body.get("emergency_event_id")).ok_or_else(|| {
-        ApiError::bad_request("emergency_event_id_required", "emergency_event_id is required")
+        ApiError::bad_request(
+            "emergency_event_id_required",
+            "emergency_event_id is required",
+        )
     })?;
     let opts = ctx.opts();
     let event = tier2::get(ctx.client(), &opts, tier2::EVENTS, &event_id).await?;
@@ -3440,22 +4798,37 @@ async fn eop_create(ctx: Ctx<'_>) -> ApiResult<Response> {
         });
     let id = format!("eop-{event_id}-v{version}")
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') { ch } else { '-' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                ch
+            } else {
+                '-'
+            }
+        })
         .take(180)
         .collect::<String>();
     let mut input = ctx.body.clone();
     input.insert("id".into(), json!(id));
-    input.insert("emergency_event_id".into(), event.get("id").cloned().unwrap_or(Value::Null));
+    input.insert(
+        "emergency_event_id".into(),
+        event.get("id").cloned().unwrap_or(Value::Null),
+    );
     input.insert("version".into(), json!(version));
     input.insert("status".into(), json!("draft"));
-    input.insert("created_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
+    input.insert(
+        "created_by".into(),
+        ctx.actor().map(Value::String).unwrap_or(Value::Null),
+    );
     let row = tier2::write(ctx.client(), &opts, tier2::EOP, input, Some(&id)).await?;
     Ok(web::created(Value::Object(row)))
 }
 
 async fn eop_generate(ctx: Ctx<'_>) -> ApiResult<Response> {
     let event_id = web::string_value(ctx.body.get("emergency_event_id")).ok_or_else(|| {
-        ApiError::bad_request("emergency_event_id_required", "emergency_event_id is required")
+        ApiError::bad_request(
+            "emergency_event_id_required",
+            "emergency_event_id is required",
+        )
     })?;
     let opts = ctx.opts();
     let event = tier2::get(ctx.client(), &opts, tier2::EVENTS, &event_id)
@@ -3471,7 +4844,8 @@ async fn eop_generate(ctx: Ctx<'_>) -> ApiResult<Response> {
             }
         })?;
     let force = web::bool_value(ctx.body.get("force_new_version")).unwrap_or(false);
-    let allow_fallback = web::string_value(ctx.body.get("fallback")).as_deref() == Some("deterministic")
+    let allow_fallback = web::string_value(ctx.body.get("fallback")).as_deref()
+        == Some("deterministic")
         || web::bool_value(ctx.body.get("allow_deterministic_fallback")).unwrap_or(false);
     let title = web::string_value(ctx.body.get("title"));
     let additional = web::string_value(ctx.body.get("additional_context"));
@@ -3535,33 +4909,30 @@ async fn eop_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let current = tier2::get(ctx.client(), &opts, tier2::EOP, id).await?;
     let status = current.get("status").and_then(Value::as_str).unwrap_or("");
-    if !["draft", "review_pending", "approved"].contains(&status) {
-        return Err(ApiError::conflict(
-            "invalid_eop_status",
-            format!("cannot approve a plan in status {status}"),
-        ));
-    }
-    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     if status == "approved" {
         let mut response = current;
         response.insert("idempotent".into(), json!(true));
         return Ok(web::json_response(Value::Object(response)));
     }
+    if !["draft", "review_pending"].contains(&status) {
+        return Err(ApiError::conflict(
+            "invalid_eop_status",
+            format!("cannot approve a plan in status {status}"),
+        ));
+    }
     let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
     let approval_id = web::string_value(ctx.body.get("approval_id"))
         .or_else(|| web::string_value(ctx.body.get("approvalId")))
         .unwrap_or_default();
-    let mut approval = None;
-    if ctx.config().hitl_required || !approval_id.is_empty() {
-        if approval_id.is_empty() {
-            return Err(ApiError::new(
-                StatusCode::PRECONDITION_REQUIRED,
-                "approval_required",
-                "create an EOP approval first",
-            ));
-        }
-        approval = Some(assert_approved(&ctx, &approval_id, id, "eop.approve", &actor).await?);
+    if approval_id.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_REQUIRED,
+            "approval_required",
+            "create an EOP approval first and supply approval_id",
+        ));
     }
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve").await?;
+    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let mut patch = Map::new();
     patch.insert("status".into(), json!("approved"));
     patch.insert(
@@ -3574,22 +4945,26 @@ async fn eop_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     );
     patch.insert("approved_by".into(), json!(actor));
     patch.insert("approved_at".into(), json!(crate::now_iso()));
-    if let Some(approval) = approval {
-        patch.insert("approval_id".into(), approval.get("id").cloned().unwrap_or(Value::Null));
-        patch.insert(
-            "approved_role".into(),
-            approval
-                .get("approverRoles")
-                .and_then(Value::as_array)
-                .and_then(|roles| roles.first())
-                .cloned()
-                .unwrap_or(Value::Null),
-        );
-        patch.insert(
-            "approval_roles".into(),
-            approval.get("approverRoles").cloned().unwrap_or(Value::Null),
-        );
-    }
+    patch.insert(
+        "approval_id".into(),
+        approval.get("id").cloned().unwrap_or(Value::Null),
+    );
+    patch.insert(
+        "approved_role".into(),
+        approval
+            .get("approverRoles")
+            .and_then(Value::as_array)
+            .and_then(|roles| roles.first())
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    patch.insert(
+        "approval_roles".into(),
+        approval
+            .get("approverRoles")
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
     let row = tier2::update(ctx.client(), &opts, tier2::EOP, id, patch, version).await?;
     Ok(web::send_record(row))
 }
@@ -3604,17 +4979,46 @@ async fn eop_publish(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             "approve the EOP before publishing it",
         ));
     }
-    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     if status == "published" {
         let mut response = current;
         response.insert("idempotent".into(), json!(true));
         return Ok(web::json_response(Value::Object(response)));
     }
+    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
+    let approval_id = web::string_value(ctx.body.get("approval_id"))
+        .or_else(|| web::string_value(ctx.body.get("approvalId")))
+        .or_else(|| {
+            current
+                .get("approval_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    if approval_id.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_REQUIRED,
+            "approval_required",
+            "publish requires the approved EOP approval",
+        ));
+    }
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve").await?;
+    if current.get("approval_id").and_then(Value::as_str)
+        != approval.get("id").and_then(Value::as_str)
+    {
+        return Err(ApiError::conflict(
+            "approval_entity_mismatch",
+            "the publication approval does not match the approval that admitted this plan",
+        ));
+    }
+    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let mut patch = Map::new();
     patch.insert("status".into(), json!("published"));
     patch.insert(
         "published_at".into(),
-        current.get("published_at").cloned().unwrap_or_else(|| json!(crate::now_iso())),
+        current
+            .get("published_at")
+            .cloned()
+            .unwrap_or_else(|| json!(crate::now_iso())),
     );
     patch.insert(
         "published_by".into(),
@@ -3639,7 +5043,10 @@ async fn eop_markdown(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let mut patch = Map::new();
     patch.insert(
         "markdown_body".into(),
-        ctx.body.get("markdown_body").cloned().unwrap_or(Value::Null),
+        ctx.body
+            .get("markdown_body")
+            .cloned()
+            .unwrap_or(Value::Null),
     );
     patch.insert(
         "review_notes".into(),
@@ -3658,8 +5065,42 @@ async fn eop_markdown(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
 async fn eop_submit(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let plan = tier2::get(ctx.client(), &opts, tier2::EOP, id).await?;
-    if plan.get("status").and_then(Value::as_str) == Some("archived") {
-        return Err(ApiError::conflict("eop_archived", "cannot submit an archived plan"));
+    let plan_status = plan.get("status").and_then(Value::as_str).unwrap_or("");
+    if plan_status == "published" {
+        return Err(ApiError::conflict(
+            "eop_already_published",
+            "cannot submit a published plan; publication is a terminal lifecycle step",
+        ));
+    }
+    if plan_status != "approved" {
+        return Err(ApiError::conflict(
+            "eop_not_approved",
+            format!("submit requires an approved plan, found {plan_status}"),
+        ));
+    }
+    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
+    let approval_id = web::string_value(ctx.body.get("approval_id"))
+        .or_else(|| web::string_value(ctx.body.get("approvalId")))
+        .or_else(|| {
+            plan.get("approval_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    if approval_id.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_REQUIRED,
+            "approval_required",
+            "submit requires the approved EOP approval",
+        ));
+    }
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve").await?;
+    if plan.get("approval_id").and_then(Value::as_str) != approval.get("id").and_then(Value::as_str)
+    {
+        return Err(ApiError::conflict(
+            "approval_entity_mismatch",
+            "the submit approval does not match the approval that admitted this plan",
+        ));
     }
     let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let seeds = domain::eop::plan_order_seeds(&to_data(&plan));
@@ -3695,27 +5136,53 @@ async fn eop_submit(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
                 "plan_version": plan.get("version"),
                 "source": "eop-submit",
             },
-            "created_by": ctx.actor(),
+            "created_by": actor.clone(),
         });
-        let order = tier2::write(
+        match tier2::write(
             ctx.client(),
             &opts,
             tier2::DISPATCH,
             input.as_object().cloned().unwrap_or_default(),
             Some(&order_id),
         )
-        .await?;
-        created.push(order);
+        .await
+        {
+            Ok(order) => created.push(order),
+            Err(error) if error.code == "record_exists" => existing_ids.push(order_id),
+            Err(error) => return Err(error),
+        }
     }
-    let order_ids: Vec<String> = existing_ids
-        .iter()
-        .cloned()
-        .chain(created.iter().filter_map(|order| order.get("id").and_then(Value::as_str).map(str::to_string)))
+    let previous_order_ids: Vec<String> = plan
+        .get("order_ids")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let order_ids: Vec<String> = previous_order_ids
+        .into_iter()
+        .chain(existing_ids.iter().cloned())
+        .chain(
+            created
+                .iter()
+                .filter_map(|order| order.get("id").and_then(Value::as_str).map(str::to_string)),
+        )
+        .collect::<std::collections::BTreeSet<String>>()
+        .into_iter()
         .collect();
     let mut patch = Map::new();
     patch.insert("status".into(), json!("approved"));
-    patch.insert("submitted_at".into(), json!(crate::now_iso()));
-    patch.insert("submitted_by".into(), ctx.actor().map(Value::String).unwrap_or(Value::Null));
+    patch.insert(
+        "submitted_at".into(),
+        plan.get("submitted_at")
+            .cloned()
+            .unwrap_or_else(|| json!(crate::now_iso())),
+    );
+    patch.insert("submitted_by".into(), json!(actor));
     patch.insert("order_ids".into(), json!(order_ids));
     let submitted = tier2::update(ctx.client(), &opts, tier2::EOP, id, patch, version).await?;
     let mut orders = Vec::new();
@@ -3757,7 +5224,9 @@ async fn eop_approval(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
         &actor,
     )
     .await?;
-    Ok(web::accepted(json!({ "approval": approval, "hitl_required": true })))
+    Ok(web::accepted(
+        json!({ "approval": approval, "hitl_required": true }),
+    ))
 }
 
 #[cfg(test)]
@@ -3790,6 +5259,26 @@ mod route_tests {
             Some("QA"),
             None,
             auth::ROLE_ADMIN,
+        );
+        auth::issue_session(
+            config,
+            &user,
+            auth::SessionExtras {
+                auth_source: Some("demo".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .access_token
+    }
+
+    fn responder_token(config: &Config) -> String {
+        let user = auth::shell_user(
+            "responder",
+            Some("responder@example.com"),
+            Some("Responder"),
+            None,
+            auth::ROLE_RESPONDER,
         );
         auth::issue_session(
             config,
@@ -3885,14 +5374,8 @@ mod route_tests {
         let app = app(state("http://127.0.0.1:1"));
         let (status, _, _) = call(app.clone(), Method::GET, "/v1/emergency", None, None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        let (status, _, _) = call(
-            app,
-            Method::GET,
-            "/v1/emergency",
-            Some("not-a-token"),
-            None,
-        )
-        .await;
+        let (status, _, _) =
+            call(app, Method::GET, "/v1/emergency", Some("not-a-token"), None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 
@@ -3947,7 +5430,9 @@ mod route_tests {
         )
         .await;
         Mock::given(method("GET"))
-            .and(path("/v1/capabilities/datasets/sos-emergency-events/entities"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-emergency-events/entities",
+            ))
             .and(query_param("limit", "500"))
             .and(query_param("offset", "0"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
@@ -4039,7 +5524,9 @@ mod route_tests {
         )
         .await;
         Mock::given(method("GET"))
-            .and(path("/v1/capabilities/datasets/sos-emergency-events/records/e1"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-emergency-events/records/e1",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "id": "e1",
                 "version": 3,
@@ -4047,11 +5534,14 @@ mod route_tests {
                 "updatedAt": "2026-11-01T00:00:00.000Z",
                 "data": { "title": "Flood", "status": "active" }
             })))
-            .expect(2)
+            .expect(3)
             .mount(&server)
             .await;
 
-        let state = AppState::new(config, Client::new(&server.uri(), Credentials::none()).unwrap());
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
         let app = app(state);
         let (status, headers, value) = call(
             app.clone(),
@@ -4092,7 +5582,9 @@ mod route_tests {
         )
         .await;
         Mock::given(method("GET"))
-            .and(path("/v1/capabilities/datasets/sos-emergency-events/records/e1"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-emergency-events/records/e1",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "id": "e1",
                 "version": 3,
@@ -4100,11 +5592,13 @@ mod route_tests {
                 "updatedAt": "2026-11-01T00:00:00.000Z",
                 "data": { "title": "Flood", "status": "active" }
             })))
-            .expect(1)
+            .expect(2)
             .mount(&server)
             .await;
         Mock::given(method("PATCH"))
-            .and(path("/v1/capabilities/datasets/sos-emergency-events/records/e1"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-emergency-events/records/e1",
+            ))
             .and(header("if-match", "\"3\""))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "id": "e1",
@@ -4117,7 +5611,10 @@ mod route_tests {
             .mount(&server)
             .await;
 
-        let state = AppState::new(config, Client::new(&server.uri(), Credentials::none()).unwrap());
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
         let (status, headers, value) = call(
             app(state),
             Method::PUT,
@@ -4129,6 +5626,701 @@ mod route_tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(headers.get("etag").unwrap(), "\"4\"");
         assert_eq!(value["record_version"], 4);
+    }
+
+    #[tokio::test]
+    async fn create_with_an_existing_id_returns_409_instead_of_overwriting() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-emergency-events",
+            "SynapseCitySOS emergency events",
+            "EmergencyEvent",
+            "Emergency event command records",
+            true,
+        )
+        .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/capabilities/datasets/sos-emergency-events/records"))
+            .respond_with(ResponseTemplate::new(409).set_body_json(json!({
+                "error": "record_exists"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(config, Client::new(&server.uri(), Credentials::none()).unwrap());
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency",
+            Some(&token),
+            Some(json!({ "id": "existing-event", "title": "Overwrite attempt" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "record_exists");
+    }
+
+    #[tokio::test]
+    async fn generic_put_cannot_change_lifecycle_fields() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = responder_token(&config);
+        let app = app(AppState::new(
+            config,
+            Client::new("http://127.0.0.1:1", Credentials::none()).unwrap(),
+        ));
+        let (status, _, body) = call(
+            app,
+            Method::PUT,
+            "/v1/emergency/eop/eop-1",
+            Some(&token),
+            Some(json!({ "status": "published", "title": "Bypass" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"], "controlled_field_forbidden");
+        assert_eq!(body["details"]["field"], "status");
+    }
+
+    #[tokio::test]
+    async fn published_eop_is_immutable_through_generic_put() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-eop-plans",
+            "SynapseCitySOS EOP plans",
+            "EmergencyOperationsPlan",
+            "Emergency operations plans",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-eop-plans/records/eop-1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "eop-1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "title": "Published plan", "status": "published" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::PUT,
+            "/v1/emergency/eop/eop-1",
+            Some(&token),
+            Some(json!({ "title": "Rewrite published plan" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "record_immutable");
+    }
+
+    #[tokio::test]
+    async fn eop_approve_and_submit_require_a_real_approval() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-eop-plans",
+            "SynapseCitySOS EOP plans",
+            "EmergencyOperationsPlan",
+            "Emergency operations plans",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-eop-plans/records/eop-1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "eop-1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "title": "Draft plan", "status": "draft" }
+            })))
+            .expect(2)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state.clone()),
+            Method::POST,
+            "/v1/emergency/eop/eop-1/approve",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::PRECONDITION_REQUIRED);
+        assert_eq!(body["error"], "approval_required");
+
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/eop/eop-1/submit",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "eop_not_approved");
+    }
+
+    #[tokio::test]
+    async fn eop_submit_never_demotes_a_published_plan() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-eop-plans",
+            "SynapseCitySOS EOP plans",
+            "EmergencyOperationsPlan",
+            "Emergency operations plans",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-eop-plans/records/eop-1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "eop-1",
+                "version": 5,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "title": "Published plan", "status": "published" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/eop/eop-1/submit",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "eop_already_published");
+    }
+
+    #[tokio::test]
+    async fn dispatch_terminal_order_cannot_be_reopened() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 4,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "canceled", "task_title": "Closed order" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/complete",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "order_terminal");
+    }
+
+    #[tokio::test]
+    async fn dispatch_assignment_requires_approval_even_when_hitl_was_optional() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let app = app(AppState::new(
+            config,
+            Client::new("http://127.0.0.1:1", Credentials::none()).unwrap(),
+        ));
+        let (status, _, body) = call(
+            app,
+            Method::POST,
+            "/v1/emergency/dispatch/d1/approve",
+            Some(&token),
+            Some(json!({ "assigned_resource_unit_id": "u1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::PRECONDITION_REQUIRED);
+        assert_eq!(body["error"], "approval_required");
+    }
+
+    #[tokio::test]
+    async fn dispatch_assignment_rejects_an_already_reserved_unit() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        mount_dataset(
+            &server,
+            "sos-resource-units",
+            "SynapseCitySOS resource units",
+            "ResourceUnit",
+            "Emergency response resources",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "entityId": "d1",
+                    "action": "dispatch.assign",
+                    "requester": "other-operator",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "pending", "task_title": "Rescue" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": 3,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "status": "assigned",
+                    "assigned_dispatch_order_id": "other-order",
+                    "resource_type": "personnel"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/approve",
+            Some(&token),
+            Some(json!({ "approval_id": "ap1", "assigned_resource_unit_id": "u1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "resource_unit_unavailable");
+    }
+
+    #[tokio::test]
+    async fn mutual_aid_accept_rejects_a_stale_expected_version() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-mutual-aid-requests",
+            "SynapseCitySOS mutual aid requests",
+            "MutualAidRequest",
+            "Cross-agency resource requests, accepts and handoffs",
+            false,
+        )
+        .await;
+        mount_dataset(
+            &server,
+            "sos-resource-units",
+            "SynapseCitySOS resource units",
+            "ResourceUnit",
+            "Emergency response resources",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-mutual-aid-requests/records/ma-1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "ma-1",
+                "version": 3,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "id": "ma-1",
+                    "request_number": "MA-1",
+                    "resource_type": "ambulance",
+                    "quantity": 5,
+                    "filled_quantity": 0,
+                    "location": {"city": "Hanoi"},
+                    "urgency": "high",
+                    "contact": {"name": "Duty"},
+                    "requesting_agency": "Partner",
+                    "status": "open",
+                    "history": [],
+                    "created_at": "2026-11-01T00:00:00.000Z",
+                    "updated_at": "2026-11-01T00:00:00.000Z"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": 1,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {"status": "available", "available_quantity": 10}
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/mutual-aid/requests/ma-1/accept",
+            Some(&token),
+            Some(json!({ "unit_id": "u1", "accepted_quantity": 1, "expected_version": 2 })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "request_version_conflict");
+    }
+
+    #[tokio::test]
+    async fn tier2_exchange_issues_an_sos_session_for_a_verified_bearer() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/auth/me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "user": { "id": "u1", "email": "duty@example.com", "displayName": "Duty" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let (status, _, body) = call(
+            app(state(&server.uri())),
+            Method::POST,
+            "/v1/auth/exchange",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["error"], "tier2_token_required");
+
+        let builder = axum::http::Request::builder()
+            .method(Method::POST)
+            .uri("/v1/auth/exchange")
+            .header("authorization", "Bearer tier2-user-token");
+        let response = app(state(&server.uri()))
+            .oneshot(builder.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(body["access_token"].as_str().unwrap_or("").len() > 20);
+        assert_eq!(body["user"]["email"], "duty@example.com");
+    }
+
+    #[tokio::test]
+    async fn hazard_status_transition_is_explicit_and_versioned() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-hazard-layers",
+            "SynapseCitySOS hazard layers",
+            "HazardLayer",
+            "Flood, storm and other hazard observations",
+            true,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-hazard-layers/records/h1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "h1",
+                "version": 1,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "active", "is_active": true, "title": "Flood" }
+            })))
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-hazard-layers/records/h1",
+            ))
+            .and(header("if-match", "\"1\""))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "h1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": { "status": "resolved", "is_active": false, "title": "Flood" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/hazards/h1/status",
+            Some(&token),
+            Some(json!({ "status": "resolved", "if_version": 1 })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["record_version"], 2);
+        assert_eq!(body["status"], "resolved");
+    }
+
+    #[tokio::test]
+    async fn public_status_counts_the_merged_feed_and_reports_stale_ingest() {
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-hazard-layers",
+            "SynapseCitySOS hazard layers",
+            "HazardLayer",
+            "Flood, storm and other hazard observations",
+            true,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-hazard-layers/entities"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/hazards/today"))
+            .and(query_param("hours", "72"))
+            .and(query_param("limit", "200"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "hazards": [{
+                    "id": "h1",
+                    "hazard_id": "h1",
+                    "title": "Flood warning",
+                    "published_at": crate::now_iso(),
+                    "severity": "high",
+                    "event_type": "flood"
+                }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/hazards/status"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "configured": true,
+                "status": "ok",
+                "last_run_at": "2026-01-01T00:00:00.000Z",
+                "last_success_at": "2026-01-01T00:00:00.000Z"
+            })))
+            .mount(&server)
+            .await;
+        let (status, _, body) = call(
+            app(state(&server.uri())),
+            Method::GET,
+            "/v1/emergency/public/status",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["hazard_feed"]["records_visible"], 1);
+        assert_eq!(body["hazard_feed"]["stale"], true);
+        assert_eq!(body["hazard_feed"]["ingest"]["configured"], true);
+        assert_eq!(body["hazard_feed"]["ingest"]["stale"], true);
+        assert_eq!(body["status"], "degraded");
+    }
+
+    #[tokio::test]
+    async fn anonymous_public_reads_are_rate_limited() {
+        let mut config = Config::for_test("http://127.0.0.1:1");
+        config.rate_limit_disabled = false;
+        config.public_rate_max = 1;
+        let app = app(AppState::new(
+            config,
+            Client::new("http://127.0.0.1:1", Credentials::none()).unwrap(),
+        ));
+        let (status, _, _) = call(app.clone(), Method::GET, "/v1/sos", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _, body) = call(app, Method::GET, "/v1/sos", None, None).await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(body["error"], "rate_limited");
+    }
+
+    #[tokio::test]
+    async fn hazard_snapshot_uses_the_feed_and_preserves_last_good_on_error() {
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-hazard-layers",
+            "SynapseCitySOS hazard layers",
+            "HazardLayer",
+            "Flood, storm and other hazard observations",
+            true,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-hazard-layers/entities"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/hazards/today"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "hazards": [{
+                    "id": "h1",
+                    "hazard_id": "h1",
+                    "title": "Feed-only flood",
+                    "published_at": crate::now_iso(),
+                    "severity": "high",
+                    "event_type": "flood"
+                }]
+            })))
+            .mount(&server)
+            .await;
+        let app_state = state(&server.uri());
+        let opts = RequestOptions::new().api_key("test-key");
+        let frame = hazard_snapshot_frame(&app_state, &opts, "initial").await;
+        assert!(frame.starts_with("event: hazards\n"), "{frame}");
+        assert!(frame.contains("\"records_visible\":1"), "{frame}");
+        assert!(frame.contains("Feed-only flood"), "{frame}");
+        assert!(app_state.hazard_last_good.lock().unwrap().is_some());
+
+        let failed_state = state("http://127.0.0.1:1");
+        let last_good = app_state.hazard_last_good.lock().unwrap().clone();
+        *failed_state.hazard_last_good.lock().unwrap() = last_good;
+        let error_frame = hazard_snapshot_frame(&failed_state, &opts, "fallback").await;
+        assert!(error_frame.starts_with("event: error\n"), "{error_frame}");
+        assert!(
+            error_frame.contains("\"has_snapshot\":true"),
+            "{error_frame}"
+        );
+        assert!(error_frame.contains("Feed-only flood"), "{error_frame}");
+    }
+
+    #[tokio::test]
+    async fn hazard_ingest_accepts_only_the_service_principal_or_dispatch_roles() {
+        let mut config = Config::for_test("http://127.0.0.1:1");
+        config.ingest_service_token = Some("svc-token".into());
+        let responder = responder_token(&config);
+        let app = app(AppState::new(
+            config,
+            Client::new("http://127.0.0.1:1", Credentials::none()).unwrap(),
+        ));
+        let (status, _, _) = call(
+            app.clone(),
+            Method::POST,
+            "/v1/hazards/ingest",
+            None,
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let (status, _, body) = call(
+            app.clone(),
+            Method::POST,
+            "/v1/hazards/ingest",
+            Some(&responder),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"], "forbidden");
+        let (status, _, _) = call(
+            app,
+            Method::POST,
+            "/v1/hazards/ingest",
+            Some("svc-token"),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "service principal must pass authentication"
+        );
     }
 }
 
@@ -4172,7 +6364,12 @@ mod route_family_tests {
         .access_token
     }
 
-    async fn call(method: Method, uri: &str, token: Option<&str>, body: Option<Value>) -> (StatusCode, Value) {
+    async fn call(
+        method: Method,
+        uri: &str,
+        token: Option<&str>,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
         let mut builder = Request::builder().method(method).uri(uri);
         if let Some(token) = token {
             builder = builder.header("authorization", format!("Bearer {token}"));
@@ -4249,23 +6446,11 @@ mod route_family_tests {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], "invalid_geometry");
 
-        let (status, body) = call(
-            Method::POST,
-            "/v1/ai/chat",
-            None,
-            Some(json!({})),
-        )
-        .await;
+        let (status, body) = call(Method::POST, "/v1/ai/chat", None, Some(json!({}))).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], "messages_required");
 
-        let (status, body) = call(
-            Method::POST,
-            "/v1/geo/geocode",
-            None,
-            Some(json!({})),
-        )
-        .await;
+        let (status, body) = call(Method::POST, "/v1/geo/geocode", None, Some(json!({}))).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["error"], "address_required");
     }

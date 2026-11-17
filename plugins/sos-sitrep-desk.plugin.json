@@ -152,7 +152,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-sitrep-create-submit"
       },
@@ -190,7 +190,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-sitrep-update-submit"
       },
@@ -210,7 +210,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: submit, publish or archive",
+            "label": "Decision: submit or archive (publish via SOS API)",
             "required": true
           },
           {
@@ -222,7 +222,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-sitrep-decision-submit"
       },
@@ -243,7 +243,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-sitrep-delete-submit"
       },
@@ -633,5 +633,5 @@
     "path": "plugins/sos-sitrep-desk.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:bb659fd936d24209e1d8fca8b39a0bdebb8037b6f3201c349634ac5d59d022c9"
+  "checksum": "sha256:baba4fadab98bc5f768b9c073abc11e5c3365cfa7ad43de4a798bc4e46b1d845"
 }

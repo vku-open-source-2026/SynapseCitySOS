@@ -164,7 +164,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-eop-create-submit"
       },
@@ -205,7 +205,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-eop-update-submit"
       },
@@ -225,7 +225,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: submit, approve, publish, reject or archive",
+            "label": "Decision: submit, reject or archive (approve/publish via SOS HITL)",
             "required": true
           },
           {
@@ -237,7 +237,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-eop-decision-submit"
       },
@@ -258,7 +258,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-eop-delete-submit"
       },
@@ -666,5 +666,5 @@
     "path": "plugins/sos-eop-console.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:3161941a92a15f74380876f8603f8303a2488bb764324786a0289cf27b5c88d4"
+  "checksum": "sha256:7faebc68b1fc1256e94729e1fc94e11c7f22b5fa53f2fa1b8206b3a8d0e9eab4"
 }

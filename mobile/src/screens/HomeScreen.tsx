@@ -126,7 +126,9 @@ export function HomeScreen({
           <Text style={styles.feedBody}>
             {health.state === 'ok'
               ? `${feedStatusLabel(feed?.hazard_feed?.status)} · cập nhật ${timeAgo(feed?.hazard_feed?.last_success_at || feed?.checked_at)}`
-              : 'API SOS đang suy giảm — dữ liệu có thể chưa đầy đủ.'}
+              : feed?.hazard_feed?.last_fetch_error || feed?.hazard_feed?.ingest?.error
+                ? `Nguồn tin suy giảm: ${feed?.hazard_feed?.last_fetch_error || feed?.hazard_feed?.ingest?.error}`
+                : 'Nguồn tin chưa cập nhật hoặc VNDMS đang gián đoạn — dữ liệu có thể chưa đầy đủ.'}
           </Text>
         </View>
         <Chip label={streamState === 'live' ? 'SSE' : streamState === 'degraded' ? 'DỰ PHÒNG' : 'POLL'} />

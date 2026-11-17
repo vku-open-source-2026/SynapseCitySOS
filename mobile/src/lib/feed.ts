@@ -10,8 +10,21 @@ export function feedHealth(status: FeedStatus | undefined): {
   if (status.data_available === false) return { state: 'unknown', label: 'Không xác định nguồn tin' };
   if (status.status !== 'ok') return { state: 'degraded', label: 'Nguồn tin suy giảm' };
   const feed = status.hazard_feed;
-  if (!feed || feed.stale || feed.status === 'error' || feed.status === 'stale' || feed.status === 'unconfigured') {
-    return { state: 'unknown', label: 'Không xác định nguồn tin' };
+  if (
+    !feed ||
+    feed.stale ||
+    feed.status === 'error' ||
+    feed.status === 'stale' ||
+    feed.status === 'degraded' ||
+    feed.status === 'unconfigured' ||
+    feed.ingest_stale === true ||
+    feed.ingest?.stale === true ||
+    feed.ingest?.status === 'failed' ||
+    feed.ingest?.status === 'error' ||
+    feed.ingest?.status === 'unconfigured'
+  ) {
+    // A stale/unconfigured VNDMS ingest is degraded, never "unknown safe".
+    return { state: 'degraded', label: 'Nguồn tin suy giảm' };
   }
   return { state: 'ok', label: 'Nguồn tin hoạt động' };
 }

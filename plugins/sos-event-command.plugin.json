@@ -244,11 +244,6 @@
             "label": "Severity"
           },
           {
-            "name": "status",
-            "type": "text",
-            "label": "Status"
-          },
-          {
             "name": "district",
             "type": "text",
             "label": "District"
@@ -268,7 +263,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-event-update-submit"
       },
@@ -288,7 +283,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: monitor, activate, contain or archive",
+            "label": "Decision: monitor, activate or contain",
             "required": true
           },
           {
@@ -300,7 +295,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-event-phase-submit"
       },
@@ -347,7 +342,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-event-delete-submit"
       },
@@ -782,12 +777,6 @@
               "required": false
             },
             {
-              "field": "status",
-              "source": "event",
-              "value": "values.status",
-              "required": false
-            },
-            {
               "field": "district",
               "source": "event",
               "value": "values.district",
@@ -948,5 +937,5 @@
     "path": "plugins/sos-event-command.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:2f1a1fe7bc3279a39a3402c266d0d12ecc06f132aca506c7729f50e4b1a85c92"
+  "checksum": "sha256:1d0836a44b4d671abcd00b23e8324de1ebef5e1438e0e26c1d2123c2783e3f12"
 }

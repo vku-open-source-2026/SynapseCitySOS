@@ -36,10 +36,16 @@ pub struct Config {
     pub stream_rate_max: u32,
     pub geo_rate_max: u32,
     pub ai_rate_max: u32,
+    pub public_rate_max: u32,
+    pub vndms_stale_minutes: u64,
+    pub hazard_feed_stale_minutes: u64,
+    pub ingest_service_token: Option<String>,
 }
 
 fn env(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|value| value.trim().to_string())
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
 }
 
 fn env_bool(name: &str) -> bool {
@@ -61,6 +67,28 @@ fn env_u32(name: &str, fallback: u32) -> u32 {
         .and_then(|value| value.parse::<u32>().ok())
         .filter(|value| *value > 0)
         .unwrap_or(fallback)
+}
+
+/// Production must opt into HITL explicitly; a missing value is a startup
+/// error rather than a silent four-eyes bypass. Development keeps the previous
+/// opt-in behaviour unless the flag is set.
+fn resolve_hitl_required(is_production: bool, raw: Option<String>) -> Result<bool, String> {
+    let raw = raw.unwrap_or_default();
+    let value = raw.trim().to_ascii_lowercase();
+    if value.is_empty() {
+        if is_production {
+            return Err(
+                "SOS_HITL_REQUIRED must be set in production (true keeps four-eyes approval; false is an explicit override)"
+                    .into(),
+            );
+        }
+        return Ok(false);
+    }
+    match value.as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err(format!("SOS_HITL_REQUIRED must be a boolean, got {raw}")),
+    }
 }
 
 fn env_list(name: &str, fallback: &str) -> Vec<String> {
@@ -112,7 +140,10 @@ fn is_loopback_host(host: &str) -> bool {
                 std::net::IpAddr::V4(v4) => v4.is_loopback(),
                 std::net::IpAddr::V6(v6) => {
                     v6.is_loopback()
-                        || v6.to_ipv4_mapped().map(|mapped| mapped.is_loopback()).unwrap_or(false)
+                        || v6
+                            .to_ipv4_mapped()
+                            .map(|mapped| mapped.is_loopback())
+                            .unwrap_or(false)
                 }
             })
             .unwrap_or(false)
@@ -137,9 +168,7 @@ fn is_private_hostname(host: &str) -> bool {
 /// only when `ALLOW_LOCAL_DEPENDENCIES=true` outside production.
 fn public_dependency(raw: &str, allow_local: bool, is_production: bool) -> Result<String, String> {
     if is_production && allow_local {
-        return Err(
-            "ALLOW_LOCAL_DEPENDENCIES=true is refused in production".into(),
-        );
+        return Err("ALLOW_LOCAL_DEPENDENCIES=true is refused in production".into());
     }
     let url = Url::parse(raw)
         .map_err(|error| format!("SYNAPSEDX_BASE_URL is not an absolute URL: {raw} ({error})"))?;
@@ -234,6 +263,10 @@ impl Config {
             .collect();
 
         let demo_allowed = auth_mode == "demo" && env_bool("ALLOW_DEMO_AUTH") && !is_production;
+        let hitl_required = resolve_hitl_required(is_production, env("SOS_HITL_REQUIRED"))?;
+        let vndms_stale_minutes = env_u64("VNDMS_STALE_MINUTES", 60).clamp(5, 24 * 60);
+        let hazard_feed_stale_minutes =
+            env_u64("SOS_HAZARD_FEED_STALE_MINUTES", vndms_stale_minutes).clamp(5, 24 * 60);
 
         Ok(Self {
             port: env("PORT")
@@ -242,7 +275,9 @@ impl Config {
             tier2_url,
             tier2_api_key: env("SYNAPSEDX_API_KEY").filter(|value| !value.is_empty()),
             tier2_token: env("SYNAPSEDX_TOKEN").filter(|value| !value.is_empty()),
-            tier2_timeout: Duration::from_millis(env_u64("SYNAPSEDX_TIMEOUT_MS", 20_000).clamp(1_000, 120_000)),
+            tier2_timeout: Duration::from_millis(
+                env_u64("SYNAPSEDX_TIMEOUT_MS", 20_000).clamp(1_000, 120_000),
+            ),
             allow_local_dependencies: allow_local,
             auth_secret,
             auth_secret_ephemeral,
@@ -253,11 +288,10 @@ impl Config {
             default_role: env("SOS_AUTH_DEFAULT_ROLE")
                 .unwrap_or_else(|| "responder".into())
                 .to_ascii_lowercase(),
-            cors_origin: env("CORS_ORIGIN")
-                .unwrap_or_else(|| "https://sos.synapsecity.sbs".into()),
-            stream_poll_ms: env_u64("SOS_STREAM_EVENT_POLL_MS", 2_000).clamp(500, 30_000),
+            cors_origin: env("CORS_ORIGIN").unwrap_or_else(|| "https://sos.synapsecity.sbs".into()),
+            stream_poll_ms: env_u64("SOS_STREAM_EVENT_POLL_MS", 30_000).clamp(5_000, 300_000),
             max_scan_records: env_u64("SOS_MAX_SCAN_RECORDS", 5_000) as usize,
-            hitl_required: env_bool("SOS_HITL_REQUIRED"),
+            hitl_required,
             approval_sla_minutes: env_u64("SOS_APPROVAL_SLA_MINUTES", 15).clamp(1, 7 * 24 * 60),
             required_approvals: env_u32("SOS_REQUIRED_APPROVALS", 1).clamp(1, 5),
             dispatch_approver_roles: env_list(
@@ -277,6 +311,10 @@ impl Config {
             stream_rate_max: env_u32("RATE_LIMIT_STREAM_MAX", 30),
             geo_rate_max: env_u32("RATE_LIMIT_GEO_MAX", 120),
             ai_rate_max: env_u32("RATE_LIMIT_AI_MAX", 30),
+            public_rate_max: env_u32("RATE_LIMIT_PUBLIC_MAX", 600),
+            vndms_stale_minutes,
+            hazard_feed_stale_minutes,
+            ingest_service_token: env("SOS_INGEST_SERVICE_TOKEN").filter(|value| !value.is_empty()),
         })
     }
 
@@ -300,7 +338,6 @@ impl Config {
             .map_err(|error| error.to_string())
     }
 }
-
 
 #[cfg(test)]
 impl Config {
@@ -333,14 +370,37 @@ impl Config {
             stream_rate_max: 1_000,
             geo_rate_max: 1_000,
             ai_rate_max: 1_000,
+            public_rate_max: 1_000,
+            vndms_stale_minutes: 60,
+            hazard_feed_stale_minutes: 60,
+            ingest_service_token: None,
         }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::public_dependency;
+    use super::{public_dependency, resolve_hitl_required};
+
+    #[test]
+    fn production_requires_an_explicit_hitl_decision() {
+        assert!(resolve_hitl_required(true, None).is_err());
+        assert!(resolve_hitl_required(true, Some("  ".into())).is_err());
+        assert_eq!(
+            resolve_hitl_required(true, Some("true".into())).unwrap(),
+            true
+        );
+        assert_eq!(
+            resolve_hitl_required(true, Some("false".into())).unwrap(),
+            false
+        );
+        assert!(resolve_hitl_required(true, Some("maybe".into())).is_err());
+        assert_eq!(resolve_hitl_required(false, None).unwrap(), false);
+        assert_eq!(
+            resolve_hitl_required(false, Some("on".into())).unwrap(),
+            true
+        );
+    }
 
     #[test]
     fn accepts_public_https_endpoint() {

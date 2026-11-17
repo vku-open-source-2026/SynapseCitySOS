@@ -69,17 +69,10 @@ export const sosApi = {
     return request<SheltersResponse>(`/emergency/resources/shelters/near?${query.toString()}`);
   },
 
-  login: (email: string, password: string) =>
-    request<AuthResponse>('/auth/login', {
-      method: 'POST',
-      body: { email: email.trim(), password },
-    }),
-
-  register: (input: { email: string; password: string; full_name: string; phone?: string }) =>
-    request<AuthResponse>('/auth/register', { method: 'POST', body: input }),
-
-  logout: (token: string) =>
-    request<unknown>('/auth/logout', { method: 'POST', token }),
+  // The only supported session path is the SOS exchange endpoint. The caller
+  // already holds a verified Tier-2 bearer from the SynapseDX workspace.
+  exchangeTier2Token: (token: string) =>
+    request<AuthResponse>('/auth/exchange', { method: 'POST', token }),
 
   listResponderEvents: async (token: string): Promise<SosEvent[]> =>
     asList<SosEvent>(await request('/emergency?limit=50', { token })),

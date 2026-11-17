@@ -19,7 +19,12 @@ services:
       SOS_AUTH_MODE: ${SOS_AUTH_MODE:-tier2}
       SOS_BOOTSTRAP_ADMIN_EMAILS: ${SOS_BOOTSTRAP_ADMIN_EMAILS:-}
       SOS_AUTH_DEFAULT_ROLE: ${SOS_AUTH_DEFAULT_ROLE:-responder}
-      SOS_AUTH_EXCHANGE: ${SOS_AUTH_EXCHANGE:-false}
+      # Production refuses to start when this is unset. Keep four-eyes
+      # approval enabled for EOP/dispatch lifecycle actions.
+      SOS_HITL_REQUIRED: ${SOS_HITL_REQUIRED:-true}
+      # Scoped service principal accepted only by POST /v1/hazards/ingest.
+      # Configure the Tier-2 scheduled ingest with this bearer secret.
+      SOS_INGEST_SERVICE_TOKEN: ${SOS_INGEST_SERVICE_TOKEN:-}
       # Production refuses ALLOW_DEMO_AUTH=true at startup. Keep it false in a
       # production stack.
       ALLOW_DEMO_AUTH: ${ALLOW_DEMO_AUTH:-false}
@@ -27,10 +32,12 @@ services:
       RATE_LIMIT_STREAM_MAX: ${RATE_LIMIT_STREAM_MAX:-30}
       RATE_LIMIT_GEO_MAX: ${RATE_LIMIT_GEO_MAX:-120}
       RATE_LIMIT_AI_MAX: ${RATE_LIMIT_AI_MAX:-30}
+      RATE_LIMIT_PUBLIC_MAX: ${RATE_LIMIT_PUBLIC_MAX:-600}
       VNDMS_STALE_MINUTES: ${VNDMS_STALE_MINUTES:-60}
+      SOS_HAZARD_FEED_STALE_MINUTES: ${SOS_HAZARD_FEED_STALE_MINUTES:-60}
       SYNAPSEDX_TIMEOUT_MS: ${SYNAPSEDX_TIMEOUT_MS:-20000}
       SYNAPSEDX_AI_TIMEOUT_MS: ${SYNAPSEDX_AI_TIMEOUT_MS:-45000}
-      SOS_STREAM_EVENT_POLL_MS: ${SOS_STREAM_EVENT_POLL_MS:-2000}
+      SOS_STREAM_EVENT_POLL_MS: ${SOS_STREAM_EVENT_POLL_MS:-30000}
     expose: ["8084"]
     networks: [synapsecity-sos]
   gateway:

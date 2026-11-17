@@ -42,7 +42,21 @@ describe('feed health', () => {
   it('never reports ok for a stale feed', () => {
     const status = feed();
     status.hazard_feed.stale = true;
-    expect(feedHealth(status).state).toBe('unknown');
+    expect(feedHealth(status).state).toBe('degraded');
+  });
+
+  it('reports degraded when VNDMS ingest is stale or unconfigured', () => {
+    const status = feed();
+    status.hazard_feed.ingest_stale = true;
+    status.hazard_feed.ingest = {
+      status: 'unconfigured',
+      configured: false,
+      stale: true,
+      last_run_at: null,
+      last_success_at: null,
+      error: 'never_run',
+    };
+    expect(feedHealth(status).state).toBe('degraded');
   });
 
   it('reports degraded for a degraded dependency', () => {

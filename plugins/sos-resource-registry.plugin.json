@@ -154,11 +154,6 @@
             "required": true
           },
           {
-            "name": "status",
-            "type": "text",
-            "label": "Status"
-          },
-          {
             "name": "capacity",
             "type": "number",
             "label": "Capacity"
@@ -200,7 +195,7 @@
         "resource": "resources",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-resource-create-submit"
       },
@@ -264,7 +259,7 @@
         "resource": "resources",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-resource-update-submit"
       },
@@ -284,7 +279,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: available, deploy, unavailable, maintain or retire",
+            "label": "Decision: available, unavailable or maintain",
             "required": true
           },
           {
@@ -296,7 +291,7 @@
         "resource": "resources",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-resource-status-submit"
       },
@@ -317,7 +312,7 @@
         "resource": "resources",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-resource-delete-submit"
       },
@@ -585,12 +580,6 @@
               "required": true
             },
             {
-              "field": "status",
-              "source": "event",
-              "value": "values.status",
-              "required": false
-            },
-            {
               "field": "capacity",
               "source": "event",
               "value": "values.capacity",
@@ -817,5 +806,5 @@
     "path": "plugins/sos-resource-registry.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:24dbbe395607647df80a6fe1040908522c763e3b12e2ad06e77c84ca6b408a89"
+  "checksum": "sha256:7c8aa58d61c0b1c187278673f789c922e9eeada3c33f723ed6448af2ece6637c"
 }

@@ -170,43 +170,6 @@
         "onSubmit": "act-dispatch-create-submit"
       },
       {
-        "id": "dispatch-assign",
-        "type": "form",
-        "title": "Assign a resource unit",
-        "width": "half",
-        "action": "execute",
-        "fields": [
-          {
-            "name": "record_id",
-            "type": "text",
-            "label": "Dispatch order id",
-            "required": true
-          },
-          {
-            "name": "decision",
-            "type": "text",
-            "label": "Decision: assign"
-          },
-          {
-            "name": "assigned_resource_unit_id",
-            "type": "text",
-            "label": "Resource unit id",
-            "required": true
-          },
-          {
-            "name": "notes",
-            "type": "textarea",
-            "label": "Notes"
-          }
-        ],
-        "resource": "dispatch",
-        "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
-        },
-        "onSubmit": "act-dispatch-assign-submit"
-      },
-      {
         "id": "dispatch-start",
         "type": "form",
         "title": "Start transit",
@@ -233,7 +196,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-dispatch-start-submit"
       },
@@ -259,30 +222,9 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-dispatch-arrive-submit"
-      },
-      {
-        "id": "dispatch-complete",
-        "type": "form",
-        "title": "Complete a dispatch order",
-        "width": "half",
-        "action": "update",
-        "fields": [
-          {
-            "name": "order_id",
-            "type": "text",
-            "label": "Dispatch order id",
-            "required": true
-          }
-        ],
-        "resource": "dispatch",
-        "workflowRef": {
-          "name": "sos-dispatch-complete",
-          "checksum": "db4d5752f4615436852703930ec9ec00f78054b79c879be27385b1225edfe9b2"
-        },
-        "onSubmit": "act-dispatch-complete-submit"
       },
       {
         "id": "dispatch-reject",
@@ -630,57 +572,6 @@
         }
       },
       {
-        "id": "act-dispatch-assign-submit",
-        "type": "action",
-        "title": "Submit Assign a resource unit",
-        "operation": {
-          "kind": "execute",
-          "target": "dispatch-assign",
-          "mappings": [
-            {
-              "field": "record_id",
-              "source": "event",
-              "value": "values.record_id",
-              "required": true
-            },
-            {
-              "field": "decision",
-              "source": "event",
-              "value": "values.decision",
-              "required": false
-            },
-            {
-              "field": "assigned_resource_unit_id",
-              "source": "event",
-              "value": "values.assigned_resource_unit_id",
-              "required": true
-            },
-            {
-              "field": "notes",
-              "source": "event",
-              "value": "values.notes",
-              "required": false
-            }
-          ],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
-        "id": "act-dispatch-assign-open",
-        "type": "action",
-        "title": "Open Assign a resource unit",
-        "operation": {
-          "kind": "openForm",
-          "target": "dispatch-assign",
-          "mappings": [],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
         "id": "act-dispatch-start-submit",
         "type": "action",
         "title": "Submit Start transit",
@@ -765,39 +656,6 @@
         }
       },
       {
-        "id": "act-dispatch-complete-submit",
-        "type": "action",
-        "title": "Submit Complete a dispatch order",
-        "operation": {
-          "kind": "update",
-          "target": "dispatch-complete",
-          "mappings": [
-            {
-              "field": "order_id",
-              "source": "event",
-              "value": "values.order_id",
-              "required": true
-            }
-          ],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
-        "id": "act-dispatch-complete-open",
-        "type": "action",
-        "title": "Open Complete a dispatch order",
-        "operation": {
-          "kind": "openForm",
-          "target": "dispatch-complete",
-          "mappings": [],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
         "id": "act-dispatch-reject-submit",
         "type": "action",
         "title": "Submit Reject a dispatch order",
@@ -837,5 +695,5 @@
     "path": "plugins/sos-dispatch-board.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:cf0e2f587b7564d33ce6c8dda5a5b3a71d5ce25631243c93f329090e231b4a40"
+  "checksum": "sha256:dafbc5526da6c60fb8e3fa9451d88d930064af879b51e0bba62fd070ffc9e6ec"
 }

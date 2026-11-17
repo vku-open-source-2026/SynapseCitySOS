@@ -215,7 +215,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-hazard-create-submit"
       },
@@ -263,7 +263,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-hazard-update-submit"
       },
@@ -283,7 +283,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: expire or resolve",
+            "label": "Decision: activate or monitor (expire/resolve via SOS API)",
             "required": true
           },
           {
@@ -295,7 +295,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-hazard-decision-submit"
       },
@@ -316,7 +316,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-hazard-delete-submit"
       },
@@ -337,7 +337,7 @@
         "resource": "hazardIngest",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-ingest-create-submit"
       },
@@ -357,7 +357,7 @@
           {
             "name": "decision",
             "type": "text",
-            "label": "Decision: start, complete or fail",
+            "label": "Ingest runs are created by the SOS ingest API",
             "required": true
           },
           {
@@ -379,7 +379,7 @@
         "resource": "hazardIngest",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "06b0881691d078f0adabb3157395d1b2f4f2ff13eab2f9767d590a5af15369f0"
+          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
         },
         "onSubmit": "act-ingest-decision-submit"
       },
@@ -1001,5 +1001,5 @@
     "path": "plugins/sos-hazard-watch.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:4b579e80e87d0fa4cebef827cd38a5dd903a644614287762d6e6159ac1adccfb"
+  "checksum": "sha256:1a501a06f47c71618f9a3551e0a8c52c330dfb0da1412df5987c042c5c7f2fd3"
 }
