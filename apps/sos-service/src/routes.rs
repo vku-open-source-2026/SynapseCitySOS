@@ -1410,6 +1410,29 @@ async fn dispatch_create(ctx: Ctx<'_>) -> ApiResult<Response> {
 
 async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
     let opts = ctx.opts();
+    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
+    // Optimizer assignments are a HITL-gated write (docs/HITL.md): without an
+    // approved `dispatch.assign` approval for the emergency event the plan is
+    // returned as a read-only proposal and no order/unit state changes.
+    let approval_id = web::string_value(ctx.body.get("approval_id"))
+        .or_else(|| web::string_value(ctx.body.get("approvalId")))
+        .unwrap_or_default();
+    let approval = if approval_id.is_empty() {
+        None
+    } else {
+        let event_id = web::string_value(ctx.body.get("emergency_event_id"))
+            .or_else(|| web::string_value(ctx.body.get("emergencyEventId")))
+            .ok_or_else(|| {
+                ApiError::bad_request(
+                    "emergency_event_id_required",
+                    "applying optimizer assignments requires emergency_event_id",
+                )
+            })?;
+        Some(
+            assert_approval_ready(&ctx, &approval_id, &event_id, "dispatch.assign", &actor)
+                .await?,
+        )
+    };
     let orders = tier2::list_all(
         ctx.client(),
         &opts,
@@ -1429,10 +1452,34 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
         &maps_to_data(&resources.items),
         domain::optimizer::OptimizeOptions::default(),
     );
+    if approval.is_none() {
+        let suggested: Vec<Value> = plan
+            .assignments
+            .iter()
+            .filter_map(|decision| serde_json::to_value(decision).ok())
+            .collect();
+        return Ok(web::json_response(json!({
+            "optimized": plan.assignments.len(),
+            "auto_assigned": 0,
+            "stale_flagged": 0,
+            "reservation_failed": 0,
+            "eta_reestimated": 0,
+            "unassignable": plan.unassignable.len(),
+            "candidates": orders.items.iter().filter(|order| {
+                let status = order.get("status").and_then(Value::as_str).unwrap_or("pending");
+                !["completed", "canceled", "rejected"].contains(&status)
+            }).count(),
+            "algorithm": "sos-capability-match-v2",
+            "triggered_by": actor,
+            "optimized_at": crate::now_iso(),
+            "applied": false,
+            "suggested": suggested,
+            "note": "supply an approved dispatch.assign approval (entity = the emergency event) to apply this plan",
+        })));
+    }
     let mut auto_assigned = 0usize;
     let mut stale_flagged = 0usize;
     let mut reservation_failed = 0usize;
-    let actor = ctx.actor().unwrap_or_else(|| "sos-operator".into());
     for decision in &plan.assignments {
         let Some(current) = orders.items.iter().find(|order| {
             order.get("id").and_then(Value::as_str) == Some(decision.order_id.as_str())
@@ -1524,6 +1571,20 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
         patch.insert("eta_minutes".into(), json!(decision.eta_minutes));
         patch.insert("assignments".into(), Value::Array(assignments));
         patch.insert("assigned_by".into(), json!(actor));
+        // Mirror dispatch_approve: the applied order records which approval
+        // admitted the batch assignment and who carried it in.
+        if let Some(approval) = approval.as_ref() {
+            patch.insert("approval_id".into(), approval.get("id").cloned().unwrap_or(Value::Null));
+            patch.insert("approved_by".into(), json!(actor));
+            patch.insert(
+                "approval_roles".into(),
+                approval
+                    .get("approverRoles")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            );
+            patch.insert("approved_at".into(), json!(crate::now_iso()));
+        }
         let metadata = current
             .get("metadata")
             .and_then(Value::as_object)
@@ -1608,8 +1669,10 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
             !["completed", "canceled", "rejected"].contains(&status)
         }).count(),
         "algorithm": "sos-capability-match-v2",
-        "triggered_by": ctx.actor().unwrap_or_else(|| "sos-operator".into()),
+        "triggered_by": actor,
         "optimized_at": crate::now_iso(),
+        "applied": true,
+        "approval_id": approval.as_ref().and_then(|approval| approval.get("id").cloned()),
     })))
 }
 
@@ -6318,6 +6381,315 @@ mod route_tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "assigned");
         assert_eq!(body["approval_id"], "ap1");
+    }
+
+    async fn mount_optimize_fixtures(server: &MockServer) {
+        mount_dataset(
+            server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        mount_dataset(
+            server,
+            "sos-resource-units",
+            "SynapseCitySOS resource units",
+            "ResourceUnit",
+            "Emergency response resources",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-dispatch-orders/records"))
+            .and(query_param("limit", "500"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [
+                    {
+                        "id": "d1", "version": 1,
+                        "createdAt": "2026-11-01T00:00:00.000Z",
+                        "updatedAt": "2026-11-01T00:00:00.000Z",
+                        "data": {
+                            "id": "d1", "status": "pending", "priority": "high",
+                            "required_capability": "personnel", "district": "A"
+                        }
+                    },
+                    {
+                        "id": "d2", "version": 1,
+                        "createdAt": "2026-11-01T00:00:00.000Z",
+                        "updatedAt": "2026-11-01T00:00:00.000Z",
+                        "data": {
+                            "id": "d2", "status": "pending", "priority": "low",
+                            "required_capability": "shelter", "district": "A"
+                        }
+                    }
+                ],
+                "total": 2, "limit": 500, "offset": 0
+            })))
+            .expect(1)
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-resource-units/records"))
+            .and(query_param("limit", "500"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [
+                    {
+                        "id": "u1", "version": 1,
+                        "createdAt": "2026-11-01T00:00:00.000Z",
+                        "updatedAt": "2026-11-01T00:00:00.000Z",
+                        "data": {
+                            "id": "u1", "status": "available",
+                            "resource_type": "personnel", "district": "A"
+                        }
+                    }
+                ],
+                "total": 1, "limit": 500, "offset": 0
+            })))
+            .expect(1)
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn optimize_without_an_approval_returns_a_read_only_proposal() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_optimize_fixtures(&server).await;
+        // No approval_id: nothing may be written, not even stale flags.
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/optimize",
+            Some(&token),
+            Some(json!({ "max_orders": 250 })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["applied"], false);
+        assert_eq!(body["auto_assigned"], 0);
+        assert_eq!(body["stale_flagged"], 0);
+        assert_eq!(body["optimized"], 1);
+        assert_eq!(body["suggested"][0]["order_id"], "d1");
+        assert_eq!(body["suggested"][0]["resource_unit_id"], "u1");
+        assert!(body["note"].as_str().unwrap_or("").contains("approval"));
+    }
+
+    #[tokio::test]
+    async fn optimize_with_a_four_eyes_event_approval_applies_assignments() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let officer = officer_token(&config, "officer");
+        let server = MockServer::start().await;
+        mount_optimize_fixtures(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "entityId": "e1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1", "version": 1,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "id": "u1", "status": "available", "resource_type": "personnel", "district": "A" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .and(body_partial_json(json!({
+                "data": { "status": "assigned", "assigned_dispatch_order_id": "d1" }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1", "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": { "id": "u1", "status": "assigned", "assigned_dispatch_order_id": "d1" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1", "version": 1,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "id": "d1", "status": "pending", "priority": "high",
+                    "required_capability": "personnel", "district": "A"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .and(body_partial_json(json!({
+                "data": { "status": "assigned", "approval_id": "ap1" }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1", "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": {
+                    "id": "d1", "status": "assigned",
+                    "assigned_resource_unit_id": "u1", "approval_id": "ap1"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d2",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d2", "version": 1,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "id": "d2", "status": "pending", "priority": "low",
+                    "required_capability": "shelter", "district": "A"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d2",
+            ))
+            .and(body_partial_json(json!({
+                "data": { "metadata": { "stale": true } }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d2", "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": { "id": "d2", "status": "pending", "metadata": { "stale": true } }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/optimize",
+            Some(&officer),
+            Some(json!({ "approval_id": "ap1", "emergency_event_id": "e1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["applied"], true);
+        assert_eq!(body["auto_assigned"], 1);
+        assert_eq!(body["stale_flagged"], 1);
+        assert_eq!(body["approval_id"], "ap1");
+    }
+
+    #[tokio::test]
+    async fn optimize_rejects_a_self_approved_event_approval() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let requester = admin_token(&config);
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "entityId": "e1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/optimize",
+            Some(&requester),
+            Some(json!({ "approval_id": "ap1", "emergency_event_id": "e1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"], "self_approval_forbidden");
+    }
+
+    #[tokio::test]
+    async fn optimize_cannot_apply_an_approval_without_the_event_scope() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let app = app(AppState::new(
+            config,
+            Client::new("http://127.0.0.1:1", Credentials::none()).unwrap(),
+        ));
+        let (status, _, body) = call(
+            app,
+            Method::POST,
+            "/v1/emergency/dispatch/optimize",
+            Some(&token),
+            Some(json!({ "approval_id": "ap1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "emergency_event_id_required");
     }
 
     #[tokio::test]
