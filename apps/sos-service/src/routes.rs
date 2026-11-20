@@ -339,18 +339,10 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
         // exchanged for a short-lived SOS session. Password login/registration
         // stay retired in the DX workspace.
         ("POST", ["v1", "auth", "exchange"]) => auth_exchange(ctx).await,
-        // Every legacy auth path is retired, including read/session paths that
-        // used to answer 401/404. Clients must use the DX workspace login.
+        // Every legacy auth path is retired, including the read/session paths
+        // that used to answer 401/404. Clients must use the DX workspace
+        // login; the workspace_moved() contract is covered above.
         (_, ["v1", "auth", ..]) => Ok(workspace_moved()),
-        ("POST", ["v1", "auth", "login"]) | ("POST", ["v1", "auth", "register"]) => {
-            Ok(workspace_moved())
-        }
-        (_, ["v1", "auth", "refresh"]) => Ok(workspace_moved()),
-        ("POST", ["v1", "auth", "logout"]) => auth_logout(ctx).await,
-        ("POST", ["v1", "auth", "change-password"]) => auth_change_password(ctx).await,
-        ("GET", ["v1", "auth", "me"]) => auth_me(ctx),
-        ("GET", ["v1", "auth", "verify"]) => auth_verify(ctx),
-        (_, ["v1", "auth", "login"]) | (_, ["v1", "auth", "register"]) => Ok(workspace_moved()),
         ("GET", ["v1", "emergency", "public", "status"]) => public_status(ctx).await,
         ("GET", ["v1", "emergency", "public"]) => public_events(ctx).await,
         ("GET", ["v1", "emergency", "health"]) => emergency_health(ctx).await,
@@ -645,324 +637,6 @@ async fn auth_exchange(ctx: Ctx<'_>) -> ApiResult<Response> {
         },
     )?;
     Ok(web::json_response(issued.json()))
-}
-
-async fn auth_login(ctx: Ctx<'_>) -> ApiResult<Response> {
-    return Ok(workspace_moved());
-    #[allow(unreachable_code)]
-    let identifier = web::string_value(ctx.body.get("email"))
-        .or_else(|| web::string_value(ctx.body.get("username")))
-        .unwrap_or_default();
-    let password = web::string_value(ctx.body.get("password")).unwrap_or_default();
-    if ctx.config().demo_auth_allowed() {
-        if identifier.is_empty() || password.is_empty() {
-            return Err(ApiError::bad_request(
-                "username_required",
-                "username and password are required",
-            ));
-        }
-        let role = auth::demo_session_role("login");
-        let user = auth::shell_user(
-            &identifier,
-            web::string_value(ctx.body.get("email")).as_deref(),
-            web::string_value(ctx.body.get("full_name")).as_deref(),
-            web::string_value(ctx.body.get("phone")).as_deref(),
-            &role,
-        );
-        let session = auth::issue_session(
-            ctx.config(),
-            &user,
-            SessionExtras {
-                auth_source: Some("demo".into()),
-                ..Default::default()
-            },
-        )?;
-        return Ok(web::json_response(session.json()));
-    }
-    if identifier.is_empty() {
-        return Err(ApiError::bad_request(
-            "email_required",
-            "email and password are required",
-        ));
-    }
-    if !identifier.contains('@') {
-        return Err(ApiError::bad_request(
-            "email_required",
-            "Tier-2 identity requires an email address.",
-        ));
-    }
-    if password.is_empty() {
-        return Err(ApiError::bad_request(
-            "password_required",
-            "email and password are required",
-        ));
-    }
-    let org_slug = web::string_value(ctx.body.get("org_slug"));
-    let opts = ctx.opts();
-    let session = ctx
-        .client()
-        .auth()
-        .login(
-            &identifier.to_ascii_lowercase(),
-            Some(&password),
-            org_slug.as_deref(),
-            &opts,
-        )
-        .await
-        .map_err(auth::identity_error)?;
-    let value = serde_json::to_value(session).unwrap_or(Value::Null);
-    let mut identity = auth::identity_from_session(&value)?;
-    if identity.email.is_empty() {
-        identity.email = identifier.to_ascii_lowercase();
-    }
-    let role = auth::role_for_identity(ctx.config(), &identity.email);
-    let user = user_from_identity(&identity, &role);
-    let issued = auth::issue_session(
-        ctx.config(),
-        &user,
-        SessionExtras {
-            auth_source: Some("tier2".into()),
-            tier2_token: identity.access_token.clone(),
-            tier2_refresh_token: identity.refresh_token.clone(),
-        },
-    )?;
-    Ok(web::json_response(issued.json()))
-}
-
-async fn auth_register(ctx: Ctx<'_>) -> ApiResult<Response> {
-    return Ok(workspace_moved());
-    #[allow(unreachable_code)]
-    let email = web::string_value(ctx.body.get("email"))
-        .or_else(|| web::string_value(ctx.body.get("username")))
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let password = web::string_value(ctx.body.get("password")).unwrap_or_default();
-    let full_name = web::string_value(ctx.body.get("full_name"))
-        .or_else(|| web::string_value(ctx.body.get("display_name")))
-        .unwrap_or_default();
-    if email.is_empty() {
-        return Err(ApiError::bad_request(
-            "email_required",
-            "email, password and full_name are required",
-        ));
-    }
-    if !email.contains('@') {
-        return Err(ApiError::bad_request("email_invalid", "email is not valid"));
-    }
-    if password.len() < 6 {
-        return Err(ApiError::bad_request(
-            "password_too_short",
-            "password must be at least 6 characters",
-        ));
-    }
-    if full_name.is_empty() {
-        return Err(ApiError::bad_request(
-            "full_name_required",
-            "full_name is required",
-        ));
-    }
-    if ctx.config().demo_auth_allowed() {
-        let role = auth::demo_session_role("register");
-        let user = auth::shell_user(
-            &web::string_value(ctx.body.get("username")).unwrap_or_else(|| email.clone()),
-            Some(&email),
-            Some(&full_name),
-            web::string_value(ctx.body.get("phone")).as_deref(),
-            &role,
-        );
-        let session = auth::issue_session(
-            ctx.config(),
-            &user,
-            SessionExtras {
-                auth_source: Some("demo".into()),
-                ..Default::default()
-            },
-        )?;
-        return Ok(web::status_json(StatusCode::CREATED, session.json()));
-    }
-    let org_slug = web::string_value(ctx.body.get("org_slug"));
-    let opts = ctx.opts();
-    let session = ctx
-        .client()
-        .auth()
-        .register(
-            &email,
-            &password,
-            Some(&full_name),
-            org_slug.as_deref(),
-            &opts,
-        )
-        .await
-        .map_err(auth::identity_error)?;
-    let value = serde_json::to_value(session).unwrap_or(Value::Null);
-    let identity = auth::identity_from_session(&value)?;
-    let role = if ctx.config().bootstrap_admins.contains(&email) {
-        auth::ROLE_ADMIN.to_string()
-    } else {
-        auth::role_for_identity(ctx.config(), &identity.email)
-    };
-    let user = user_from_identity(&identity, &role);
-    let issued = auth::issue_session(
-        ctx.config(),
-        &user,
-        SessionExtras {
-            auth_source: Some("tier2".into()),
-            tier2_token: identity.access_token.clone(),
-            tier2_refresh_token: identity.refresh_token.clone(),
-        },
-    )?;
-    Ok(web::status_json(StatusCode::CREATED, issued.json()))
-}
-
-async fn auth_refresh(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let token = web::string_value(ctx.body.get("refresh_token")).unwrap_or_default();
-    let claims = auth::verify_token(ctx.config(), &token, "refresh").ok_or_else(|| {
-        ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "invalid_refresh_token",
-            "invalid_refresh_token",
-        )
-    })?;
-    if claims.auth_source.as_deref() == Some("tier2") {
-        let refresh = claims.tier2_refresh_token.clone().ok_or_else(|| {
-            ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                "invalid_refresh_token",
-                "no Tier-2 refresh token in this session",
-            )
-        })?;
-        let opts = ctx.opts();
-        let rotated = ctx
-            .client()
-            .auth()
-            .refresh(&refresh, &opts)
-            .await
-            .map_err(auth::identity_error)?;
-        let value = serde_json::to_value(rotated).unwrap_or(Value::Null);
-        let new_access = web::string_value(value.get("accessToken"))
-            .or_else(|| web::string_value(value.get("access_token")));
-        let new_refresh = web::string_value(value.get("refreshToken"))
-            .or_else(|| web::string_value(value.get("refresh_token")));
-        let role = auth::role_for_identity(ctx.config(), &claims.email);
-        let mut user = auth::user_from_claims(&claims);
-        user.role = role.clone();
-        user.permissions = auth::role_permissions(&role);
-        let issued = auth::issue_session(
-            ctx.config(),
-            &user,
-            SessionExtras {
-                auth_source: Some("tier2".into()),
-                tier2_token: new_access.or(claims.tier2_token.clone()),
-                tier2_refresh_token: new_refresh.or(Some(refresh)),
-            },
-        )?;
-        return Ok(web::json_response(issued.json()));
-    }
-    if !ctx.config().demo_auth_allowed() {
-        return Err(ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "invalid_refresh_token",
-            "invalid_refresh_token",
-        ));
-    }
-    let user = auth::user_from_claims(&claims);
-    let issued = auth::issue_session(
-        ctx.config(),
-        &user,
-        SessionExtras {
-            auth_source: Some("demo".into()),
-            ..Default::default()
-        },
-    )?;
-    Ok(web::json_response(issued.json()))
-}
-
-async fn auth_logout(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let refresh = web::string_value(ctx.body.get("refresh_token")).unwrap_or_default();
-    let claims = auth::verify_token(ctx.config(), &refresh, "refresh");
-    let refresh_token = claims
-        .and_then(|claims| claims.tier2_refresh_token)
-        .or_else(|| {
-            ctx.session
-                .and_then(|claims| claims.tier2_refresh_token.clone())
-        });
-    if let Some(token) = refresh_token {
-        let opts = ctx.opts();
-        let _ = ctx.client().auth().logout(&token, &opts).await;
-    }
-    Ok(web::no_content())
-}
-
-async fn auth_change_password(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let session = ctx.session.ok_or_else(|| {
-        ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "unauthorized",
-            "A valid SOS session is required.",
-        )
-    })?;
-    let current = web::string_value(ctx.body.get("current_password")).unwrap_or_default();
-    let new_password = web::string_value(ctx.body.get("new_password")).unwrap_or_default();
-    if current.is_empty() || new_password.is_empty() {
-        return Err(ApiError::bad_request(
-            "current_and_new_password_required",
-            "current_password and new_password are required",
-        ));
-    }
-    if new_password.len() < 6 {
-        return Err(ApiError::bad_request(
-            "password_too_short",
-            "new_password must be at least 6 characters",
-        ));
-    }
-    if session.auth_source.as_deref() != Some("tier2") || session.tier2_token.is_none() {
-        if ctx.config().demo_auth_allowed() {
-            return Ok(web::no_content());
-        }
-        return Err(ApiError::unavailable(
-            "identity_not_configured",
-            "Password changes require the Tier-2 identity capability.",
-        ));
-    }
-    let opts = ctx.opts();
-    ctx.client()
-        .auth()
-        .change_password(&current, &new_password, &opts)
-        .await
-        .map_err(auth::identity_error)?;
-    Ok(web::no_content())
-}
-
-fn auth_me(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let session = ctx.session.ok_or_else(|| {
-        ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "unauthorized",
-            "A valid SOS session is required.",
-        )
-    })?;
-    Ok(web::json_response(auth::user_json(
-        &auth::user_from_claims(session),
-    )))
-}
-
-fn auth_verify(ctx: Ctx<'_>) -> ApiResult<Response> {
-    let session = ctx.session.ok_or_else(|| {
-        ApiError::new(
-            StatusCode::UNAUTHORIZED,
-            "unauthorized",
-            "A valid SOS session is required.",
-        )
-    })?;
-    let expires = chrono::DateTime::<chrono::Utc>::from_timestamp(session.exp, 0)
-        .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
-        .unwrap_or_default();
-    Ok(web::json_response(json!({
-        "valid": true,
-        "user": auth::user_json(&auth::user_from_claims(session)),
-        "identity_source": session.auth_source.clone().unwrap_or_else(|| "demo".into()),
-        "expires_at": expires,
-    })))
 }
 
 // ---------------------------------------------------------------------------
@@ -1613,7 +1287,7 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
                 release.insert("status".into(), json!("available"));
                 release.insert("assigned_dispatch_order_id".into(), Value::Null);
                 let reserved_version = reserved.get("record_version").and_then(Value::as_i64);
-                let _ = tier2::update(
+                if let Err(release_error) = tier2::update(
                     ctx.client(),
                     &opts,
                     tier2::RESOURCES,
@@ -1621,7 +1295,17 @@ async fn dispatch_optimize(ctx: Ctx<'_>) -> ApiResult<Response> {
                     release,
                     reserved_version,
                 )
-                .await;
+                .await
+                {
+                    // The unit stays assigned to an order that is not; an
+                    // operator must reconcile it manually.
+                    tracing::warn!(
+                        dispatch_order = %decision.order_id,
+                        resource_unit = %decision.resource_unit_id,
+                        error = %release_error.message,
+                        "dispatch optimize failed to update the order and the reserved resource unit could not be released; manual reconciliation needed"
+                    );
+                }
                 reservation_failed += 1;
             }
         }
@@ -1985,15 +1669,16 @@ async fn dispatch_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let version = current.get("record_version").and_then(Value::as_i64);
     let row = match tier2::update(ctx.client(), &opts, tier2::DISPATCH, id, patch, version).await {
         Ok(row) => row,
-        Err(error) => {
+        Err(mut error) => {
             // Compensate the reservation so a failed order update cannot
-            // permanently strand a resource unit.
+            // permanently strand a resource unit. If the release also fails,
+            // surface it: the unit stays assigned to an order that is not.
             if !already_reserved {
                 let mut release = Map::new();
                 release.insert("status".into(), json!("available"));
                 release.insert("assigned_dispatch_order_id".into(), Value::Null);
                 let reserved_version = reserved.get("record_version").and_then(Value::as_i64);
-                let _ = tier2::update(
+                if let Err(release_error) = tier2::update(
                     ctx.client(),
                     &opts,
                     tier2::RESOURCES,
@@ -2001,7 +1686,19 @@ async fn dispatch_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
                     release,
                     reserved_version,
                 )
-                .await;
+                .await
+                {
+                    tracing::warn!(
+                        dispatch_order = %id,
+                        resource_unit = %resource_id,
+                        error = %release_error.message,
+                        "dispatch assignment failed and the reserved resource unit could not be released; manual reconciliation needed"
+                    );
+                    error.message = format!(
+                        "{} (compensation_failed: release of unit {resource_id} failed — manual reconciliation needed)",
+                        error.message
+                    );
+                }
             }
             return Err(error);
         }
@@ -2627,6 +2324,13 @@ async fn mutual_aid_decline(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
 async fn mutual_aid_handoff(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
     let opts = ctx.opts();
     let current = tier2::get(ctx.client(), &opts, tier2::MUTUAL_AID, id).await?;
+    let status = current.get("status").and_then(Value::as_str).unwrap_or("");
+    if !["open", "partially_filled"].contains(&status) {
+        return Err(ApiError::conflict(
+            "request_not_open",
+            format!("request is {status}"),
+        ));
+    }
     let mut history = current
         .get("history")
         .and_then(Value::as_array)
@@ -7434,6 +7138,69 @@ mod route_tests {
         .await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(body["error"], "request_version_conflict");
+    }
+
+    #[tokio::test]
+    async fn mutual_aid_handoff_rejects_a_request_that_is_not_open() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-mutual-aid-requests",
+            "SynapseCitySOS mutual aid requests",
+            "MutualAidRequest",
+            "Cross-agency resource requests, accepts and handoffs",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-mutual-aid-requests/records/ma-2",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "ma-2",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "id": "ma-2",
+                    "request_number": "MA-2",
+                    "resource_type": "ambulance",
+                    "quantity": 5,
+                    "status": "declined",
+                    "history": [
+                        { "action": "decline", "at": "2026-11-01T00:00:00.000Z", "by": "qa" }
+                    ]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // A declined request is immutable: the handoff must not append a
+        // second history entry or flip it to handed_off.
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-mutual-aid-requests/records/ma-2",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/mutual-aid/requests/ma-2/handoff",
+            Some(&token),
+            Some(json!({ "to_agency": "Coast Guard" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "request_not_open");
     }
 
     #[tokio::test]

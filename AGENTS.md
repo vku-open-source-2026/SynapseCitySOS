@@ -156,8 +156,13 @@ Never add `/admin/assets*`, `/admin/incidents*`, `/admin/iot*`,
 npm ci
 npm run build
 npm test
+# Rust service tests (the shipped binary). Run sequentially.
+(cd apps/sos-service && cargo test -- --test-threads=1)
 (cd apps/gateway && cargo test)                       # Rust gateway tests
-npm run start --workspace=@synapsecity/sos-service   # SOS service
+(cd apps/sos-service && cargo run)                     # SOS service (synapsecity-sos binary, as in the Dockerfile)
+(cd apps/gateway && cargo run)                         # public API gateway (synapsecity-sos-gateway binary)
+npm run start:service:legacy                           # legacy TS reference server (tests only; diverges from the Rust binary)
+npm run start:gateway:legacy                           # legacy TS reference gateway (tests only)
 npm run dev --workspace=@synapsecity/sos-console     # console dev server
 docker compose up -d --build                         # production stack
 ```

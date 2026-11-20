@@ -17,9 +17,9 @@ export default defineConfig({
   },
   test: {
     setupFiles: ['./e2e/setup.ts'],
-    // Work-surface specs (dashboard/auth/emergency) describe the retired
-    // command centre and now redirect to SynapseDX. Keep the live public map
-    // and navigation surface in the browser gate.
+    // The retired work-surface specs (dashboard/auth/emergency) were removed:
+    // they asserted a command centre that no longer ships. The browser gate
+    // keeps the live public map and navigation surface.
     include: [
       'e2e/map.spec.ts',
       'e2e/navigation.spec.ts',
