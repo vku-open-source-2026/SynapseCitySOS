@@ -56,6 +56,8 @@ test('manifest is SOS-owned, source-ready and inactive', () => {
         'eop.approve',
         'eop.publish',
         'eop.submit',
+        'sitrep.delta',
+        'sitrep.publish',
     ]);
     for (const entry of manifest.workflows) {
         assert.equal(entry.status, 'source_ready_pending_credential_binding');
@@ -315,6 +317,51 @@ test('eop lifecycle workflows enforce four-eyes approvals and the route guards',
         ['Create dispatch order 20', 'Skip order 20']);
     assert.deepEqual(submit.connections['Collect created order 20'].main[0][0].node, 'Prepare submitted plan patch');
     assert.deepEqual(submit.connections['Skip order 20'].main[0][0].node, 'Prepare submitted plan patch');
+});
+
+test('sitrep publication and delta workflows mirror the reviewed route guards', () => {
+    const publish = readWorkflow(entryFor('sitrep.publish').file);
+    const byName = new Map(publish.nodes.map((node) => [node.name, node]));
+    const guards = byName.get('Enforce SITREP publication guards').parameters.code;
+    // Guard order mirrors assert_publishable: immutable first, content, review.
+    assert.match(guards, /sitrep_already_published/);
+    assert.match(guards, /sitrep_content_required/);
+    assert.match(guards, /sitrep_review_required/);
+    assert.ok(guards.indexOf('sitrep_already_published') < guards.indexOf('sitrep_content_required'));
+    assert.ok(guards.indexOf('sitrep_content_required') < guards.indexOf('sitrep_review_required'));
+    assert.match(guards, /'published'\s*,\s*\n\s*published_at/);
+    assert.match(guards, /reviewed_by/);
+    assert.match(guards, /ifVersion: current\.version/);
+    assert.ok(byName.get('Read SITREP').parameters.url.includes('/sos-sitreps/'));
+
+    const delta = readWorkflow(entryFor('sitrep.delta').file);
+    const deltaNodes = new Map(delta.nodes.map((node) => [node.name, node]));
+    const compute = deltaNodes.get('Compute structural delta').parameters.code;
+    assert.match(compute, /changed_fields/);
+    assert.match(compute, /from_revision/);
+    assert.match(compute, /to_revision/);
+    assert.match(compute, /sitrep_delta_empty/);
+    assert.match(compute, /action_type: 'update'/);
+    assert.match(deltaNodes.get('Check SITREP and resolve delta base').parameters.code, /sitrep_status_invalid/);
+    assert.match(deltaNodes.get('Extract delta base').parameters.code, /sitrep_base_not_found/);
+    assert.deepEqual(delta.connections['Has amended base?'].main.map((branch) => branch[0].node),
+        ['Read amended base', 'Use current record as base']);
+    assert.deepEqual(delta.connections['Create delta revision?'].main.map((branch) => branch[0].node),
+        ['Prepare delta revision', 'Append delta entry']);
+    const revision = deltaNodes.get('Prepare delta revision').parameters.code;
+    assert.match(revision, /amends_sitrep_id: sitrep\.id/);
+    assert.match(revision, /status: 'draft'/);
+    assert.match(revision, /deltas: \[state\.deltaEntry\]/);
+    assert.match(revision, /publish: false/);
+    const append = deltaNodes.get('Append delta entry').parameters.code;
+    assert.match(append, /ifVersion: state\.version/);
+    assert.equal(deltaNodes.get('Create delta revision').parameters.method, 'POST');
+    assert.equal(deltaNodes.get('Create delta revision').parameters.url, `${API}/sos-sitreps/records`);
+    assert.equal(deltaNodes.get('Create delta revision').parameters.body, '={{ $json.createBody }}');
+    assert.ok(deltaNodes.get('Validate DX envelope and action fields').parameters.code.includes('_non_negative_integer_required'), 'counters must be validated as non-negative integers');
+    for (const counter of ['casualties', 'deaths', 'injuries', 'missing', 'affected_people', 'evacuated_people', 'damaged_structures', 'destroyed_structures', 'rescued_people', 'resources_deployed']) {
+        assert.ok(deltaNodes.get('Validate DX envelope and action fields').parameters.code.includes(`'${counter}'`), `the ${counter} count field must be accepted`);
+    }
 });
 
 test('workspace lifecycle guards reject invalid transitions and non-draft deletes', () => {

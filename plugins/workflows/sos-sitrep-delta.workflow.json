@@ -1,0 +1,414 @@
+{
+  "name": "sos-sitrep-delta",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'sitrep') throw new Error('unsupported_resource');\nconst recordId = text(fields.sitrep_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst COUNT_FIELDS = ['casualties', 'deaths', 'injuries', 'missing', 'affected_people', 'evacuated_people', 'damaged_structures', 'destroyed_structures', 'rescued_people', 'resources_deployed'];\nconst allowed = new Set(['sitrep_id', 'summary', 'note', ...COUNT_FIELDS]);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst changes = {};\nfor (const name of COUNT_FIELDS) {\n  const raw = fields[name];\n  if (raw === undefined || raw === null || raw === '') continue;\n  const num = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() && Number.isFinite(Number(raw)) ? Number(raw) : null;\n  if (num === null || !Number.isInteger(num) || num < 0) throw new Error(name + '_non_negative_integer_required');\n  changes[name] = num;\n}\nconst summary = text(fields.summary);\nif (summary) changes.summary = summary;\nif (summary.length > 8000) throw new Error('summary_max_8000');\nconst note = text(fields.note);\nif (note.length > 4000) throw new Error('note_max_4000');\nconst audit = {\n  product, resource, operation: 'sitrep.delta', recordId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { recordId, encodedId: encodeURIComponent(recordId), changes, note, audit };\n"
+      }
+    },
+    {
+      "id": "read-sitrep",
+      "name": "Read SITREP",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records/' + $json.encodedId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-base",
+      "name": "Check SITREP and resolve delta base",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('sitrep_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst sitrep = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(sitrep.status);\nif (!['draft', 'review_pending', 'published', 'archived'].includes(status)) throw new Error('sitrep_status_invalid');\nconst amendsId = typeof sitrep.amends_sitrep_id === 'string' && sitrep.amends_sitrep_id.trim() ? sitrep.amends_sitrep_id.trim() : '';\nreturn {\n  sitrep, status, version: current.version,\n  encodedId: state.encodedId, changes: state.changes, note: state.note,\n  needsBase: amendsId ? true : false, encodedBaseId: amendsId ? encodeURIComponent(amendsId) : '',\n  audit: state.audit, operation: state.operation,\n};\n"
+      }
+    },
+    {
+      "id": "if-base",
+      "name": "Has amended base?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.needsBase === true }}"
+      }
+    },
+    {
+      "id": "read-base",
+      "name": "Read amended base",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        180
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records/' + $json.encodedBaseId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "extract-base",
+      "name": "Extract delta base",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        180
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || typeof response.body.data !== 'object' || !response.body.data) throw new Error('sitrep_base_not_found');\nconst base = { ...response.body.data, id: String(response.body.data.id || response.body.id) };\nreturn { ...state, base };\n"
+      }
+    },
+    {
+      "id": "pass-base",
+      "name": "Use current record as base",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        420
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nreturn { ...state, base: state.sitrep };\n"
+      }
+    },
+    {
+      "id": "compute-delta",
+      "name": "Compute structural delta",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        300
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nconst sitrep = state.sitrep;\nconst base = state.base || sitrep;\nconst changedFields = [];\nfor (const [name, to] of Object.entries(state.changes)) {\n  const from = base[name] === undefined ? null : base[name];\n  if (JSON.stringify(from) === JSON.stringify(to)) continue;\n  changedFields.push({ field: name, from, to });\n}\n// A delta entry must be a real structural change, never a no-op write.\nif (!changedFields.length) throw new Error('sitrep_delta_empty');\nconst baseRevision = typeof base.version === 'number' && Number.isFinite(base.version) && base.version !== 0 ? base.version : 1;\nconst currentRevision = typeof sitrep.version === 'number' && Number.isFinite(sitrep.version) && sitrep.version !== 0 ? sitrep.version : 1;\nconst mode = (state.status === 'published' || state.status === 'archived') ? 'revision' : 'append';\nconst deltaEntry = {\n  action_type: 'update',\n  changed_fields: changedFields,\n  from_revision: baseRevision,\n  to_revision: mode === 'revision' ? currentRevision + 1 : currentRevision,\n  note: state.note || null,\n  actor_id: state.audit.submittedBy,\n  created_at: $now,\n};\nreturn { sitrep, status: state.status, version: state.version, deltaEntry, mode, currentRevision, encodedId: state.encodedId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "if-revision",
+      "name": "Create delta revision?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1960,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.mode === 'revision' }}"
+      }
+    },
+    {
+      "id": "prepare-revision",
+      "name": "Prepare delta revision",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        180
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'revision') throw new Error('unexpected_delta_mode');\nconst sitrep = state.sitrep;\nconst millis = Date.parse($now);\nconst nowMs = Number.isFinite(millis) ? millis : 0;\nconst nonce = Math.random().toString(36).slice(2, 8).padEnd(6, '0');\nconst revisionId = 'sitrep-' + nowMs + '-' + nonce;\nconst revision = {\n  ...sitrep,\n  id: revisionId,\n  status: 'draft',\n  amends_sitrep_id: sitrep.id,\n  version: state.currentRevision + 1,\n  deltas: [state.deltaEntry],\n  published_at: null,\n  published_by: null,\n  created_at: $now,\n  updated_at: $now,\n  author: state.audit.submittedBy || (typeof sitrep.author === 'string' ? sitrep.author : 'sos-operator'),\n};\nreturn { createBody: { id: revisionId, data: revision, publish: false }, sitrep, deltaEntry: state.deltaEntry };\n"
+      }
+    },
+    {
+      "id": "create-revision",
+      "name": "Create delta revision",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.createBody }}",
+        "includeInput": true
+      }
+    },
+    {
+      "id": "return-revision",
+      "name": "Return delta revision",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        180
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('sitrep_revision_create_failed');\nconst revisionId = response.body && response.body.id ? String(response.body.id) : String(state.createBody.id);\nreturn {\n  operation: 'sitrep.delta', mode: 'revision', revision_id: revisionId,\n  amends_sitrep_id: state.sitrep.id, superseded_sitrep_id: state.sitrep.id,\n  from_revision: state.deltaEntry.from_revision, to_revision: state.deltaEntry.to_revision,\n  changed_fields: state.deltaEntry.changed_fields, status: 'draft', publish: false,\n};\n"
+      }
+    },
+    {
+      "id": "append-delta",
+      "name": "Append delta entry",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        420
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'append') throw new Error('unexpected_delta_mode');\nconst deltas = Array.isArray(state.sitrep.deltas) ? state.sitrep.deltas : [];\nconst next = { ...state.sitrep, deltas: [...deltas, state.deltaEntry], updated_at: $now };\nreturn { body: { data: next, ifVersion: state.version }, encodedId: state.encodedId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "patch-sitrep",
+      "name": "Patch sitrep with delta",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        420
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read SITREP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read SITREP": {
+      "main": [
+        [
+          {
+            "node": "Check SITREP and resolve delta base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check SITREP and resolve delta base": {
+      "main": [
+        [
+          {
+            "node": "Has amended base?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has amended base?": {
+      "main": [
+        [
+          {
+            "node": "Read amended base",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use current record as base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read amended base": {
+      "main": [
+        [
+          {
+            "node": "Extract delta base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract delta base": {
+      "main": [
+        [
+          {
+            "node": "Compute structural delta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use current record as base": {
+      "main": [
+        [
+          {
+            "node": "Compute structural delta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute structural delta": {
+      "main": [
+        [
+          {
+            "node": "Create delta revision?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create delta revision?": {
+      "main": [
+        [
+          {
+            "node": "Prepare delta revision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append delta entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare delta revision": {
+      "main": [
+        [
+          {
+            "node": "Create delta revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create delta revision": {
+      "main": [
+        [
+          {
+            "node": "Return delta revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append delta entry": {
+      "main": [
+        [
+          {
+            "node": "Patch sitrep with delta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

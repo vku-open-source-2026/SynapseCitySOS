@@ -32,7 +32,8 @@
     "datasetByResource": {
       "events": "sos-emergency-events",
       "dispatch": "sos-dispatch-orders",
-      "eop": "sos-eop-plans"
+      "eop": "sos-eop-plans",
+      "sitrep": "sos-sitreps"
     },
     "credentialBinding": {
       "owner": "DX workflow management (workflow worker)",
@@ -190,6 +191,56 @@
         "maxCreatesPerRun": 20,
         "failClosed": "eop_missing_orders_max_20 before any write"
       }
+    },
+    {
+      "operation": "sitrep.publish",
+      "workflow": "sos-sitrep-publish",
+      "file": "plugins/workflows/sos-sitrep-publish.workflow.json",
+      "dataset": "sos-sitreps",
+      "method": "PATCH",
+      "resource": "sitrep",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "review_pending"
+      ],
+      "refusedStatuses": [
+        "published",
+        "archived"
+      ],
+      "contentGuard": "a snapshot, summary or reporting period must exist before publishing"
+    },
+    {
+      "operation": "sitrep.delta",
+      "workflow": "sos-sitrep-delta",
+      "file": "plugins/workflows/sos-sitrep-delta.workflow.json",
+      "dataset": "sos-sitreps",
+      "method": "PATCH",
+      "resource": "sitrep",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "draft",
+        "review_pending",
+        "published",
+        "archived"
+      ],
+      "delta": {
+        "modeByStatus": {
+          "draft": "append the computed delta entry and PATCH",
+          "review_pending": "append the computed delta entry and PATCH",
+          "published": "create a new draft revision that amends the published record",
+          "archived": "create a new draft revision that amends the archived record"
+        },
+        "diffBase": "the amended base revision when amends_sitrep_id is set, else the current record",
+        "structure": {
+          "action_type": "update",
+          "changed_fields": "[{field, from, to}] for every submitted value that really differs",
+          "from_revision": "the base revision number",
+          "to_revision": "the append target (current) or the new revision number",
+          "actor_id": "{submittedBy}",
+          "created_at": "{now}"
+        },
+        "emptyGuard": "sitrep_delta_empty when no submitted value differs from the base"
+      }
     }
   ],
   "engineContract": {
@@ -303,6 +354,31 @@
         "submit refuses a published plan (publication is a terminal lifecycle step) and only submits an approved one",
         "submit seeds deterministic dispatch orders from the plan actions and skips existing ones",
         "the static Tier-1 graph creates at most 20 missing orders per run and fails closed before any write beyond that"
+      ]
+    },
+    "sitrep": {
+      "operation": "sitrep.publish",
+      "dataset": "sos-sitreps",
+      "allowedFrom": [
+        "review_pending"
+      ],
+      "refusedStatuses": [
+        "published",
+        "archived"
+      ],
+      "patch": {
+        "status": "published",
+        "published_at": "{now}",
+        "published_by": "{submittedBy}",
+        "reviewed_by": "{submittedBy}"
+      },
+      "invariants": [
+        "a published or archived SITREP is refused (sitrep_already_published); publication is the only path to the published status",
+        "content guard: a snapshot, summary or reporting period must exist (sitrep_content_required)",
+        "only review_pending may be published (sitrep_review_required)",
+        "a delta against a published/archived SITREP creates a new draft revision with amends_sitrep_id instead of mutating history",
+        "a delta entry must carry a real changed-fields diff with revision numbers; a no-op is refused with sitrep_delta_empty",
+        "a stale ifVersion returns 409 version_conflict and fails the run"
       ]
     }
   },

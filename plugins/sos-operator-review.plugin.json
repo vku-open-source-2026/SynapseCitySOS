@@ -202,35 +202,25 @@
         "onSubmit": "act-eop-approve-submit"
       },
       {
-        "id": "sitrep-decision",
+        "id": "sitrep-publish",
         "type": "form",
         "title": "Publish a SITREP",
         "width": "half",
-        "action": "execute",
+        "action": "update",
         "fields": [
           {
-            "name": "record_id",
+            "name": "sitrep_id",
             "type": "text",
             "label": "SITREP id",
             "required": true
-          },
-          {
-            "name": "decision",
-            "type": "text",
-            "label": "Decision: archive (publish via SOS API)"
-          },
-          {
-            "name": "notes",
-            "type": "textarea",
-            "label": "Note"
           }
         ],
         "resource": "sitrep",
         "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "name": "sos-sitrep-publish",
+          "checksum": "1307d2fbdc89c73585077375bd450e1b95a57a2eb6b5c16bf7b5647f71da6581"
         },
-        "onSubmit": "act-sitrep-decision-submit"
+        "onSubmit": "act-sitrep-publish-submit"
       },
       {
         "id": "aar-decision",
@@ -750,30 +740,18 @@
         }
       },
       {
-        "id": "act-sitrep-decision-submit",
+        "id": "act-sitrep-publish-submit",
         "type": "action",
         "title": "Submit Publish a SITREP",
         "operation": {
-          "kind": "execute",
-          "target": "sitrep-decision",
+          "kind": "update",
+          "target": "sitrep-publish",
           "mappings": [
             {
-              "field": "record_id",
+              "field": "sitrep_id",
               "source": "event",
-              "value": "values.record_id",
+              "value": "values.sitrep_id",
               "required": true
-            },
-            {
-              "field": "decision",
-              "source": "event",
-              "value": "values.decision",
-              "required": false
-            },
-            {
-              "field": "notes",
-              "source": "event",
-              "value": "values.notes",
-              "required": false
             }
           ],
           "javascript": "",
@@ -782,12 +760,12 @@
         }
       },
       {
-        "id": "act-sitrep-decision-open",
+        "id": "act-sitrep-publish-open",
         "type": "action",
         "title": "Open Publish a SITREP",
         "operation": {
           "kind": "openForm",
-          "target": "sitrep-decision",
+          "target": "sitrep-publish",
           "mappings": [],
           "javascript": "",
           "inputs": [],
@@ -891,5 +869,5 @@
     "path": "plugins/sos-operator-review.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:a4958f846c87d728fac3c55e664e046ca8e5ab2d57ac2ab1443d576439bdeab1"
+  "checksum": "sha256:9cbeab2cd9ffbc38c5fa6c0806fc68a1ffd0f3e26a2c3093618b3ab978230dd9"
 }

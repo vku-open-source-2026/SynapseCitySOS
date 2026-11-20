@@ -334,3 +334,91 @@ test('eop submit seeds deterministic dispatch orders and never demotes a publish
     assert.match(String(published.error || ''), /eop_already_published/);
     assert.equal(published.calls.length, 1);
 });
+
+test('sitrep publish moves a review_pending SITREP to published', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('sitrep.publish');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-sitreps/records/sitrep-1',
+        'PATCH /v1/capabilities/datasets/sos-sitreps/records/sitrep-1',
+    ]);
+    const body = JSON.parse(result.calls[1].body);
+    assert.equal(body.ifVersion, 3);
+    assert.equal(body.data.status, 'published');
+    assert.equal(body.data.published_by, 'member-test');
+    assert.equal(body.data.reviewed_by, 'member-test');
+    assert.equal(typeof body.data.published_at, 'string');
+    assert.equal(result.validationOutput.audit.operation, 'sitrep.publish');
+});
+
+test('sitrep publish refuses published, contentless and unreviewed SITREPs', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('sitrep.publish');
+    const cases = [
+        ['terminal', /sitrep_already_published/],
+        ['no-content', /sitrep_content_required/],
+        ['unreviewed', /sitrep_review_required/],
+    ];
+    for (const [mode, code] of cases) {
+        const result = runHarness(entry.file, entry.dataset, mode);
+        assert.equal(result.status, 'error', `${mode} was published`);
+        assert.match(String(result.error || ''), code);
+        assert.equal(result.calls.length, 1, `${mode} must stop after the SITREP read`);
+        assert.equal(result.calls.filter((call) => call.method === 'PATCH').length, 0);
+    }
+});
+
+test('sitrep delta appends a real structural delta to a draft SITREP', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('sitrep.delta');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-sitreps/records/sitrep-1',
+        'PATCH /v1/capabilities/datasets/sos-sitreps/records/sitrep-1',
+    ]);
+    const body = JSON.parse(result.calls[1].body);
+    assert.equal(body.ifVersion, 2);
+    assert.equal(body.data.status, 'draft', 'the append path must not change the status');
+    assert.equal(body.data.deltas.length, 1);
+    const delta = body.data.deltas[0];
+    assert.equal(delta.action_type, 'update');
+    assert.equal(delta.actor_id, 'member-test');
+    assert.equal(delta.from_revision, 1);
+    assert.equal(delta.to_revision, 1);
+    const changed = new Map(delta.changed_fields.map((row) => [row.field, row]));
+    assert.deepEqual(changed.get('casualties'), { field: 'casualties', from: 2, to: 5 });
+    assert.deepEqual(changed.get('summary'), { field: 'summary', from: 'First sweep complete', to: 'Second sweep complete' });
+    assert.ok(delta.changed_fields.length >= 2, 'the delta must be a non-empty structural diff');
+});
+
+test('sitrep delta against a published SITREP creates an amending revision', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('sitrep.delta');
+    const result = runHarness(entry.file, entry.dataset, 'published');
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-sitreps/records/sitrep-1',
+        'POST /v1/capabilities/datasets/sos-sitreps/records',
+    ]);
+    const create = JSON.parse(result.calls[1].body);
+    assert.match(create.id, /^sitrep-\d+-[a-z0-9]{6}$/);
+    assert.equal(create.publish, false);
+    assert.equal(create.data.id, create.id);
+    assert.equal(create.data.amends_sitrep_id, 'sitrep-1');
+    assert.equal(create.data.status, 'draft');
+    assert.equal(create.data.version, 2);
+    assert.equal(create.data.published_at, null);
+    assert.equal(create.data.deltas.length, 1);
+    assert.equal(create.data.deltas[0].from_revision, 1);
+    assert.equal(create.data.deltas[0].to_revision, 2);
+    assert.ok(create.data.deltas[0].changed_fields.length >= 1, 'the revision must carry a non-empty structural delta');
+    assert.equal(result.output.superseded_sitrep_id, 'sitrep-1');
+});
+
+test('sitrep delta refuses a no-op delta before any write', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('sitrep.delta');
+    const result = runHarness(entry.file, entry.dataset, 'no-content');
+    assert.equal(result.status, 'error');
+    assert.match(String(result.error || ''), /sitrep_delta_empty/);
+    assert.equal(result.calls.length, 1, 'a no-op delta must stop after the read');
+    assert.equal(result.calls[0].method, 'GET');
+});

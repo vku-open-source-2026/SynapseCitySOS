@@ -1,0 +1,142 @@
+{
+  "name": "sos-sitrep-publish",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'sitrep') throw new Error('unsupported_resource');\nconst recordId = text(fields.sitrep_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst allowed = new Set(['sitrep_id']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst audit = {\n  product, resource, operation: 'sitrep.publish', recordId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { recordId, encodedId: encodeURIComponent(recordId), audit };\n"
+      }
+    },
+    {
+      "id": "read-sitrep",
+      "name": "Read SITREP",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records/' + $json.encodedId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check",
+      "name": "Enforce SITREP publication guards",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('sitrep_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst sitrep = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(sitrep.status);\nif (status === 'published' || status === 'archived') throw new Error('sitrep_already_published');\nconst hasContent = (() => {\n  const snapshot = sitrep.snapshot;\n  if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && Object.keys(snapshot).length) return true;\n  if (Array.isArray(snapshot) && snapshot.length) return true;\n  const summary = typeof sitrep.summary === 'string' ? sitrep.summary.trim() : '';\n  if (summary) return true;\n  if (sitrep.reporting_period_start && sitrep.reporting_period_end) return true;\n  return false;\n})();\nif (!hasContent) throw new Error('sitrep_content_required');\nif (status !== 'review_pending') throw new Error('sitrep_review_required');\nconst next = {\n  ...sitrep,\n  status: 'published',\n  published_at: $now,\n  published_by: state.audit.submittedBy,\n  reviewed_by: state.audit.submittedBy,\n  updated_at: $now,\n};\nreturn { body: { data: next, ifVersion: current.version }, encodedId: state.encodedId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "patch",
+      "name": "Patch published SITREP",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-sitreps/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read SITREP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read SITREP": {
+      "main": [
+        [
+          {
+            "node": "Enforce SITREP publication guards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce SITREP publication guards": {
+      "main": [
+        [
+          {
+            "node": "Patch published SITREP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

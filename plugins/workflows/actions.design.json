@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "product": "sos",
   "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
-  "revision": "2026-11-20.1",
+  "revision": "2026-11-20.2",
   "status": "implemented_source_ready",
   "blocker": "Resolved by the Tier-1 httpRequest includeInput option. Residual: Tier-2 PATCH conditional support is ifVersion/If-Match (optimistic CAS); concurrent conflicts return 409 and must surface to the user.",
   "requiredEnabler": "Engine prior-node context (e.g. $node[\"Validate\"]) or a Tier-2 conditional/merge update contract with tenant/product authz and audit.",
@@ -251,6 +251,124 @@
         "submit refuses a published plan with eop_already_published",
         "submit requires an approved plan and the admission approval under four-eyes",
         "the plan stays approved; submit records submitted_at/submitted_by and the order ids"
+      ]
+    },
+    {
+      "operation": "sitrep.publish",
+      "method": "PATCH",
+      "dataset": "sos-sitreps",
+      "recordIdField": "sitrep_id",
+      "fields": [
+        {
+          "name": "sitrep_id",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "allowedFrom": [
+        "review_pending"
+      ],
+      "refusedFrom": [
+        "published",
+        "archived"
+      ],
+      "patch": {
+        "status": "published",
+        "published_at": "{now}",
+        "published_by": "{submittedBy}",
+        "reviewed_by": "{submittedBy}"
+      },
+      "invariants": [
+        "an already published or archived SITREP is refused (sitrep_already_published)",
+        "a SITREP needs a snapshot, summary or reporting period before publishing (sitrep_content_required)",
+        "only a review_pending SITREP may be published (sitrep_review_required)"
+      ]
+    },
+    {
+      "operation": "sitrep.delta",
+      "method": "PATCH",
+      "dataset": "sos-sitreps",
+      "recordIdField": "sitrep_id",
+      "fields": [
+        {
+          "name": "sitrep_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "summary",
+          "type": "textarea"
+        },
+        {
+          "name": "casualties",
+          "type": "number"
+        },
+        {
+          "name": "deaths",
+          "type": "number"
+        },
+        {
+          "name": "injuries",
+          "type": "number"
+        },
+        {
+          "name": "missing",
+          "type": "number"
+        },
+        {
+          "name": "affected_people",
+          "type": "number"
+        },
+        {
+          "name": "evacuated_people",
+          "type": "number"
+        },
+        {
+          "name": "damaged_structures",
+          "type": "number"
+        },
+        {
+          "name": "destroyed_structures",
+          "type": "number"
+        },
+        {
+          "name": "rescued_people",
+          "type": "number"
+        },
+        {
+          "name": "resources_deployed",
+          "type": "number"
+        },
+        {
+          "name": "note",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "draft",
+        "review_pending",
+        "published",
+        "archived"
+      ],
+      "patch": {
+        "deltas": "append {action_type, changed_fields, from_revision, to_revision, note, actor_id, created_at} to the record (draft/review_pending)",
+        "status": "draft for the new revision created against a published/archived SITREP"
+      },
+      "createBefore": {
+        "dataset": "sos-sitreps",
+        "method": "POST",
+        "requiredFields": [
+          "id",
+          "amends_sitrep_id",
+          "version",
+          "deltas"
+        ],
+        "invariant": "a published/archived SITREP is immutable: the delta creates a new draft revision (id sitrep-<millis>-<nonce>, version+1, amends_sitrep_id=base, publish false) carrying the structured delta entry",
+        "diffBase": "the amended base revision when amends_sitrep_id is set, else the current record"
+      },
+      "invariants": [
+        "counters must be non-negative integers",
+        "the delta entry must contain a real changed-fields diff with revision numbers; a no-op is refused with sitrep_delta_empty"
       ]
     }
   ],

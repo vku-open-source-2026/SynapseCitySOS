@@ -248,6 +248,108 @@
         "onSubmit": "act-sitrep-delete-submit"
       },
       {
+        "id": "sitrep-publish",
+        "type": "form",
+        "title": "Publish a SITREP",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "sitrep_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-sitrep-publish",
+          "checksum": "1307d2fbdc89c73585077375bd450e1b95a57a2eb6b5c16bf7b5647f71da6581"
+        },
+        "onSubmit": "act-sitrep-publish-submit"
+      },
+      {
+        "id": "sitrep-delta",
+        "type": "form",
+        "title": "Record a calculated SITREP delta",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "sitrep_id",
+            "type": "text",
+            "label": "SITREP id",
+            "required": true
+          },
+          {
+            "name": "summary",
+            "type": "textarea",
+            "label": "Updated summary"
+          },
+          {
+            "name": "casualties",
+            "type": "number",
+            "label": "Casualties"
+          },
+          {
+            "name": "deaths",
+            "type": "number",
+            "label": "Deaths"
+          },
+          {
+            "name": "injuries",
+            "type": "number",
+            "label": "Injuries"
+          },
+          {
+            "name": "missing",
+            "type": "number",
+            "label": "Missing"
+          },
+          {
+            "name": "affected_people",
+            "type": "number",
+            "label": "Affected people"
+          },
+          {
+            "name": "evacuated_people",
+            "type": "number",
+            "label": "Evacuated people"
+          },
+          {
+            "name": "damaged_structures",
+            "type": "number",
+            "label": "Damaged structures"
+          },
+          {
+            "name": "destroyed_structures",
+            "type": "number",
+            "label": "Destroyed structures"
+          },
+          {
+            "name": "rescued_people",
+            "type": "number",
+            "label": "Rescued people"
+          },
+          {
+            "name": "resources_deployed",
+            "type": "number",
+            "label": "Resources deployed"
+          },
+          {
+            "name": "note",
+            "type": "textarea",
+            "label": "Delta note"
+          }
+        ],
+        "resource": "sitrep",
+        "workflowRef": {
+          "name": "sos-sitrep-delta",
+          "checksum": "36e710836af986352bbebcb8a2a2819dafeaff7a6ab13d1d2699cd94a06eec79"
+        },
+        "onSubmit": "act-sitrep-delta-submit"
+      },
+      {
         "id": "act-workspace-navigation-link1",
         "type": "action",
         "title": "Navigate Overview",
@@ -625,6 +727,144 @@
           "inputs": [],
           "actions": []
         }
+      },
+      {
+        "id": "act-sitrep-publish-submit",
+        "type": "action",
+        "title": "Submit Publish a SITREP",
+        "operation": {
+          "kind": "update",
+          "target": "sitrep-publish",
+          "mappings": [
+            {
+              "field": "sitrep_id",
+              "source": "event",
+              "value": "values.sitrep_id",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-publish-open",
+        "type": "action",
+        "title": "Open Publish a SITREP",
+        "operation": {
+          "kind": "openForm",
+          "target": "sitrep-publish",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-delta-submit",
+        "type": "action",
+        "title": "Submit Record a calculated SITREP delta",
+        "operation": {
+          "kind": "update",
+          "target": "sitrep-delta",
+          "mappings": [
+            {
+              "field": "sitrep_id",
+              "source": "event",
+              "value": "values.sitrep_id",
+              "required": true
+            },
+            {
+              "field": "summary",
+              "source": "event",
+              "value": "values.summary",
+              "required": false
+            },
+            {
+              "field": "casualties",
+              "source": "event",
+              "value": "values.casualties",
+              "required": false
+            },
+            {
+              "field": "deaths",
+              "source": "event",
+              "value": "values.deaths",
+              "required": false
+            },
+            {
+              "field": "injuries",
+              "source": "event",
+              "value": "values.injuries",
+              "required": false
+            },
+            {
+              "field": "missing",
+              "source": "event",
+              "value": "values.missing",
+              "required": false
+            },
+            {
+              "field": "affected_people",
+              "source": "event",
+              "value": "values.affected_people",
+              "required": false
+            },
+            {
+              "field": "evacuated_people",
+              "source": "event",
+              "value": "values.evacuated_people",
+              "required": false
+            },
+            {
+              "field": "damaged_structures",
+              "source": "event",
+              "value": "values.damaged_structures",
+              "required": false
+            },
+            {
+              "field": "destroyed_structures",
+              "source": "event",
+              "value": "values.destroyed_structures",
+              "required": false
+            },
+            {
+              "field": "rescued_people",
+              "source": "event",
+              "value": "values.rescued_people",
+              "required": false
+            },
+            {
+              "field": "resources_deployed",
+              "source": "event",
+              "value": "values.resources_deployed",
+              "required": false
+            },
+            {
+              "field": "note",
+              "source": "event",
+              "value": "values.note",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-sitrep-delta-open",
+        "type": "action",
+        "title": "Open Record a calculated SITREP delta",
+        "operation": {
+          "kind": "openForm",
+          "target": "sitrep-delta",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
       }
     ]
   },
@@ -633,5 +873,5 @@
     "path": "plugins/sos-sitrep-desk.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:baba4fadab98bc5f768b9c073abc11e5c3365cfa7ad43de4a798bc4e46b1d845"
+  "checksum": "sha256:a6a29e7986ddef5267b6c58e082e6f5c8e287539ced4dba01c7d662f8b32138a"
 }
