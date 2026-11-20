@@ -12,6 +12,7 @@ use serde_json::Value;
 use synapsedx::Client;
 
 use crate::config::Config;
+use crate::domain::vndms::IngestConnectorStatus;
 
 #[derive(Clone, Debug, Default)]
 pub struct HazardFeedStatus {
@@ -265,7 +266,7 @@ pub struct AppState {
     pub limiter: Arc<RateLimiter>,
     pub ai_status_cache: Arc<Mutex<Option<(Instant, Value)>>>,
     pub hazard_cache: Arc<Mutex<HashMap<i64, (Instant, Vec<Value>)>>>,
-    pub hazard_status_cache: Arc<Mutex<Option<(Instant, Value)>>>,
+    pub connector_status_cache: Arc<Mutex<Option<(Instant, IngestConnectorStatus)>>>,
     pub ingest_run_cache: Arc<Mutex<Option<(Instant, Option<serde_json::Map<String, Value>>)>>>,
     pub hazard_feed_status: Arc<Mutex<HazardFeedStatus>>,
     pub hazard_last_good: Arc<Mutex<Option<(String, Vec<Value>)>>>,
@@ -287,7 +288,7 @@ impl AppState {
             limiter: Arc::new(RateLimiter::new()),
             ai_status_cache: Arc::new(Mutex::new(None)),
             hazard_cache: Arc::new(Mutex::new(HashMap::new())),
-            hazard_status_cache: Arc::new(Mutex::new(None)),
+            connector_status_cache: Arc::new(Mutex::new(None)),
             ingest_run_cache: Arc::new(Mutex::new(None)),
             hazard_feed_status: Arc::new(Mutex::new(HazardFeedStatus::default())),
             hazard_last_good: Arc::new(Mutex::new(None)),

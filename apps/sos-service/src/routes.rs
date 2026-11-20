@@ -3609,104 +3609,98 @@ async fn latest_ingest_run(ctx: &Ctx<'_>) -> Option<Map<String, Value>> {
     latest
 }
 
-async fn fetch_tier2_hazard_status(ctx: &Ctx<'_>) -> Option<Value> {
+/// Project the VNDMS connector state from the Tier-2 scheduled-jobs API.
+///
+/// SOS does not own a scheduler: it reads the job definition and its run
+/// history (`jobs`, `jobs/:id/runs`) through the same Tier-2 client as every
+/// other capability. An unavailable jobs API is reported precisely
+/// (tier2_jobs_* error codes), never as an "enabled" connector.
+async fn vndms_connector_status(ctx: &Ctx<'_>) -> domain::vndms::IngestConnectorStatus {
     {
         let cache = ctx
             .state
-            .hazard_status_cache
+            .connector_status_cache
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         if let Some((at, value)) = cache.as_ref() {
-            if at.elapsed() < Duration::from_secs(30) {
-                return Some(value.clone());
+            if at.elapsed() < Duration::from_secs(15) {
+                return value.clone();
             }
         }
     }
+    let checked_at = crate::now_iso();
+    let now_ms = chrono::Utc::now().timestamp_millis();
     let opts = ctx.opts();
-    match ctx.client().hazards().status(&opts).await {
-        Ok(value) => {
-            let mut cache = ctx
-                .state
-                .hazard_status_cache
-                .lock()
-                .unwrap_or_else(|poison| poison.into_inner());
-            *cache = Some((std::time::Instant::now(), value.clone()));
-            Some(value)
+    let status = match ctx.client().jobs().list(Some(100), Some(0), &opts).await {
+        Ok(page) => {
+            let items = page
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            match items
+                .iter()
+                .filter_map(|item| item.as_object().cloned())
+                .find(|job| domain::vndms::is_vndms_connector_job(job))
+            {
+                None => domain::vndms::connector_not_configured(Some(&checked_at)),
+                Some(job) => {
+                    let job_id = job
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string();
+                    match ctx.client().jobs().runs(&job_id, Some(20), Some(0), &opts).await {
+                        Ok(runs_page) => {
+                            let runs: Vec<Map<String, Value>> = runs_page
+                                .get("items")
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default()
+                                .iter()
+                                .filter_map(|run| run.as_object().cloned())
+                                .collect();
+                            domain::vndms::connector_status_from_runs(&job, &runs, now_ms)
+                        }
+                        Err(_) => {
+                            // The job exists but its run history is
+                            // unreadable: surface the gap, do not guess.
+                            let mut partial =
+                                domain::vndms::connector_status_from_runs(&job, &[], now_ms);
+                            partial.error = Some("tier2_job_runs_unavailable".into());
+                            partial
+                        }
+                    }
+                }
+            }
         }
-        Err(_) => {
-            let cache = ctx
-                .state
-                .hazard_status_cache
-                .lock()
-                .unwrap_or_else(|poison| poison.into_inner());
-            cache.as_ref().map(|(_, value)| value.clone())
+        Err(error) => {
+            let domain_error = domain::DomainError::new(
+                error.status().unwrap_or(503),
+                error.code().unwrap_or("tier2_unreachable"),
+                String::new(),
+                None,
+            );
+            domain::vndms::connector_unavailable(Some(&domain_error), Some(&checked_at))
         }
-    }
+    };
+    let mut cache = ctx
+        .state
+        .connector_status_cache
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    *cache = Some((std::time::Instant::now(), status.clone()));
+    status
 }
 
 async fn compute_ingest_status(ctx: &Ctx<'_>) -> domain::vndms::IngestStatus {
     let latest = latest_ingest_run(ctx).await;
-    let feed = fetch_tier2_hazard_status(ctx).await;
-    let connector = if let Some(feed) = feed {
-        let last_success = feed
-            .get("last_success_at")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        let failed = feed.get("status").and_then(Value::as_str) == Some("error");
-        Some(domain::vndms::IngestConnectorStatus {
-            source: "tier-2-scheduled-job".into(),
-            available: true,
-            configured: feed
-                .get("configured")
-                .and_then(Value::as_bool)
-                .unwrap_or(true),
-            job_id: Some("kttv-crawler".into()),
-            job_name: Some("Tier-2 KTTV crawler (NCHMF/VNDMS)".into()),
-            job_kind: Some("interval".into()),
-            enabled: Some(true),
-            schedule: Some(domain::vndms::ConnectorSchedule {
-                cron: None,
-                every_seconds: Some(1800.0),
-            }),
-            last_run_at: feed
-                .get("last_run_at")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .or_else(|| last_success.clone()),
-            last_run_status: Some(
-                if failed {
-                    "failed"
-                } else if last_success.is_some() {
-                    "succeeded"
-                } else {
-                    "unknown"
-                }
-                .into(),
-            ),
-            last_run_error: feed
-                .get("error")
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            last_success_at: last_success,
-            runs_considered: 1,
-            error: if failed {
-                feed.get("error")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-                    .or_else(|| Some("tier2_crawler_failed".into()))
-            } else {
-                None
-            },
-            checked_at: crate::now_iso(),
-        })
-    } else {
-        None
-    };
+    let connector = vndms_connector_status(ctx).await;
     let latest_data = latest.as_ref().map(|row| to_data(row));
     domain::vndms::ingest_status_from_run_with_stale(
         latest_data.as_ref(),
         chrono::Utc::now().timestamp_millis(),
-        connector.as_ref(),
+        Some(&connector),
         Some(ctx.config().vndms_stale_minutes as f64),
     )
 }
@@ -6980,14 +6974,39 @@ mod route_tests {
             })))
             .mount(&server)
             .await;
+        // The ingest projection comes from the real Tier-2 scheduled job and
+        // its run history, never from a hardcoded connector literal.
         Mock::given(method("GET"))
-            .and(path("/v1/capabilities/hazards/status"))
+            .and(path("/v1/capabilities/jobs"))
+            .and(query_param("limit", "100"))
+            .and(query_param("offset", "0"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "configured": true,
-                "status": "ok",
-                "last_run_at": "2026-01-01T00:00:00.000Z",
-                "last_success_at": "2026-01-01T00:00:00.000Z"
+                "items": [{
+                    "id": "vndms-connector",
+                    "name": "VNDMS feed ingest",
+                    "kind": "ingest",
+                    "enabled": true,
+                    "schedule": { "everySeconds": 1800 },
+                    "datasetId": "sos-hazard-layers"
+                }]
             })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/jobs/vndms-connector/runs"))
+            .and(query_param("limit", "20"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [{
+                    "id": "r1",
+                    "status": "success",
+                    "startedAt": "2026-01-01T00:00:00.000Z",
+                    "finishedAt": "2026-01-01T00:05:00.000Z",
+                    "lastError": null
+                }]
+            })))
+            .expect(1)
             .mount(&server)
             .await;
         let (status, _, body) = call(
@@ -7001,9 +7020,142 @@ mod route_tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["hazard_feed"]["records_visible"], 1);
         assert_eq!(body["hazard_feed"]["stale"], true);
+        assert_eq!(
+            body["hazard_feed"]["ingest"]["connector"]["job_id"],
+            "vndms-connector"
+        );
+        assert_eq!(
+            body["hazard_feed"]["ingest"]["connector"]["last_run_status"],
+            "success"
+        );
         assert_eq!(body["hazard_feed"]["ingest"]["configured"], true);
         assert_eq!(body["hazard_feed"]["ingest"]["stale"], true);
         assert_eq!(body["status"], "degraded");
+    }
+
+    async fn mount_connector_job(
+        server: &MockServer,
+        job: Value,
+        runs: Value,
+    ) {
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/jobs"))
+            .and(query_param("limit", "100"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [job]
+            })))
+            .expect(1)
+            .mount(server)
+            .await;
+        let job_id = job.get("id").and_then(Value::as_str).unwrap_or_default();
+        Mock::given(method("GET"))
+            .and(path(format!("/v1/capabilities/jobs/{job_id}/runs")))
+            .and(query_param("limit", "20"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [runs]
+            })))
+            .expect(1)
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn ingest_status_reflects_the_real_tier2_connector_job() {
+        let server = MockServer::start().await;
+        let now = crate::now_iso();
+        mount_connector_job(
+            &server,
+            json!({
+                "id": "vndms-connector", "name": "VNDMS feed ingest", "kind": "ingest",
+                "enabled": true, "schedule": { "everySeconds": 900 },
+                "datasetId": "sos-hazard-layers"
+            }),
+            json!({
+                "id": "r1", "status": "success", "startedAt": now, "finishedAt": now,
+                "lastError": null
+            }),
+        )
+        .await;
+        let (status_code, _, body) = call(
+            app(state(&server.uri())),
+            Method::GET,
+            "/v1/hazards/ingest/status",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status_code, StatusCode::OK);
+        assert_eq!(body["configured"], true);
+        assert_eq!(body["status"], "ready");
+        let connector = &body["connector"];
+        assert_eq!(connector["job_id"], "vndms-connector");
+        assert_eq!(connector["job_name"], "VNDMS feed ingest");
+        assert_eq!(connector["enabled"], true);
+        assert_eq!(connector["schedule"]["every_seconds"], 900.0);
+        assert_eq!(connector["last_run_status"], "success");
+        assert_eq!(connector["runs_considered"], 1);
+        assert_eq!(connector["error"], Value::Null);
+    }
+
+    #[tokio::test]
+    async fn ingest_status_flags_a_disabled_connector_job() {
+        let server = MockServer::start().await;
+        mount_connector_job(
+            &server,
+            json!({
+                "id": "vndms-connector", "name": "VNDMS feed ingest", "kind": "ingest",
+                "enabled": false, "schedule": { "everySeconds": 1800 },
+                "datasetId": "sos-hazard-layers"
+            }),
+            json!({ "id": "r-none" }),
+        )
+        .await;
+        let (status_code, _, body) = call(
+            app(state(&server.uri())),
+            Method::GET,
+            "/v1/hazards/ingest/status",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status_code, StatusCode::OK);
+        let connector = &body["connector"];
+        assert_eq!(connector["enabled"], false);
+        assert_eq!(connector["error"], "connector_disabled");
+        assert_eq!(body["status"], "error");
+        assert_eq!(body["error"], "connector_disabled");
+    }
+
+    #[tokio::test]
+    async fn ingest_status_reports_an_absent_connector_as_unconfigured() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/jobs"))
+            .and(query_param("limit", "100"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [
+                    { "id": "email-digest", "name": "Email digest", "kind": "interval" }
+                ]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let (status_code, _, body) = call(
+            app(state(&server.uri())),
+            Method::GET,
+            "/v1/hazards/ingest/status",
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(status_code, StatusCode::OK);
+        assert_eq!(body["configured"], false);
+        assert_eq!(body["status"], "unconfigured");
+        assert_eq!(body["connector"]["configured"], false);
+        assert_eq!(body["connector"]["available"], true);
     }
 
     #[tokio::test]
