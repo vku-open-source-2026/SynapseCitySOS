@@ -3087,11 +3087,15 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
     } else {
         "medium"
     };
+    // Never fabricate coordinates. A feed warning without a usable Point
+    // (polygon/circle warnings, province-wide alerts) stays in the list APIs
+    // with `location_unknown: true` and no geometry, so maps and geo/near
+    // exclude it instead of drawing it at an invented authoritative spot.
     let geometry = row
         .get("geometry")
         .filter(|value| value.get("type").and_then(Value::as_str) == Some("Point"))
-        .cloned()
-        .unwrap_or_else(|| json!({ "type": "Point", "coordinates": [105.8542, 21.0285] }));
+        .cloned();
+    let location_unknown = geometry.is_none();
     let id = format!(
         "synapsedx-{}",
         row.get("id")
@@ -3108,7 +3112,7 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
             .take(160)
             .collect::<String>()
     );
-    Some(json!({
+    let mut record = json!({
         "id": id,
         "hazard_id": hazard_id,
         "title": row.get("title").and_then(Value::as_str).unwrap_or("Cảnh báo khí tượng thủy văn"),
@@ -3118,7 +3122,7 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
         "source": source,
         "status": "active",
         "is_active": row.get("is_active").and_then(Value::as_bool).unwrap_or(true),
-        "geometry": geometry,
+        "location_unknown": location_unknown,
         "provinces": provinces,
         "district": provinces.first(),
         "url": row.get("url"),
@@ -3139,7 +3143,11 @@ fn to_sos_hazard(record: &Value) -> Option<Value> {
         },
         "linked_event_id": null,
         "linked_eop_plan_id": null,
-    }))
+    });
+    if let Some(geometry) = geometry {
+        record["geometry"] = geometry;
+    }
+    Some(record)
 }
 
 async fn fetch_tier2_hazards_with_state(
@@ -5544,6 +5552,44 @@ mod route_tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body[0]["hazard_id"], "h1");
+    }
+
+    #[test]
+    fn feed_hazards_without_a_point_never_get_fabricated_coordinates() {
+        let missing = to_sos_hazard(&json!({
+            "hazard_id": "h-no-geo",
+            "title": "Province-wide rain warning",
+            "published_at": "2026-11-01T00:00:00.000Z"
+        }))
+        .expect("record");
+        assert_eq!(missing.get("geometry"), None);
+        assert_eq!(missing["location_unknown"], true);
+
+        let polygon = to_sos_hazard(&json!({
+            "hazard_id": "h-polygon",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[107, 16], [108, 16], [108, 17], [107, 16]]]
+            }
+        }))
+        .expect("record");
+        // Polygon warnings stay in the list APIs but are never drawn at an
+        // invented point; the severity default logic still applies.
+        assert_eq!(polygon.get("geometry"), None);
+        assert_eq!(polygon["location_unknown"], true);
+        assert_eq!(polygon["severity"], "medium");
+    }
+
+    #[test]
+    fn feed_hazards_with_a_point_keep_their_real_coordinates() {
+        let point = to_sos_hazard(&json!({
+            "hazard_id": "h-point",
+            "geometry": { "type": "Point", "coordinates": [108.2, 16.05] }
+        }))
+        .expect("record");
+        assert_eq!(point["geometry"]["type"], "Point");
+        assert_eq!(point["geometry"]["coordinates"], json!([108.2, 16.05]));
+        assert_eq!(point["location_unknown"], false);
     }
 
     #[tokio::test]

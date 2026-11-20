@@ -36,6 +36,7 @@ test('toSosHazard maps a Tier-2 NCHMF warning to the SOS projection', () => {
   assert.equal(row.source, 'nchmf');
   assert.equal(row.is_active, true);
   assert.deepEqual(row.geometry, { type: 'Point', coordinates: [108.2, 16.05] });
+  assert.equal(row.location_unknown, false);
   assert.deepEqual(row.provinces, ['Đà Nẵng', 'Huế']);
   assert.equal(row.district, 'Đà Nẵng');
   assert.equal(row.observed_at, '2026-11-06T12:00:00.000Z');
@@ -54,7 +55,25 @@ test('toSosHazard rejects records without a stable id and normalises bad values'
   assert.ok(row);
   assert.equal(row.event_type, 'other');
   assert.equal(row.severity, 'medium');
-  assert.deepEqual(row.geometry, { type: 'Point', coordinates: [105.8542, 21.0285] });
+  // No usable Point: the hazard keeps its identity but never gets fabricated
+  // coordinates. It is flagged so lists/UIs can show "vùng chưa xác định".
+  assert.equal(row.geometry, undefined);
+  assert.equal(row.location_unknown, true);
+});
+
+test('toSosHazard never pins a non-Point feed warning to a default city', () => {
+  const row = toSosHazard({
+    hazard_id: 'h-polygon',
+    title: 'Cảnh báo lũ quét trên diện rộng',
+    event_type: 'flood',
+    severity: 'high',
+    geometry: { type: 'Polygon', coordinates: [[[107, 16], [108, 16], [108, 17], [107, 16]]] },
+    published_at: '2026-11-06T12:00:00.000Z',
+  });
+  assert.ok(row);
+  assert.equal(row.geometry, undefined);
+  assert.equal(row.location_unknown, true);
+  assert.equal(row.severity, 'high');
 });
 
 test('mergeHazardFeed keeps the fresh Tier-2 copy for the same hazard_id', () => {

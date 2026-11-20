@@ -77,8 +77,13 @@ export function toSosHazard(record: unknown): Data | null {
   const provinces = Array.isArray(row.provinces) ? row.provinces.map(String).filter(Boolean).slice(0, 24) : [];
   const eventType = String(row.event_type ?? 'other');
   const severity = String(row.severity ?? 'medium');
-  const geometry = pointGeometry(row.geometry) ?? { type: 'Point' as const, coordinates: [105.8542, 21.0285] as [number, number] };
-  return {
+  // Never fabricate coordinates. A feed warning without a usable Point
+  // (polygon/circle warnings, province-wide alerts) stays in the list APIs
+  // with `location_unknown: true` and no geometry, so maps and geo/near
+  // exclude it instead of drawing it at an invented authoritative spot.
+  const geometry = pointGeometry(row.geometry);
+  const locationUnknown = geometry === null;
+  const hazard: Data = {
     id: `synapsedx-${String(row.id ?? hazardId).replace(/[^A-Za-z0-9_.-]/g, '-').slice(0, 160)}`,
     hazard_id: hazardId,
     title: String(row.title ?? 'Cảnh báo khí tượng thủy văn').slice(0, 300),
@@ -88,7 +93,7 @@ export function toSosHazard(record: unknown): Data | null {
     source,
     status: 'active',
     is_active: row.is_active !== false,
-    geometry,
+    location_unknown: locationUnknown,
     provinces,
     district: provinces[0] ?? null,
     url: typeof row.url === 'string' ? row.url : null,
@@ -110,6 +115,8 @@ export function toSosHazard(record: unknown): Data | null {
     linked_event_id: null,
     linked_eop_plan_id: null,
   };
+  if (geometry) hazard.geometry = geometry;
+  return hazard;
 }
 
 /** Feed records win over a stored copy with the same stable hazard_id. */
