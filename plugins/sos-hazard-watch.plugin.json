@@ -215,7 +215,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-hazard-create-submit"
       },
@@ -263,7 +263,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-hazard-update-submit"
       },
@@ -295,7 +295,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-hazard-decision-submit"
       },
@@ -316,7 +316,7 @@
         "resource": "hazards",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-hazard-delete-submit"
       },
@@ -337,7 +337,7 @@
         "resource": "hazardIngest",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-ingest-create-submit"
       },
@@ -379,7 +379,7 @@
         "resource": "hazardIngest",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-ingest-decision-submit"
       },
@@ -1001,5 +1001,5 @@
     "path": "plugins/sos-hazard-watch.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:919349ee5e818e538899e4c54ad492ae30a5d228d5c912f0e7751195af1cf6d3"
+  "checksum": "sha256:4039c2accf5652165c0bc3fcde236bbe811388c8411a28c28e3d4d5bbcfd0942"
 }

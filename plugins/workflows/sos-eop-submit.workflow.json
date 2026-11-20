@@ -2672,5 +2672,10 @@
         ]
       ]
     }
+  },
+  "settings": {
+    "access": {
+      "mode": "owner-only"
+    }
   }
 }

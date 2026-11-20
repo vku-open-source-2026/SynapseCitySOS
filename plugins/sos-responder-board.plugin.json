@@ -189,7 +189,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-dispatch-start-submit"
       },
@@ -215,7 +215,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-dispatch-arrive-submit"
       },
@@ -242,7 +242,7 @@
         "resource": "resources",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-resource-status-submit"
       },
@@ -779,5 +779,5 @@
     "path": "plugins/sos-responder-board.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:d93847861a8b767cb254bfd02df835ea1481bcb513061c8df9648523b3486b82"
+  "checksum": "sha256:7d4fc7ad2f28883be8688d90a8489ae6418e6134efb62f3aaf8fcca69bf6a6da"
 }

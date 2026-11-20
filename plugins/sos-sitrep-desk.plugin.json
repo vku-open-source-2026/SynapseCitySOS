@@ -152,7 +152,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-sitrep-create-submit"
       },
@@ -190,7 +190,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-sitrep-update-submit"
       },
@@ -222,7 +222,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-sitrep-decision-submit"
       },
@@ -243,7 +243,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-sitrep-delete-submit"
       },
@@ -264,7 +264,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-sitrep-publish",
-          "checksum": "1307d2fbdc89c73585077375bd450e1b95a57a2eb6b5c16bf7b5647f71da6581"
+          "checksum": "2c4d09d942ee551ffc43a7f41f767579e323e3563a35646836b0e4d4c0961a04"
         },
         "onSubmit": "act-sitrep-publish-submit"
       },
@@ -345,7 +345,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-sitrep-delta",
-          "checksum": "36e710836af986352bbebcb8a2a2819dafeaff7a6ab13d1d2699cd94a06eec79"
+          "checksum": "40e8d36f39b5cb60bd4a7ceff474ce8b8dd9a58ce02e1d9877bb1ae362e55c4a"
         },
         "onSubmit": "act-sitrep-delta-submit"
       },
@@ -873,5 +873,5 @@
     "path": "plugins/sos-sitrep-desk.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:387705d6b815dad0159542849ddae93d0a72e7e29b8a090465ec21613a7a6ea9"
+  "checksum": "sha256:6b246a5b39d4469899ad8eb33cb846b61b133194bfd3d8470af9c66406394362"
 }

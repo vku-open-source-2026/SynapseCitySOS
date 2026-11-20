@@ -146,7 +146,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-mutual-aid-create-submit"
       },
@@ -177,7 +177,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-mutual-aid-update-submit"
       },
@@ -198,7 +198,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-mutual-aid-delete-submit"
       },
@@ -236,7 +236,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-mutual-aid-accept",
-          "checksum": "968a35bf8fad47205c953463618e7ce064429e00c4d971c65baf735f3aa8edb8"
+          "checksum": "cdcdae7f97c694817d532b697d0cdcfaf51f158e5b4b15ef06e2b6f5724a5857"
         },
         "onSubmit": "act-mutual-aid-accept-submit"
       },
@@ -262,7 +262,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-mutual-aid-decline",
-          "checksum": "6362e7da8771b3b520e42c004f8f544c9093e46bf66ae914f6d7a0e8848ef4e6"
+          "checksum": "ac53336d3af8ec04531ff4e8c12a908a9c14422a7f1b67c8ac03e759183b1518"
         },
         "onSubmit": "act-mutual-aid-decline-submit"
       },
@@ -294,7 +294,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-mutual-aid-handoff",
-          "checksum": "16f7872efb8f69a2d749adb4449f06d3d0f27c3d50e1e34913f6c8730abde00a"
+          "checksum": "a9bb352f43b6c001f1e763400bd8f11818fcd6154c259d4e42402e9818d81afc"
         },
         "onSubmit": "act-mutual-aid-handoff-submit"
       },
@@ -744,5 +744,5 @@
     "path": "plugins/sos-mutual-aid.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:c2c29249de8fb9856267a0f73423ee3254367d4b0999c032261e30d8f2878abd"
+  "checksum": "sha256:0a540030aa5a30eff08cf74613661c6bbb5d32d54ec5b30d0b3755b234e84868"
 }

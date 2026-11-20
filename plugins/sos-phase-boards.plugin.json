@@ -241,7 +241,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-eop-publish",
-          "checksum": "9b3975e4d9a6f3aa3338f057e17f7ef4c64ce2d710ce83f3a77dd1f891dbdc46"
+          "checksum": "8a3e51b365e259540932a81150281590b8142461ce69bb97655e912106349305"
         },
         "onSubmit": "act-eop-publish-submit"
       },
@@ -262,7 +262,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-sitrep-publish",
-          "checksum": "1307d2fbdc89c73585077375bd450e1b95a57a2eb6b5c16bf7b5647f71da6581"
+          "checksum": "2c4d09d942ee551ffc43a7f41f767579e323e3563a35646836b0e4d4c0961a04"
         },
         "onSubmit": "act-sitrep-publish-submit"
       },
@@ -288,7 +288,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-aar-publish-submit"
       },
@@ -935,5 +935,5 @@
     "path": "plugins/sos-phase-boards.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:e1f9b2d4abf0cba2f072f2461ad2fd21f50d98f05eae24118615615252de72fa"
+  "checksum": "sha256:270895d8e85177b141dd99373a95225172037e4ca8a6e3a7a826db566cab6cc6"
 }

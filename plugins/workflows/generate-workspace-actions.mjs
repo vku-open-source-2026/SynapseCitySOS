@@ -361,6 +361,10 @@ const GUARDS = Object.fromEntries(Object.entries(SCHEMAS).map(([key, value]) => 
 
 const workflow = {
   name: 'sos-workspace-actions',
+  // DX injects the mandatory owner-only access policy on every managed
+  // workflow import; declaring it keeps the committed graph byte-identical to
+  // the imported artifact and the bundle pins verifiable offline.
+  settings: { access: { mode: 'owner-only' } },
   nodes: [
     node('DX manual execution', 'manualTrigger', 1, [200, 300]),
     node('Validate envelope and select operation', 'code', 2, [420, 300], { code: CODE }),

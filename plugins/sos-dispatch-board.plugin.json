@@ -165,7 +165,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-dispatch-create",
-          "checksum": "588826887db9c32c481597efa4323d65e823e32d2ef2f9519f9b1b217f2ac628"
+          "checksum": "304737a89aa4d269ace185f2552731ed1a27339c7d360645b7208664ac6b7b3c"
         },
         "onSubmit": "act-dispatch-create-submit"
       },
@@ -208,7 +208,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-dispatch-assign",
-          "checksum": "d449a8dea6a1e1f4d36d6cbf5cfbd810065adbbd7e4b0bb130d621fc806d8f84"
+          "checksum": "4fec69bb602bedfe2b3a374b20639eb814894634278c687db6f2e7ab0fb84c70"
         },
         "onSubmit": "act-dispatch-assign-submit"
       },
@@ -243,7 +243,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-dispatch-progress",
-          "checksum": "a8b2906c4a604cdd94416daabf6009cca4268a18aa4da338b0ae969231ed0518"
+          "checksum": "26a86211f3b98b8bc259ccc1ffd96393e86e67d151a4aa70630c2530ec2731c7"
         },
         "onSubmit": "act-dispatch-start-submit"
       },
@@ -278,7 +278,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-dispatch-progress",
-          "checksum": "a8b2906c4a604cdd94416daabf6009cca4268a18aa4da338b0ae969231ed0518"
+          "checksum": "26a86211f3b98b8bc259ccc1ffd96393e86e67d151a4aa70630c2530ec2731c7"
         },
         "onSubmit": "act-dispatch-arrive-submit"
       },
@@ -299,7 +299,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-dispatch-reject",
-          "checksum": "36966fe422be7b3c59b4bd1930dba542f280f7f82fae6b1dbce2999229de65a0"
+          "checksum": "96ce6aad2b680696f98bd70bae2c15cab7027c32a5f9b1e3170e96c45c39c697"
         },
         "onSubmit": "act-dispatch-reject-submit"
       },
@@ -814,5 +814,5 @@
     "path": "plugins/sos-dispatch-board.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:19b36e361f56bf5e3ba7a3e455fa3b7d938db0743a9aaf6ac03ce481e8af972a"
+  "checksum": "sha256:ff791b4bbd95de216bf0c7a1c8bc68c3edd7f692463ca183c91f68540b0c032e"
 }

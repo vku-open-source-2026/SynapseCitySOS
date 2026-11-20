@@ -261,7 +261,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-event-create",
-          "checksum": "c4cc3147e75398800e3248d19b0c7e6ed2f094b9e6c3122331d93964687dd4ef"
+          "checksum": "480dd3075575f6425c97a48b1c845f849fdac56b68024ddddc0fe8273b24615f"
         },
         "onSubmit": "act-event-create-submit"
       },
@@ -298,7 +298,7 @@
         "resource": "dispatch",
         "workflowRef": {
           "name": "sos-dispatch-create",
-          "checksum": "588826887db9c32c481597efa4323d65e823e32d2ef2f9519f9b1b217f2ac628"
+          "checksum": "304737a89aa4d269ace185f2552731ed1a27339c7d360645b7208664ac6b7b3c"
         },
         "onSubmit": "act-dispatch-create-submit"
       },
@@ -324,7 +324,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-event-close",
-          "checksum": "61bb9f85be7659ed76a0f9b922a38d5d735e42d2e90081b5d903ba418ccdc225"
+          "checksum": "e66c006e339f303854c473b0cc83ba6460ca39eb008710f7f008a1d04e97b1c8"
         },
         "onSubmit": "act-event-close-submit"
       },
@@ -1061,5 +1061,5 @@
     "path": "plugins/sos-command-overview.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:e2c4eca79621793ffbfdaf9aae1be7eccc9daecdbb18873e0e8b81cf3b133965"
+  "checksum": "sha256:3ad5cae318d2676f7fa59b657cb0506f5811bbe060a36cbe0d906894987096ef"
 }

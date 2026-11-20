@@ -197,7 +197,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-eop-approve",
-          "checksum": "393685bd78f918ad8022576cf409094f9d8d93c53f3c59f084b106b24d0261e9"
+          "checksum": "26fdffb1a6a14ad0719ec9ba6e8fd416c3fe298b6ca348a6e97670372d3fd97e"
         },
         "onSubmit": "act-eop-approve-submit"
       },
@@ -218,7 +218,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-sitrep-publish",
-          "checksum": "1307d2fbdc89c73585077375bd450e1b95a57a2eb6b5c16bf7b5647f71da6581"
+          "checksum": "2c4d09d942ee551ffc43a7f41f767579e323e3563a35646836b0e4d4c0961a04"
         },
         "onSubmit": "act-sitrep-publish-submit"
       },
@@ -249,7 +249,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-aar-decision-submit"
       },
@@ -281,7 +281,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-mutual-aid-decision-submit"
       },
@@ -869,5 +869,5 @@
     "path": "plugins/sos-operator-review.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:4d6f9d0662e85afcb40af247c761838d57b6acc9eb4b23ba120680d411a3c2e8"
+  "checksum": "sha256:2f502752688c5b322534fe1cd0cd3bfbabfb963bf72ab0fed954f74eb8b32d8d"
 }

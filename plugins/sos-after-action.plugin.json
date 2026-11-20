@@ -144,7 +144,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-aar-create-submit"
       },
@@ -187,7 +187,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-aar-update-submit"
       },
@@ -219,7 +219,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-aar-decision-submit"
       },
@@ -240,7 +240,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "checksum": "30b6d7bd2549bbca569c3d9479b2d7d19fa23c1ecb8a5d629cf9b7722c6695e6"
         },
         "onSubmit": "act-aar-delete-submit"
       },
@@ -261,7 +261,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-aar-publish",
-          "checksum": "2dbd95dba5944ba94c3d9db2e8a134ecbe56c39b58cee8902f6de2e1ceb37595"
+          "checksum": "aed96d62a71e7bcfbd9293a6e7b1f2afd4c5cf2ba4234054d568ffb2d7c2bb5f"
         },
         "onSubmit": "act-aar-publish-submit"
       },
@@ -684,5 +684,5 @@
     "path": "plugins/sos-after-action.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:ec1d9816b19483af61d8362d53300efe80cde8e11ddea66b7fbbfe678c87abb6"
+  "checksum": "sha256:65e6cc605ea6b6091ebc3405454b1b8258af8522a2529c4ffad84704472b0366"
 }
