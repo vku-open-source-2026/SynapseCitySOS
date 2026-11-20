@@ -1285,18 +1285,16 @@ async fn sos_timeline(ctx: Ctx<'_>) -> ApiResult<Response> {
         ctx.config().max_scan_records,
     )
     .await?;
+    // A dispatch-dataset failure is an honest error, never a plausible
+    // timeline: computing SLA from absent dispatch data would report numbers
+    // the fields do not mean. The events scan above fails the same way.
     let dispatch = tier2::list_all(
         ctx.client(),
         &opts,
         tier2::DISPATCH,
         ctx.config().max_scan_records,
     )
-    .await
-    .unwrap_or(AllRows {
-        items: Vec::new(),
-        scanned: 0,
-        truncated: false,
-    });
+    .await?;
     let mut first_assignment: HashMap<String, i64> = HashMap::new();
     for order in &dispatch.items {
         let event_id = order
@@ -6801,6 +6799,56 @@ mod route_tests {
         .await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(body["error"], "invalid_dispatch_transition");
+    }
+
+    #[tokio::test]
+    async fn sos_timeline_fails_when_the_dispatch_scan_fails() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-emergency-events",
+            "SynapseCitySOS emergency events",
+            "EmergencyEvent",
+            "Emergency event command records",
+            true,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-emergency-events/records"))
+            .and(query_param("limit", "500"))
+            .and(query_param("offset", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "items": [], "total": 0, "limit": 500, "offset": 0
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // The dispatch dataset is unreachable: the timeline must return the
+        // dependency error, never a 200 with SLA numbers computed from
+        // silently absent dispatch data. (The Tier-2 SDK retries a 5xx once,
+        // hence the two expected hits.)
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/datasets/sos-dispatch-orders"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(2)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::GET,
+            "/v1/emergency/sos/timeline",
+            Some(&token),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
+        assert_eq!(body["error"], "tier2_unavailable");
     }
 
     async fn mount_resource_unit(server: &MockServer, status: &str, version: i64) {
