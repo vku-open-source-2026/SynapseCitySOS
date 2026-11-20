@@ -1768,7 +1768,8 @@ async fn dispatch_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             "create a dispatch approval first and supply approval_id",
         ));
     }
-    let approval = assert_approval_ready(&ctx, &approval_id, id, "dispatch.assign").await?;
+    let approval =
+        assert_approval_ready(&ctx, &approval_id, id, "dispatch.assign", &actor).await?;
     let resource_id = requested_resource_unit_id(ctx.body).ok_or_else(|| {
         ApiError::bad_request(
             "assigned_resource_unit_id_required",
@@ -2565,6 +2566,7 @@ async fn assert_approval_ready(
     approval_id: &str,
     entity_id: &str,
     action: &str,
+    actor: &str,
 ) -> ApiResult<Value> {
     let approval = get_approval(ctx, approval_id).await?;
     if approval.get("status").and_then(Value::as_str) != Some("approved") {
@@ -2589,6 +2591,14 @@ async fn assert_approval_ready(
         return Err(ApiError::conflict(
             "approval_action_mismatch",
             "approval belongs to another action",
+        ));
+    }
+    // Four-eyes (docs/HITL.md): the operator who requested the approval can
+    // never be the one who makes it ready or uses it.
+    if approval.get("requester").and_then(Value::as_str) == Some(actor) {
+        return Err(ApiError::forbidden(
+            "self_approval_forbidden",
+            "the requester cannot approve their own request",
         ));
     }
     Ok(approval)
@@ -2644,6 +2654,18 @@ async fn hitl_decide(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             "invalid_decision",
             "decision must be approve or reject",
         ));
+    }
+    // Four-eyes (docs/HITL.md): the operator who requested the approval can
+    // never decide it. The decision never reaches Tier-2 in that case, so the
+    // approval stays pending for a different approver.
+    if let Some(actor) = ctx.actor().as_deref() {
+        let approval = get_approval(&ctx, id).await?;
+        if approval.get("requester").and_then(Value::as_str) == Some(actor) {
+            return Err(ApiError::forbidden(
+                "self_approval_forbidden",
+                "the requester cannot approve their own request",
+            ));
+        }
     }
     let mut body = json!({ "decision": decision });
     if let Some(note) = web::string_value(ctx.body.get("note")) {
@@ -4931,7 +4953,7 @@ async fn eop_approve(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             "create an EOP approval first and supply approval_id",
         ));
     }
-    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve").await?;
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve", &actor).await?;
     let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let mut patch = Map::new();
     patch.insert("status".into(), json!("approved"));
@@ -5001,7 +5023,7 @@ async fn eop_publish(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             "publish requires the approved EOP approval",
         ));
     }
-    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve").await?;
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve", &actor).await?;
     if current.get("approval_id").and_then(Value::as_str)
         != approval.get("id").and_then(Value::as_str)
     {
@@ -5094,7 +5116,7 @@ async fn eop_submit(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
             "submit requires the approved EOP approval",
         ));
     }
-    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve").await?;
+    let approval = assert_approval_ready(&ctx, &approval_id, id, "eop.approve", &actor).await?;
     if plan.get("approval_id").and_then(Value::as_str) != approval.get("id").and_then(Value::as_str)
     {
         return Err(ApiError::conflict(
@@ -5239,7 +5261,7 @@ mod route_tests {
     use serde_json::{json, Value};
     use synapsedx::{Client, Credentials};
     use tower::ServiceExt;
-    use wiremock::matchers::{header, method, path, query_param};
+    use wiremock::matchers::{body_partial_json, header, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn state(uri: &str) -> AppState {
@@ -5280,6 +5302,21 @@ mod route_tests {
             None,
             auth::ROLE_RESPONDER,
         );
+        auth::issue_session(
+            config,
+            &user,
+            auth::SessionExtras {
+                auth_source: Some("demo".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .access_token
+    }
+
+    /// A second dispatch-capable operator so four-eyes flows have two actors.
+    fn officer_token(config: &Config, username: &str) -> String {
+        let user = auth::shell_user(username, None, None, None, auth::ROLE_OPERATOR);
         auth::issue_session(
             config,
             &user,
@@ -5974,6 +6011,267 @@ mod route_tests {
         .await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(body["error"], "resource_unit_unavailable");
+    }
+
+    #[tokio::test]
+    async fn hitl_decide_rejects_the_requester_and_keeps_the_approval_pending() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let requester = admin_token(&config);
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "pending",
+                    "entityId": "d1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // The decision must never reach Tier-2 when the requester decides
+        // alone; the approval stays pending for a different approver.
+        Mock::given(method("POST"))
+            .and(path("/v1/capabilities/approvals/ap1/decide"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": { "id": "ap1", "status": "approved" }
+            })))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/hitl/approvals/ap1/decide",
+            Some(&requester),
+            Some(json!({ "decision": "approve" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"], "self_approval_forbidden");
+    }
+
+    #[tokio::test]
+    async fn hitl_decide_allows_a_second_operator() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let approver = responder_token(&config);
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "pending",
+                    "entityId": "d1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/capabilities/approvals/ap1/decide"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "requester": "qa",
+                    "decisions": [{ "actor": "responder", "decision": "approve" }]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/hitl/approvals/ap1/decide",
+            Some(&approver),
+            Some(json!({ "decision": "approve" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["approval"]["status"], "approved");
+    }
+
+    #[tokio::test]
+    async fn an_approval_cannot_be_used_by_its_requester() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let requester = admin_token(&config);
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "entityId": "d1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/approve",
+            Some(&requester),
+            Some(json!({ "approval_id": "ap1", "assigned_resource_unit_id": "u1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"], "self_approval_forbidden");
+    }
+
+    #[tokio::test]
+    async fn dispatch_assignment_accepts_a_four_eyes_approval_from_another_operator() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let officer = officer_token(&config, "officer");
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        mount_dataset(
+            &server,
+            "sos-resource-units",
+            "SynapseCitySOS resource units",
+            "ResourceUnit",
+            "Emergency response resources",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "entityId": "d1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "pending", "task_title": "Rescue", "assignments": [] }
+            })))
+            // The handler reads the order and tier2::update re-reads it.
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": 1,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "available", "resource_type": "personnel" }
+            })))
+            // The handler reads the unit and tier2::update re-reads it.
+            .expect(2)
+            .mount(&server)
+            .await;
+        // The unit is reserved for the order before the order is patched.
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .and(body_partial_json(json!({
+                "data": { "status": "assigned", "assigned_dispatch_order_id": "d1" }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": {
+                    "status": "assigned",
+                    "assigned_dispatch_order_id": "d1",
+                    "resource_type": "personnel"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .and(body_partial_json(json!({
+                "data": { "status": "assigned", "approval_id": "ap1" }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 3,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": {
+                    "status": "assigned",
+                    "task_title": "Rescue",
+                    "assigned_resource_unit_id": "u1",
+                    "approval_id": "ap1",
+                    "approved_by": "officer"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/approve",
+            Some(&officer),
+            Some(json!({ "approval_id": "ap1", "assigned_resource_unit_id": "u1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "assigned");
+        assert_eq!(body["approval_id"], "ap1");
     }
 
     #[tokio::test]
