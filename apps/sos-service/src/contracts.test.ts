@@ -457,11 +457,13 @@ test('role escalation is denied on every mutation family', async () => {
   });
   assert.equal(responderEopPublish.status, 403);
 
-  // A manager can dispatch.
+  // A manager passes the dispatch permission gate; the unconditional
+  // four-eyes gate still demands an approval before any assignment.
   const managerApprove = await fetch(`${baseUrl}/v1/emergency/dispatch/role-dispatch/approve`, {
     method: 'POST', headers: manager, body: JSON.stringify({ assigned_resource_unit_id: 'role-resource' }),
   });
-  assert.equal(managerApprove.status, 200);
+  assert.equal(managerApprove.status, 428);
+  assert.equal(((await managerApprove.json()) as Data).error, 'approval_required');
 
   // Anonymous mutation is 401.
   const anonymous = await fetch(`${baseUrl}/v1/emergency/dispatch`, {
@@ -823,28 +825,26 @@ test('EOP submit creates dispatch orders once and optimize assigns units (issue 
   assert.ok(assigned.some((order) => order.assigned_resource_unit_id === 'dispatch-resource' && typeof order.eta_minutes === 'number'));
 });
 
-test('approval requires an existing usable resource unit (issue #20)', async () => {
+test('dispatch approve always demands an approval before any assignment (issue #20)', async () => {
   fake.seed('sos-dispatch-orders', 'approve-order', { emergency_event_id: 'e-x', task_title: 'Task', status: 'pending', assignments: [] });
   fake.seed('sos-resource-units', 'approve-offline', { name: 'Offline', resource_type: 'personnel', status: 'offline' });
   const headers = headersFor('manager');
 
-  const missing = await fetch(`${baseUrl}/v1/emergency/dispatch/approve-order/approve`, { method: 'POST', headers, body: JSON.stringify({}) });
-  assert.equal(missing.status, 400);
-  assert.equal(((await missing.json()) as Data).error, 'assigned_resource_unit_id_required');
+  // Four-eyes is unconditional: no approval_id means no assignment, no matter
+  // how valid the requested resource unit would be. Neither the order nor the
+  // unit is touched before the approval exists.
+  for (const body of [
+    {},
+    { assigned_resource_unit_id: 'nope' },
+    { assigned_resource_unit_id: 'approve-offline' },
+    { assigned_resource_unit_id: 'dispatch-resource' },
+  ]) {
+    const response = await fetch(`${baseUrl}/v1/emergency/dispatch/approve-order/approve`, { method: 'POST', headers, body: JSON.stringify(body) });
+    assert.equal(response.status, 428);
+    assert.equal(((await response.json()) as Data).error, 'approval_required');
+  }
   assert.equal(fake.read('sos-dispatch-orders', 'approve-order')?.status, 'pending');
-
-  const unknown = await fetch(`${baseUrl}/v1/emergency/dispatch/approve-order/approve`, { method: 'POST', headers, body: JSON.stringify({ assigned_resource_unit_id: 'nope' }) });
-  assert.equal(unknown.status, 404);
-
-  const offline = await fetch(`${baseUrl}/v1/emergency/dispatch/approve-order/approve`, { method: 'POST', headers, body: JSON.stringify({ assigned_resource_unit_id: 'approve-offline' }) });
-  assert.equal(offline.status, 409);
-
-  const ok = await fetch(`${baseUrl}/v1/emergency/dispatch/approve-order/approve`, { method: 'POST', headers, body: JSON.stringify({ assigned_resource_unit_id: 'dispatch-resource' }) });
-  assert.equal(ok.status, 200);
-  const body = await ok.json() as Data;
-  assert.equal(body.status, 'assigned');
-  assert.equal(body.assigned_resource_unit_id, 'dispatch-resource');
-  assert.equal(body.assigned_user_id, 'dispatch-resource');
+  assert.equal(fake.read('sos-resource-units', 'approve-offline')?.status, 'offline');
 });
 
 // ── Deploy idempotency ──────────────────────────────────────────────────────
@@ -1072,7 +1072,7 @@ test('the six-role matrix is enforced on dispatch and EOP publish', async () => 
   const operatorApprove = await fetch(`${baseUrl}/v1/emergency/dispatch/matrix-order/approve`, {
     method: 'POST', headers: headersFor('operator'), body: JSON.stringify({ assigned_resource_unit_id: 'matrix-resource' }),
   });
-  assert.equal(operatorApprove.status, 200, 'operator can dispatch');
+  assert.equal(operatorApprove.status, 428, 'operator passes the dispatch permission gate; the four-eyes gate still applies');
 
   const operatorPublish = await fetch(`${baseUrl}/v1/emergency/eop/matrix-plan/publish`, {
     method: 'POST', headers: headersFor('operator'), body: JSON.stringify({}),
@@ -1299,28 +1299,23 @@ test('record GETs expose the Tier-2 version as an ETag and updates honour If-Mat
   assert.equal(((await invalid.json()) as Data).error, 'invalid_if_match');
 });
 
-test('repeating the same dispatch approval is idempotent and writes no second assignment (issue #20)', async () => {
+test('repeating a dispatch approval without approval_id never writes (issue #20)', async () => {
   fake.seed('sos-dispatch-orders', 'idem-order', { emergency_event_id: 'e-idem', task_title: 'Task', status: 'pending', assignments: [] });
   fake.seed('sos-resource-units', 'idem-resource', { name: 'Team Idem', resource_type: 'personnel', status: 'available' });
   const headers = headersFor('manager');
+  const versionBefore = fake.recordVersion('sos-dispatch-orders', 'idem-order');
 
-  const first = await fetch(`${baseUrl}/v1/emergency/dispatch/idem-order/approve`, {
-    method: 'POST', headers, body: JSON.stringify({ assigned_resource_unit_id: 'idem-resource' }),
-  });
-  assert.equal(first.status, 200);
-  const firstBody = await first.json() as Data;
-  assert.equal(firstBody.status, 'assigned');
-  assert.equal((firstBody.assignments as unknown[]).length, 1);
-  const versionAfterFirst = fake.recordVersion('sos-dispatch-orders', 'idem-order');
-
-  const second = await fetch(`${baseUrl}/v1/emergency/dispatch/idem-order/approve`, {
-    method: 'POST', headers, body: JSON.stringify({ assigned_resource_unit_id: 'idem-resource' }),
-  });
-  assert.equal(second.status, 200);
-  const secondBody = await second.json() as Data;
-  assert.equal(secondBody.idempotent, true);
-  assert.equal((secondBody.assignments as unknown[]).length, 1);
-  assert.equal(fake.recordVersion('sos-dispatch-orders', 'idem-order'), versionAfterFirst, 'an idempotent approval must not write again');
+  // The unconditional approval gate refuses before any write, so a repeated
+  // request cannot create a second assignment either.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(`${baseUrl}/v1/emergency/dispatch/idem-order/approve`, {
+      method: 'POST', headers, body: JSON.stringify({ assigned_resource_unit_id: 'idem-resource' }),
+    });
+    assert.equal(response.status, 428);
+    assert.equal(((await response.json()) as Data).error, 'approval_required');
+  }
+  assert.equal(fake.read('sos-dispatch-orders', 'idem-order')?.status, 'pending');
+  assert.equal(fake.recordVersion('sos-dispatch-orders', 'idem-order'), versionBefore, 'a refused approval must not write');
 });
 
 // ── Public projection source and publication state (issue #19) ───────────────

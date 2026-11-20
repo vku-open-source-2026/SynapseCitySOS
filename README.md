@@ -146,7 +146,6 @@ legacy/demo code path.
 | `SOS_AUTH_MODE` | `tier2` | `tier2` = Tier-2 auth capability; `demo` = development-only shell |
 | `SOS_BOOTSTRAP_ADMIN_EMAILS` | empty | Comma-separated emails that receive `admin` after a verified exchange |
 | `SOS_AUTH_DEFAULT_ROLE` | `responder` | Fallback role; never `admin` |
-| `SOS_HITL_REQUIRED` | `true` in compose | Four-eyes approval for EOP/dispatch; production refuses to start when unset |
 | `SOS_INGEST_SERVICE_TOKEN` | empty | Scoped bearer accepted only by `POST /v1/hazards/ingest` |
 | `ALLOW_DEMO_AUTH` | `false` | Enables the demo shell only with `SOS_AUTH_MODE=demo` and `NODE_ENV != production` |
 | `AUTH_SECRET` | empty | HMAC secret for the SOS session; an ephemeral secret is used when empty |

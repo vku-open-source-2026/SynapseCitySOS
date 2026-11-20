@@ -48,7 +48,7 @@ import {
 import { hazardTtlHours, isHazardStale, sseErrorFrame, sseHazardsFrame, sseHeartbeatFrame } from './hazards';
 import { incrementCounter, metricsMiddleware, recordDependency, renderMetrics } from './metrics';
 import { planOptimization } from './optimizer';
-import { HitlError, assertApproved, buildHandoff, createApproval, decideApproval, hitlRequired, listPendingApprovals } from './hitl';
+import { HitlError, assertApproved, buildHandoff, createApproval, decideApproval, listPendingApprovals } from './hitl';
 import { publicMutualAidProjection, validateAccept, validateRequest, type MutualAidAccept, type MutualAidRequest } from './mutual-aid';
 import { fromNgsiLdList } from './projection';
 import { rateLimiters } from './rate-limit';
@@ -1067,11 +1067,10 @@ app.post('/v1/emergency/eop/:id/approve', async (req, res, next) => {
     const input = body(req);
     const actor = actorOf(res).username ?? 'sos-operator';
     const approvalId = String(input.approval_id || input.approvalId || '');
-    let approval: any = null;
-    if (hitlRequired() || approvalId) {
-      if (!approvalId) throw new HitlError(428, 'approval_required', 'create an EOP approval first');
-      approval = await assertApproved(req, approvalId, { entityId: String(req.params.id), action: 'eop.approve', actor });
-    }
+    // Four-eyes is unconditional: an EOP can only be approved through a
+    // ready Tier-2 approval decided by another operator.
+    if (!approvalId) throw new HitlError(428, 'approval_required', 'create an EOP approval first');
+    const approval = await assertApproved(req, approvalId, { entityId: String(req.params.id), action: 'eop.approve', actor });
     sendRecord(res, await update(c, DATASETS.eop, req.params.id, {
       status: 'approved',
       review_notes: input.review_notes ?? current.review_notes ?? null,
@@ -1277,11 +1276,10 @@ async function approveDispatch(req: Request, res: Response): Promise<void> {
   const input = body(req);
   const actor = actorOf(res).username ?? 'sos-operator';
   const approvalId = String(input.approval_id || input.approvalId || '');
-  let approval: any = null;
-  if (hitlRequired() || approvalId) {
-    if (!approvalId) throw new HitlError(428, 'approval_required', 'create a dispatch approval first');
-    approval = await assertApproved(req, approvalId, { entityId: String(req.params.id), action: 'dispatch.assign', actor });
-  }
+  // Four-eyes is unconditional: dispatch assignment always needs a ready
+  // Tier-2 approval decided by another operator.
+  if (!approvalId) throw new HitlError(428, 'approval_required', 'create a dispatch approval first');
+  const approval = await assertApproved(req, approvalId, { entityId: String(req.params.id), action: 'dispatch.assign', actor });
   const resourceUnitId = requestedResourceUnitId(input);
   if (!resourceUnitId) throw badRequest('assigned_resource_unit_id_required', 'approve/assign needs an existing SOS resource unit id');
   const resource = await get(c, DATASETS.resources, resourceUnitId).catch((error) => {

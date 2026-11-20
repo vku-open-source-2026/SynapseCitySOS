@@ -34,9 +34,7 @@ export class HitlError extends Error {
   }
 }
 
-export function hitlRequired(): boolean {
-  return process.env.SOS_HITL_REQUIRED === 'true';
-}
+/** Four-eyes approval is unconditional; there is no env override. */
 
 export function approvalSlaMinutes(): number {
   const value = Number(process.env.SOS_APPROVAL_SLA_MINUTES || 15);

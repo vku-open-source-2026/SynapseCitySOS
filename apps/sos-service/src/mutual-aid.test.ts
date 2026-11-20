@@ -7,7 +7,7 @@ import {
   assertRequestVersion, duplicateRequest, publicMutualAidProjection, validateAccept, validateRequest,
   type MutualAidRequest,
 } from './mutual-aid';
-import { approverRolesFor, hitlRequired } from './hitl';
+import { approverRolesFor } from './hitl';
 
 const request: MutualAidRequest = {
   id: 'ma-1', request_number: 'MA-1', resource_type: 'ambulance', quantity: 10, filled_quantity: 2,
@@ -76,9 +76,6 @@ test('SOS approver roles are server-derived per action, not client input', () =>
     if (previous === undefined) delete process.env.SOS_DISPATCH_APPROVER_ROLES;
     else process.env.SOS_DISPATCH_APPROVER_ROLES = previous;
   }
-  const required = process.env.SOS_HITL_REQUIRED;
-  process.env.SOS_HITL_REQUIRED = 'true';
-  assert.equal(hitlRequired(), true);
-  if (required === undefined) delete process.env.SOS_HITL_REQUIRED;
-  else process.env.SOS_HITL_REQUIRED = required;
+  // Four-eyes approval is unconditional (docs/HITL.md): there is no
+  // SOS_HITL_REQUIRED knob in either implementation anymore.
 });

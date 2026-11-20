@@ -6018,7 +6018,7 @@ mod route_tests {
     }
 
     #[tokio::test]
-    async fn dispatch_assignment_requires_approval_even_when_hitl_was_optional() {
+    async fn dispatch_assignment_always_requires_an_approval() {
         let config = Config::for_test("http://127.0.0.1:1");
         let token = admin_token(&config);
         let app = app(AppState::new(
@@ -6381,6 +6381,83 @@ mod route_tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "assigned");
         assert_eq!(body["approval_id"], "ap1");
+    }
+
+    #[tokio::test]
+    async fn repeating_a_dispatch_assignment_is_idempotent() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let officer = officer_token(&config, "officer");
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/capabilities/approvals/ap1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "approval": {
+                    "id": "ap1",
+                    "status": "approved",
+                    "entityId": "d1",
+                    "action": "dispatch.assign",
+                    "requester": "qa",
+                    "approverRoles": ["duty-manager"]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 3,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "status": "assigned",
+                    "task_title": "Rescue",
+                    "assigned_resource_unit_id": "u1",
+                    "approval_id": "ap1",
+                    "assignments": [
+                        { "dispatch_order_id": "d1", "assigned_resource_unit_id": "u1" }
+                    ]
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // Repeating the assignment must not write a second time (issue #20).
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/approve",
+            Some(&officer),
+            Some(json!({ "approval_id": "ap1", "assigned_resource_unit_id": "u1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["idempotent"], true);
+        assert_eq!(body["status"], "assigned");
     }
 
     async fn mount_optimize_fixtures(server: &MockServer) {

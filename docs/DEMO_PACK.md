@@ -50,8 +50,8 @@ SOS_DEMO_TOKEN=... npm run demo:reset
 
 ## Evidence checklist
 
-- [ ] Dispatch without `approval_id` returns `428 approval_required` when
-      `SOS_HITL_REQUIRED=true`.
+- [ ] Dispatch without `approval_id` returns `428 approval_required`
+      (four-eyes is unconditional; there is no env override).
 - [ ] Self-approval returns `403 self_approval_forbidden`.
 - [ ] Rejected approval cannot assign a dispatch/EOP.
 - [ ] Overdue approvals show `escalated: true`.

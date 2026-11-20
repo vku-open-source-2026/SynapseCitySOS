@@ -12,8 +12,8 @@ Dispatch assignment and EOP publication use the Tier-2 `approvals` capability:
 
 Approver roles are derived server-side from `SOS_DISPATCH_APPROVER_ROLES` /
 `SOS_EOP_APPROVER_ROLES` (defaults `incident-commander,duty-manager`), never
-from client input. Production refuses to start when `SOS_HITL_REQUIRED` is
-unset; the compose stack sets it to `true`. Dispatch assignment, EOP approve,
+from client input. Four-eyes approval is **unconditional**: there is no
+environment knob that can disable it. Dispatch assignment, EOP approve,
 publish and submit always require an approved `approval_id` and reject
 self-approval. Submit requires an already-approved plan and never demotes a
 published plan. EOP records `approved_by`, `approved_role`, `approved_at`, the

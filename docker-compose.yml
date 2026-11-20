@@ -19,9 +19,6 @@ services:
       SOS_AUTH_MODE: ${SOS_AUTH_MODE:-tier2}
       SOS_BOOTSTRAP_ADMIN_EMAILS: ${SOS_BOOTSTRAP_ADMIN_EMAILS:-}
       SOS_AUTH_DEFAULT_ROLE: ${SOS_AUTH_DEFAULT_ROLE:-responder}
-      # Production refuses to start when this is unset. Keep four-eyes
-      # approval enabled for EOP/dispatch lifecycle actions.
-      SOS_HITL_REQUIRED: ${SOS_HITL_REQUIRED:-true}
       # Scoped service principal accepted only by POST /v1/hazards/ingest.
       # Configure the Tier-2 scheduled ingest with this bearer secret.
       SOS_INGEST_SERVICE_TOKEN: ${SOS_INGEST_SERVICE_TOKEN:-}

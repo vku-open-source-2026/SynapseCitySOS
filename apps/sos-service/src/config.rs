@@ -25,7 +25,6 @@ pub struct Config {
     pub cors_origin: String,
     pub stream_poll_ms: u64,
     pub max_scan_records: usize,
-    pub hitl_required: bool,
     pub approval_sla_minutes: u64,
     pub required_approvals: u32,
     pub dispatch_approver_roles: Vec<String>,
@@ -67,28 +66,6 @@ fn env_u32(name: &str, fallback: u32) -> u32 {
         .and_then(|value| value.parse::<u32>().ok())
         .filter(|value| *value > 0)
         .unwrap_or(fallback)
-}
-
-/// Production must opt into HITL explicitly; a missing value is a startup
-/// error rather than a silent four-eyes bypass. Development keeps the previous
-/// opt-in behaviour unless the flag is set.
-fn resolve_hitl_required(is_production: bool, raw: Option<String>) -> Result<bool, String> {
-    let raw = raw.unwrap_or_default();
-    let value = raw.trim().to_ascii_lowercase();
-    if value.is_empty() {
-        if is_production {
-            return Err(
-                "SOS_HITL_REQUIRED must be set in production (true keeps four-eyes approval; false is an explicit override)"
-                    .into(),
-            );
-        }
-        return Ok(false);
-    }
-    match value.as_str() {
-        "true" | "1" | "yes" | "on" => Ok(true),
-        "false" | "0" | "no" | "off" => Ok(false),
-        _ => Err(format!("SOS_HITL_REQUIRED must be a boolean, got {raw}")),
-    }
 }
 
 fn env_list(name: &str, fallback: &str) -> Vec<String> {
@@ -263,7 +240,8 @@ impl Config {
             .collect();
 
         let demo_allowed = auth_mode == "demo" && env_bool("ALLOW_DEMO_AUTH") && !is_production;
-        let hitl_required = resolve_hitl_required(is_production, env("SOS_HITL_REQUIRED"))?;
+        // Four-eyes approval is unconditional (docs/HITL.md): there is no
+        // documented env knob that could silently disable it.
         let vndms_stale_minutes = env_u64("VNDMS_STALE_MINUTES", 60).clamp(5, 24 * 60);
         let hazard_feed_stale_minutes =
             env_u64("SOS_HAZARD_FEED_STALE_MINUTES", vndms_stale_minutes).clamp(5, 24 * 60);
@@ -291,7 +269,6 @@ impl Config {
             cors_origin: env("CORS_ORIGIN").unwrap_or_else(|| "https://sos.synapsecity.sbs".into()),
             stream_poll_ms: env_u64("SOS_STREAM_EVENT_POLL_MS", 30_000).clamp(5_000, 300_000),
             max_scan_records: env_u64("SOS_MAX_SCAN_RECORDS", 5_000) as usize,
-            hitl_required,
             approval_sla_minutes: env_u64("SOS_APPROVAL_SLA_MINUTES", 15).clamp(1, 7 * 24 * 60),
             required_approvals: env_u32("SOS_REQUIRED_APPROVALS", 1).clamp(1, 5),
             dispatch_approver_roles: env_list(
@@ -359,7 +336,6 @@ impl Config {
             cors_origin: "http://localhost".into(),
             stream_poll_ms: 1_000,
             max_scan_records: 5_000,
-            hitl_required: false,
             approval_sla_minutes: 15,
             required_approvals: 1,
             dispatch_approver_roles: vec!["duty-manager".into()],
@@ -380,27 +356,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use super::{public_dependency, resolve_hitl_required};
-
-    #[test]
-    fn production_requires_an_explicit_hitl_decision() {
-        assert!(resolve_hitl_required(true, None).is_err());
-        assert!(resolve_hitl_required(true, Some("  ".into())).is_err());
-        assert_eq!(
-            resolve_hitl_required(true, Some("true".into())).unwrap(),
-            true
-        );
-        assert_eq!(
-            resolve_hitl_required(true, Some("false".into())).unwrap(),
-            false
-        );
-        assert!(resolve_hitl_required(true, Some("maybe".into())).is_err());
-        assert_eq!(resolve_hitl_required(false, None).unwrap(), false);
-        assert_eq!(
-            resolve_hitl_required(false, Some("on".into())).unwrap(),
-            true
-        );
-    }
+    use super::public_dependency;
 
     #[test]
     fn accepts_public_https_endpoint() {
