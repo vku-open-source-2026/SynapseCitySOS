@@ -146,7 +146,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-mutual-aid-create-submit"
       },
@@ -177,7 +177,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-mutual-aid-update-submit"
       },
@@ -209,7 +209,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-mutual-aid-decision-submit"
       },
@@ -230,7 +230,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-mutual-aid-delete-submit"
       },
@@ -590,5 +590,5 @@
     "path": "plugins/sos-mutual-aid.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:eb6ee821251873baf50b7555ec9acc818f59c03b90bdcb3ff3f81b61f8a7108e"
+  "checksum": "sha256:3ba48dd4f13bf1265e12cf3b28b45823a9aefc61e05c0afe3beedff81bfc033d"
 }

@@ -263,7 +263,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-event-update-submit"
       },
@@ -295,7 +295,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-event-phase-submit"
       },
@@ -342,7 +342,7 @@
         "resource": "events",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-event-delete-submit"
       },
@@ -937,5 +937,5 @@
     "path": "plugins/sos-event-command.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:1d0836a44b4d671abcd00b23e8324de1ebef5e1438e0e26c1d2123c2783e3f12"
+  "checksum": "sha256:1a4263eafc3782f13e54009ab1be1bbfba4de2e80fd74371d6bc29bab0da0e6a"
 }

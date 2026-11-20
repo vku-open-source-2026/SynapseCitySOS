@@ -249,7 +249,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-aar-decision-submit"
       },
@@ -281,7 +281,7 @@
         "resource": "mutualAid",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-mutual-aid-decision-submit"
       },
@@ -869,5 +869,5 @@
     "path": "plugins/sos-operator-review.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:9cbeab2cd9ffbc38c5fa6c0806fc68a1ffd0f3e26a2c3093618b3ab978230dd9"
+  "checksum": "sha256:4d6f9d0662e85afcb40af247c761838d57b6acc9eb4b23ba120680d411a3c2e8"
 }

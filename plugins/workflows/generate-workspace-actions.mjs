@@ -56,11 +56,13 @@ const SCHEMAS = {
     statuses: ['pending', 'assigned', 'in_transit', 'on_scene', 'completed', 'canceled', 'rejected'],
     // Assignment/start/arrive/complete require SOS resource reservation and
     // release; only a still-pending order may be rejected/canceled here.
+    // The responder progression mirrors the fixed route (dispatch_action):
+    // start only from assigned, arrive only from in_transit.
     decisionStatus: { start: 'in_transit', arrive: 'on_scene', reject: 'rejected', cancel: 'canceled' },
     allowedFrom: {
       assigned: ['pending'],
       in_transit: ['assigned'],
-      on_scene: ['assigned', 'in_transit'],
+      on_scene: ['in_transit'],
       completed: ['assigned', 'in_transit', 'on_scene'],
       canceled: ['pending'],
       rejected: ['pending'],

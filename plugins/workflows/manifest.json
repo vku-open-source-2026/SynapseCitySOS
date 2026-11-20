@@ -241,6 +241,80 @@
         },
         "emptyGuard": "sitrep_delta_empty when no submitted value differs from the base"
       }
+    },
+    {
+      "operation": "dispatch.assign",
+      "workflow": "sos-dispatch-assign",
+      "file": "plugins/workflows/sos-dispatch-assign.workflow.json",
+      "dataset": "sos-dispatch-orders",
+      "method": "PATCH",
+      "resource": "dispatch",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "pending",
+        "approved"
+      ],
+      "idempotentWhen": {
+        "status": "assigned",
+        "sameResourceUnit": true
+      },
+      "requiresApproval": {
+        "action": "dispatch.assign",
+        "fourEyes": true,
+        "source": "https://synapsedx.sbs/v1/capabilities/approvals"
+      },
+      "reservesResource": {
+        "dataset": "sos-resource-units",
+        "patch": {
+          "status": "assigned",
+          "assigned_dispatch_order_id": "{order_id}",
+          "assigned_at": "{now}",
+          "assigned_by": "{submittedBy}"
+        },
+        "releaseCompensation": {
+          "trigger": "a terminal order that still holds the reservation releases it before refusing (order_terminal)",
+          "patch": {
+            "status": "available",
+            "assigned_dispatch_order_id": null,
+            "released_at": "{now}"
+          },
+          "engineLimit": "the Tier-1 graph has no error branch, so an order PATCH that fails after a fresh reservation fails the run loudly; a retry re-enters through the already-reserved idempotent path"
+        }
+      }
+    },
+    {
+      "operation": "dispatch.progress",
+      "workflow": "sos-dispatch-progress",
+      "file": "plugins/workflows/sos-dispatch-progress.workflow.json",
+      "dataset": "sos-dispatch-orders",
+      "method": "PATCH",
+      "resource": "dispatch",
+      "status": "source_ready_pending_credential_binding",
+      "progression": {
+        "start": {
+          "allowedFrom": [
+            "assigned"
+          ],
+          "next": "in_transit",
+          "timestamp": "started_at"
+        },
+        "arrive": {
+          "allowedFrom": [
+            "in_transit"
+          ],
+          "next": "on_scene",
+          "timestamp": "arrived_at"
+        }
+      },
+      "historyEntry": {
+        "from": "{status}",
+        "to": "{next}",
+        "action": "{action}",
+        "at": "{now}",
+        "by": "{submittedBy}",
+        "note": "{note or null}"
+      },
+      "keepsReservation": true
     }
   ],
   "engineContract": {
@@ -379,6 +453,68 @@
         "a delta against a published/archived SITREP creates a new draft revision with amends_sitrep_id instead of mutating history",
         "a delta entry must carry a real changed-fields diff with revision numbers; a no-op is refused with sitrep_delta_empty",
         "a stale ifVersion returns 409 version_conflict and fails the run"
+      ]
+    },
+    "assign": {
+      "operation": "dispatch.assign",
+      "dataset": "sos-dispatch-orders",
+      "allowedFrom": [
+        "pending",
+        "approved"
+      ],
+      "idempotentStatuses": [
+        "assigned"
+      ],
+      "patch": {
+        "status": "assigned",
+        "assigned_resource_unit_id": "{resource_unit}",
+        "assigned_user_id": "{resource_unit}",
+        "assigned_at": "{now}",
+        "assigned_by": "{submittedBy}",
+        "assignments": "appended {dispatch_order_id, resource_unit_id, assigned_resource_unit_id, assigned_user_id, assigned_at, assigned_by} unless duplicated",
+        "approval_id": "{approval.id}",
+        "approved_by": "{submittedBy}",
+        "approval_roles": "{approval.approverRoles}",
+        "approved_at": "{now}"
+      },
+      "invariants": [
+        "the workflow reads the Tier-2 approvals record and requires status=approved, entityId=order and action=dispatch.assign",
+        "four-eyes: the approval requester can never be the executing operator",
+        "the unit is reserved first (status=assigned, assigned_dispatch_order_id) and the reservation survives the responder progression",
+        "a terminal order that still holds the reservation releases it before refusing (compensation release)",
+        "an already-assigned order with the same unit is idempotent; a different unit is refused with order_already_assigned",
+        "a stale ifVersion returns 409 version_conflict and fails the run"
+      ]
+    },
+    "progress": {
+      "operation": "dispatch.progress",
+      "dataset": "sos-dispatch-orders",
+      "progression": {
+        "start": {
+          "allowedFrom": [
+            "assigned"
+          ],
+          "next": "in_transit",
+          "timestamp": "started_at"
+        },
+        "arrive": {
+          "allowedFrom": [
+            "in_transit"
+          ],
+          "next": "on_scene",
+          "timestamp": "arrived_at"
+        }
+      },
+      "terminalStatuses": [
+        "completed",
+        "canceled",
+        "rejected"
+      ],
+      "invariants": [
+        "start only from assigned; arrive only from in_transit (the fixed route table at routes:1374-1375)",
+        "started_at/arrived_at are captured once and the transition is appended to status_history",
+        "the reservation is never released by a progression step; only a terminal order releases its unit",
+        "an order already in the target state is idempotent without any write"
       ]
     }
   },

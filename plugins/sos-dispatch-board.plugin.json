@@ -170,33 +170,80 @@
         "onSubmit": "act-dispatch-create-submit"
       },
       {
-        "id": "dispatch-start",
+        "id": "dispatch-assign",
         "type": "form",
-        "title": "Start transit",
-        "width": "half",
-        "action": "execute",
+        "title": "Assign a resource unit (four-eyes)",
+        "width": "full",
+        "action": "update",
         "fields": [
           {
-            "name": "record_id",
+            "name": "order_id",
             "type": "text",
             "label": "Dispatch order id",
             "required": true
           },
           {
-            "name": "decision",
+            "name": "approval_id",
             "type": "text",
-            "label": "Decision: start"
+            "label": "Tier-2 dispatch.assign approval id created by another operator",
+            "required": true
           },
           {
-            "name": "started_at",
+            "name": "assigned_resource_unit_id",
             "type": "text",
-            "label": "Started at"
+            "label": "SOS resource unit id",
+            "required": true
+          },
+          {
+            "name": "eta_minutes",
+            "type": "number",
+            "label": "ETA minutes"
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Notes"
           }
         ],
         "resource": "dispatch",
         "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "name": "sos-dispatch-assign",
+          "checksum": "d449a8dea6a1e1f4d36d6cbf5cfbd810065adbbd7e4b0bb130d621fc806d8f84"
+        },
+        "onSubmit": "act-dispatch-assign-submit"
+      },
+      {
+        "id": "dispatch-start",
+        "type": "form",
+        "title": "Start transit",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          },
+          {
+            "name": "action",
+            "type": "select",
+            "label": "Progression",
+            "options": [
+              "start"
+            ],
+            "defaultValue": "start"
+          },
+          {
+            "name": "note",
+            "type": "textarea",
+            "label": "Note"
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-progress",
+          "checksum": "a8b2906c4a604cdd94416daabf6009cca4268a18aa4da338b0ae969231ed0518"
         },
         "onSubmit": "act-dispatch-start-submit"
       },
@@ -205,24 +252,33 @@
         "type": "form",
         "title": "Mark on scene",
         "width": "half",
-        "action": "execute",
+        "action": "update",
         "fields": [
           {
-            "name": "record_id",
+            "name": "order_id",
             "type": "text",
             "label": "Dispatch order id",
             "required": true
           },
           {
-            "name": "decision",
-            "type": "text",
-            "label": "Decision: arrive"
+            "name": "action",
+            "type": "select",
+            "label": "Progression",
+            "options": [
+              "arrive"
+            ],
+            "defaultValue": "arrive"
+          },
+          {
+            "name": "note",
+            "type": "textarea",
+            "label": "Note"
           }
         ],
         "resource": "dispatch",
         "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "name": "sos-dispatch-progress",
+          "checksum": "a8b2906c4a604cdd94416daabf6009cca4268a18aa4da338b0ae969231ed0518"
         },
         "onSubmit": "act-dispatch-arrive-submit"
       },
@@ -576,25 +632,25 @@
         "type": "action",
         "title": "Submit Start transit",
         "operation": {
-          "kind": "execute",
+          "kind": "update",
           "target": "dispatch-start",
           "mappings": [
             {
-              "field": "record_id",
+              "field": "order_id",
               "source": "event",
-              "value": "values.record_id",
+              "value": "values.order_id",
               "required": true
             },
             {
-              "field": "decision",
+              "field": "action",
               "source": "event",
-              "value": "values.decision",
+              "value": "values.action",
               "required": false
             },
             {
-              "field": "started_at",
+              "field": "note",
               "source": "event",
-              "value": "values.started_at",
+              "value": "values.note",
               "required": false
             }
           ],
@@ -621,19 +677,25 @@
         "type": "action",
         "title": "Submit Mark on scene",
         "operation": {
-          "kind": "execute",
+          "kind": "update",
           "target": "dispatch-arrive",
           "mappings": [
             {
-              "field": "record_id",
+              "field": "order_id",
               "source": "event",
-              "value": "values.record_id",
+              "value": "values.order_id",
               "required": true
             },
             {
-              "field": "decision",
+              "field": "action",
               "source": "event",
-              "value": "values.decision",
+              "value": "values.action",
+              "required": false
+            },
+            {
+              "field": "note",
+              "source": "event",
+              "value": "values.note",
               "required": false
             }
           ],
@@ -687,6 +749,63 @@
           "inputs": [],
           "actions": []
         }
+      },
+      {
+        "id": "act-dispatch-assign-submit",
+        "type": "action",
+        "title": "Submit Assign a resource unit (four-eyes)",
+        "operation": {
+          "kind": "update",
+          "target": "dispatch-assign",
+          "mappings": [
+            {
+              "field": "order_id",
+              "source": "event",
+              "value": "values.order_id",
+              "required": true
+            },
+            {
+              "field": "approval_id",
+              "source": "event",
+              "value": "values.approval_id",
+              "required": true
+            },
+            {
+              "field": "assigned_resource_unit_id",
+              "source": "event",
+              "value": "values.assigned_resource_unit_id",
+              "required": true
+            },
+            {
+              "field": "eta_minutes",
+              "source": "event",
+              "value": "values.eta_minutes",
+              "required": false
+            },
+            {
+              "field": "notes",
+              "source": "event",
+              "value": "values.notes",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-assign-open",
+        "type": "action",
+        "title": "Open Assign a resource unit (four-eyes)",
+        "operation": {
+          "kind": "openForm",
+          "target": "dispatch-assign",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
       }
     ]
   },
@@ -695,5 +814,5 @@
     "path": "plugins/sos-dispatch-board.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:dafbc5526da6c60fb8e3fa9451d88d930064af879b51e0bba62fd070ffc9e6ec"
+  "checksum": "sha256:19b36e361f56bf5e3ba7a3e455fa3b7d938db0743a9aaf6ac03ce481e8af972a"
 }

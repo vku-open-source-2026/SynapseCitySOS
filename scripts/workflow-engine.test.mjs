@@ -422,3 +422,97 @@ test('sitrep delta refuses a no-op delta before any write', { skip: available ? 
     assert.equal(result.calls.length, 1, 'a no-op delta must stop after the read');
     assert.equal(result.calls[0].method, 'GET');
 });
+
+test('four-eyes dispatch assignment reserves the unit and assigns the order', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('dispatch.assign');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/approvals/approval-1',
+        'GET /v1/capabilities/datasets/sos-dispatch-orders/records/dispatch-1',
+        'GET /v1/capabilities/datasets/sos-resource-units/records/resource-1',
+        'PATCH /v1/capabilities/datasets/sos-resource-units/records/resource-1',
+        'PATCH /v1/capabilities/datasets/sos-dispatch-orders/records/dispatch-1',
+    ]);
+    const reserve = JSON.parse(result.calls[3].body);
+    assert.equal(reserve.ifVersion, 1);
+    assert.equal(reserve.data.status, 'assigned');
+    assert.equal(reserve.data.assigned_dispatch_order_id, 'dispatch-1');
+    assert.equal(reserve.data.assigned_by, 'member-test');
+    assert.equal(typeof reserve.data.assigned_at, 'string');
+
+    const assigned = JSON.parse(result.calls[4].body);
+    assert.equal(assigned.ifVersion, 4);
+    assert.equal(assigned.data.status, 'assigned');
+    assert.equal(assigned.data.assigned_resource_unit_id, 'resource-1');
+    assert.equal(assigned.data.assigned_user_id, 'resource-1', 'the legacy mirror still carries the unit id');
+    assert.equal(assigned.data.assigned_by, 'member-test');
+    assert.equal(assigned.data.approval_id, 'approval-1');
+    assert.equal(assigned.data.approved_by, 'member-test');
+    assert.deepEqual(assigned.data.approval_roles, ['manager']);
+    assert.equal(typeof assigned.data.approved_at, 'string');
+    assert.equal(assigned.data.assignments.length, 1);
+    assert.equal(assigned.data.assignments[0].dispatch_order_id, 'dispatch-1');
+    assert.equal(assigned.data.assignments[0].assigned_resource_unit_id, 'resource-1');
+    assert.equal(result.validationOutput.audit.operation, 'dispatch.assign');
+});
+
+test('dispatch assignment refuses a self-approval and never reserves', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('dispatch.assign');
+    const result = runHarness(entry.file, entry.dataset, 'self-approval');
+    assert.equal(result.status, 'error');
+    assert.match(String(result.error || ''), /self_approval_forbidden/);
+    assert.equal(result.calls.length, 1, 'the refusal must happen at the approval read');
+    assert.equal(result.calls.filter((call) => call.method === 'PATCH').length, 0, 'a refused approval must never reserve or assign');
+});
+
+test('a terminal order releases its stranded reservation before refusing', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('dispatch.assign');
+    const result = runHarness(entry.file, entry.dataset, 'terminal');
+    assert.equal(result.status, 'error');
+    assert.match(String(result.error || ''), /order_terminal/);
+    assert.match(String(result.error || ''), /released/);
+    const patches = result.calls.filter((call) => call.method === 'PATCH');
+    assert.equal(patches.length, 1, 'only the compensation release may write');
+    assert.ok(patches[0].url.includes('/sos-resource-units/'));
+    const release = JSON.parse(patches[0].body);
+    assert.equal(release.data.status, 'available');
+    assert.equal(release.data.assigned_dispatch_order_id, null);
+    assert.equal(typeof release.data.released_at, 'string');
+    assert.ok(!result.calls.some((call) => call.method === 'PATCH' && call.url.includes('/sos-dispatch-orders/')), 'a terminal order must never be assigned');
+});
+
+test('dispatch progression moves an assigned order to in transit', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('dispatch.progress');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-dispatch-orders/records/dispatch-1',
+        'PATCH /v1/capabilities/datasets/sos-dispatch-orders/records/dispatch-1',
+    ]);
+    const body = JSON.parse(result.calls[1].body);
+    assert.equal(body.ifVersion, 4);
+    assert.equal(body.data.status, 'in_transit');
+    assert.equal(typeof body.data.started_at, 'string');
+    assert.equal(body.data.status_history.length, 1);
+    assert.equal(body.data.status_history[0].from, 'assigned');
+    assert.equal(body.data.status_history[0].to, 'in_transit');
+    assert.equal(body.data.status_history[0].action, 'start');
+    assert.equal(body.data.status_history[0].by, 'member-test');
+    assert.equal(body.data.assigned_resource_unit_id, 'resource-1', 'the progression keeps the reservation');
+    assert.equal(result.validationOutput.audit.operation, 'dispatch.progress');
+});
+
+test('dispatch progression refuses terminal orders and invalid transitions', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('dispatch.progress');
+    const terminal = runHarness(entry.file, entry.dataset, 'terminal');
+    assert.equal(terminal.status, 'error');
+    assert.match(String(terminal.error || ''), /order_terminal/);
+    assert.equal(terminal.calls.length, 1);
+
+    const invalid = runHarness(entry.file, entry.dataset, 'bad-transition');
+    assert.equal(invalid.status, 'error');
+    assert.match(String(invalid.error || ''), /invalid_dispatch_transition/);
+    assert.equal(invalid.calls.length, 1, 'an invalid step must stop after the read');
+    assert.equal(invalid.calls.filter((call) => call.method === 'PATCH').length, 0);
+});

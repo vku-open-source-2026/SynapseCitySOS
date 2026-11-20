@@ -1,0 +1,583 @@
+{
+  "name": "sos-dispatch-assign",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'dispatch') throw new Error('unsupported_resource');\nconst orderId = text(fields.order_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(orderId)) throw new Error('record_id_invalid');\nconst approvalId = text(fields.approval_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(approvalId)) throw new Error('approval_id_invalid');\nconst resourceId = text(fields.assigned_resource_unit_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(resourceId)) throw new Error('assigned_resource_unit_id_required');\nconst allowed = new Set(['order_id', 'approval_id', 'assigned_resource_unit_id', 'eta_minutes', 'notes']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nlet etaMinutes;\nif (fields.eta_minutes !== undefined && fields.eta_minutes !== null && String(fields.eta_minutes).trim() !== '') {\n  const num = Number(fields.eta_minutes);\n  if (!Number.isFinite(num) || num < 0) throw new Error('eta_minutes_invalid');\n  etaMinutes = num;\n}\nconst notes = text(fields.notes);\nif (notes.length > 4000) throw new Error('notes_max_4000');\nconst audit = {\n  product, resource, operation: 'dispatch.assign', recordId: orderId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn {\n  orderId, encodedOrderId: encodeURIComponent(orderId), planId: orderId,\n  approvalId, encodedApprovalId: encodeURIComponent(approvalId),\n  resourceId, encodedResourceId: encodeURIComponent(resourceId),\n  etaMinutes, notes, audit,\n};\n"
+      }
+    },
+    {
+      "id": "read-approval",
+      "name": "Read approval",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/approvals/' + $json.encodedApprovalId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-approval",
+      "name": "Enforce four-eyes approval readiness",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || typeof response.body !== 'object') throw new Error('approval_not_found');\nconst approval = response.body.approval && typeof response.body.approval === 'object' ? response.body.approval : response.body;\nif (String(approval.status) !== 'approved') throw new Error('approval_not_approved');\nif (String(approval.entityId) !== String(state.planId)) throw new Error('approval_entity_mismatch');\nif (String(approval.action) !== 'dispatch.assign') throw new Error('approval_action_mismatch');\n// Four-eyes (docs/HITL.md, mirroring assert_approval_ready in the Tier-3\n// routes): the operator who requested the approval can never consume it.\nif (String(approval.requester) === String(state.audit.submittedBy)) throw new Error('self_approval_forbidden');\nreturn { ...state, approval: { id: approval.id === undefined ? null : String(approval.id), approverRoles: Array.isArray(approval.approverRoles) ? approval.approverRoles.map(String) : [] } };\n"
+      }
+    },
+    {
+      "id": "read-order",
+      "name": "Read dispatch order",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records/' + $json.encodedOrderId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-order",
+      "name": "Check order and prepare resource read",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('order_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst order = { ...current.data, id: String(current.data.id || current.id) };\nreturn { ...state, order, version: current.version };\n"
+      }
+    },
+    {
+      "id": "read-unit",
+      "name": "Read resource unit",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedResourceId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "decide-mode",
+      "name": "Decide assignment mode",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('resource_unit_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst unit = { ...current.data, id: String(current.data.id || current.id) };\nconst order = state.order;\nconst orderStatus = String(order.status);\nconst requested = String(state.resourceId);\nif (['completed', 'canceled', 'rejected'].includes(orderStatus)) {\n  const reservedForThisOrder = String(unit.status) === 'assigned' && String(unit.assigned_dispatch_order_id || '') === String(order.id);\n  if (reservedForThisOrder) return { ...state, unit, unitVersion: current.version, mode: 'compensate' };\n  throw new Error('order_terminal');\n}\nconst existing = typeof order.assigned_resource_unit_id === 'string' && order.assigned_resource_unit_id.trim() ? order.assigned_resource_unit_id.trim() : '';\nif (existing) {\n  if (existing !== requested) throw new Error('order_already_assigned');\n  if (orderStatus === 'assigned') return { ...state, unit, unitVersion: current.version, mode: 'idempotent' };\n  throw new Error('invalid_dispatch_status');\n}\nif (!['pending', 'approved'].includes(orderStatus)) throw new Error('invalid_dispatch_status');\nconst unitStatus = String(unit.status || '');\nconst alreadyReserved = unitStatus === 'assigned' && String(unit.assigned_dispatch_order_id || '') === String(order.id);\nif (!alreadyReserved && unitStatus !== 'available') throw new Error('resource_unit_unavailable');\nreturn { ...state, unit, unitVersion: current.version, mode: alreadyReserved ? 'reserved' : 'reserve' };\n"
+      }
+    },
+    {
+      "id": "if-compensate",
+      "name": "Stranded reservation?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1960,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.mode === 'compensate' }}"
+      }
+    },
+    {
+      "id": "prepare-release",
+      "name": "Prepare reservation release",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        180
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'compensate') throw new Error('unexpected_assign_mode');\nconst next = { ...state.unit, status: 'available', assigned_dispatch_order_id: null, released_at: $now, updated_at: $now };\nreturn { body: { data: next, ifVersion: state.unitVersion }, encodedId: state.encodedResourceId, audit: state.audit, operation: state.operation, resourceId: state.resourceId };\n"
+      }
+    },
+    {
+      "id": "release-unit",
+      "name": "Release reserved unit",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}",
+        "includeInput": true
+      }
+    },
+    {
+      "id": "refuse-terminal",
+      "name": "Refuse terminal order",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        180
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 && response.statusCode !== 201) throw new Error('reservation_release_failed_' + response.statusCode);\n// Mirror of the dispatch_approve compensation: the reservation is released\n// and the terminal order still refuses the assignment.\nthrow new Error('order_terminal (reserved unit ' + state.resourceId + ' released)');\n"
+      }
+    },
+    {
+      "id": "if-idempotent",
+      "name": "Idempotent assignment?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        2180,
+        420
+      ],
+      "parameters": {
+        "condition": "={{ $json.mode === 'idempotent' }}"
+      }
+    },
+    {
+      "id": "return-idem",
+      "name": "Return idempotent assignment",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'idempotent') throw new Error('unexpected_assign_mode');\nreturn { idempotent: true, operation: 'dispatch.assign', order_id: state.order.id, status: 'assigned', assigned_resource_unit_id: state.resourceId, approval_id: state.approval.id };\n"
+      }
+    },
+    {
+      "id": "if-reserve",
+      "name": "Reservation needed?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        480
+      ],
+      "parameters": {
+        "condition": "={{ $json.mode === 'reserve' }}"
+      }
+    },
+    {
+      "id": "prepare-reserve",
+      "name": "Prepare unit reservation",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        480
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'reserve') throw new Error('unexpected_assign_mode');\nconst next = { ...state.unit, status: 'assigned', assigned_dispatch_order_id: String(state.order.id), assigned_at: $now, assigned_by: state.audit.submittedBy, updated_at: $now };\nreturn { ...state, body: { data: next, ifVersion: state.unitVersion } };\n"
+      }
+    },
+    {
+      "id": "reserve-unit",
+      "name": "Reserve resource unit",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        480
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedResourceId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}",
+        "includeInput": true
+      }
+    },
+    {
+      "id": "collect-reserve",
+      "name": "Collect reservation",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        3060,
+        480
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 && response.statusCode !== 201) throw new Error('resource_unit_conflict');\nreturn { ...state, reserved: true };\n"
+      }
+    },
+    {
+      "id": "pass-reserved",
+      "name": "Pass reserved unit state",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        620
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.mode !== 'reserved') throw new Error('unexpected_assign_mode');\nreturn { ...state, reserved: true };\n"
+      }
+    },
+    {
+      "id": "prepare-patch",
+      "name": "Prepare order assignment",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        540
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nconst order = state.order;\nif (!['reserve', 'reserved'].includes(state.mode)) throw new Error('unexpected_assign_mode');\nconst now = $now;\nconst actor = state.audit.submittedBy;\nconst assignments = Array.isArray(order.assignments) ? [...order.assignments] : [];\nconst duplicate = assignments.some((assignment) => assignment && typeof assignment === 'object'\n  && String(assignment.dispatch_order_id || '') === String(order.id)\n  && String(assignment.assigned_resource_unit_id || assignment.resource_unit_id || '') === String(state.resourceId));\nif (!duplicate) {\n  assignments.push({\n    dispatch_order_id: String(order.id),\n    resource_unit_id: String(state.resourceId),\n    assigned_resource_unit_id: String(state.resourceId),\n    assigned_user_id: String(state.resourceId),\n    assigned_at: now,\n    assigned_by: actor,\n  });\n}\nconst next = {\n  ...order,\n  status: 'assigned',\n  assigned_resource_unit_id: String(state.resourceId),\n  assigned_user_id: String(state.resourceId),\n  assigned_at: now,\n  assigned_by: actor,\n  assignments,\n  approval_id: state.approval.id,\n  approved_by: actor,\n  approval_roles: state.approval.approverRoles,\n  approved_at: now,\n  updated_at: now,\n};\nif (state.etaMinutes !== undefined && state.etaMinutes !== null) next.eta_minutes = state.etaMinutes;\nif (state.notes) next.notes = state.notes;\nreturn { body: { data: next, ifVersion: state.version }, encodedId: state.encodedOrderId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "patch-order",
+      "name": "Patch dispatch order",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        3500,
+        540
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read approval": {
+      "main": [
+        [
+          {
+            "node": "Enforce four-eyes approval readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce four-eyes approval readiness": {
+      "main": [
+        [
+          {
+            "node": "Read dispatch order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read dispatch order": {
+      "main": [
+        [
+          {
+            "node": "Check order and prepare resource read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check order and prepare resource read": {
+      "main": [
+        [
+          {
+            "node": "Read resource unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read resource unit": {
+      "main": [
+        [
+          {
+            "node": "Decide assignment mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide assignment mode": {
+      "main": [
+        [
+          {
+            "node": "Stranded reservation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stranded reservation?": {
+      "main": [
+        [
+          {
+            "node": "Prepare reservation release",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Idempotent assignment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare reservation release": {
+      "main": [
+        [
+          {
+            "node": "Release reserved unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release reserved unit": {
+      "main": [
+        [
+          {
+            "node": "Refuse terminal order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idempotent assignment?": {
+      "main": [
+        [
+          {
+            "node": "Return idempotent assignment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reservation needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservation needed?": {
+      "main": [
+        [
+          {
+            "node": "Prepare unit reservation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pass reserved unit state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare unit reservation": {
+      "main": [
+        [
+          {
+            "node": "Reserve resource unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve resource unit": {
+      "main": [
+        [
+          {
+            "node": "Collect reservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect reservation": {
+      "main": [
+        [
+          {
+            "node": "Prepare order assignment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass reserved unit state": {
+      "main": [
+        [
+          {
+            "node": "Prepare order assignment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare order assignment": {
+      "main": [
+        [
+          {
+            "node": "Patch dispatch order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

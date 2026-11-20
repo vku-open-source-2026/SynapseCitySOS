@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "product": "sos",
   "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
-  "revision": "2026-11-20.2",
+  "revision": "2026-11-20.3",
   "status": "implemented_source_ready",
   "blocker": "Resolved by the Tier-1 httpRequest includeInput option. Residual: Tier-2 PATCH conditional support is ifVersion/If-Match (optimistic CAS); concurrent conflicts return 409 and must surface to the user.",
   "requiredEnabler": "Engine prior-node context (e.g. $node[\"Validate\"]) or a Tier-2 conditional/merge update contract with tenant/product authz and audit.",
@@ -369,6 +369,111 @@
       "invariants": [
         "counters must be non-negative integers",
         "the delta entry must contain a real changed-fields diff with revision numbers; a no-op is refused with sitrep_delta_empty"
+      ]
+    },
+    {
+      "operation": "dispatch.assign",
+      "method": "PATCH",
+      "dataset": "sos-dispatch-orders",
+      "recordIdField": "order_id",
+      "fields": [
+        {
+          "name": "order_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "approval_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "assigned_resource_unit_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "eta_minutes",
+          "type": "number"
+        },
+        {
+          "name": "notes",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "pending",
+        "approved"
+      ],
+      "idempotentWhen": {
+        "status": "assigned",
+        "behaviour": "return the assigned order without any write when the same unit is requested"
+      },
+      "patch": {
+        "status": "assigned",
+        "assigned_resource_unit_id": "{resource_unit}",
+        "assigned_at": "{now}",
+        "assigned_by": "{submittedBy}",
+        "approval_id": "{approval.id}",
+        "approved_at": "{now}"
+      },
+      "invariants": [
+        "the four-eyes dispatch.assign approval is consumed from the Tier-2 approvals record (status/entityId/action, requester != operator)",
+        "the SOS resource unit is reserved first and a terminal order that still holds the reservation releases it before refusing",
+        "assignment history is preserved and duplicated assignment entries are not appended"
+      ]
+    },
+    {
+      "operation": "dispatch.progress",
+      "method": "PATCH",
+      "dataset": "sos-dispatch-orders",
+      "recordIdField": "order_id",
+      "fields": [
+        {
+          "name": "order_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "note",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "assigned",
+        "in_transit"
+      ],
+      "progression": {
+        "start": {
+          "allowedFrom": [
+            "assigned"
+          ],
+          "next": "in_transit",
+          "timestamp": "started_at"
+        },
+        "arrive": {
+          "allowedFrom": [
+            "in_transit"
+          ],
+          "next": "on_scene",
+          "timestamp": "arrived_at"
+        }
+      },
+      "patch": {
+        "status": "{in_transit|on_scene}",
+        "started_at": "{now when start}",
+        "arrived_at": "{now when arrive}",
+        "status_history": "append {from, to, action, at, by, note}"
+      },
+      "invariants": [
+        "start only from assigned; arrive only from in_transit",
+        "a terminal order is refused with order_terminal and an invalid step with invalid_dispatch_transition",
+        "the unit reservation survives the progression"
       ]
     }
   ],

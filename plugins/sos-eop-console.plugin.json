@@ -164,7 +164,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-eop-create-submit"
       },
@@ -205,7 +205,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-eop-update-submit"
       },
@@ -237,7 +237,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-eop-decision-submit"
       },
@@ -258,7 +258,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-eop-delete-submit"
       },
@@ -808,5 +808,5 @@
     "path": "plugins/sos-eop-console.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:d1b01e3d11b34e1613ef7ca197015621f643bf74f5c431b7759a805bb83cc97d"
+  "checksum": "sha256:41fa57398a304b81759f098e4afc2d2541a5b0d1b0ff89d781b2538b0ba512da"
 }

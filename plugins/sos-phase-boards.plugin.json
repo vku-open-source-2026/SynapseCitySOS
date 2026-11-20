@@ -288,7 +288,7 @@
         "resource": "afterAction",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-aar-publish-submit"
       },
@@ -935,5 +935,5 @@
     "path": "plugins/sos-phase-boards.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:ac7d1b5cbae6c4ed2a9cb9ad9245e79cc30f4fb05a56556234287a496474758e"
+  "checksum": "sha256:e1f9b2d4abf0cba2f072f2461ad2fd21f50d98f05eae24118615615252de72fa"
 }

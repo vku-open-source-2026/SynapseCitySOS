@@ -152,7 +152,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-sitrep-create-submit"
       },
@@ -190,7 +190,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-sitrep-update-submit"
       },
@@ -222,7 +222,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-sitrep-decision-submit"
       },
@@ -243,7 +243,7 @@
         "resource": "sitrep",
         "workflowRef": {
           "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-sitrep-delete-submit"
       },
@@ -873,5 +873,5 @@
     "path": "plugins/sos-sitrep-desk.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:a6a29e7986ddef5267b6c58e082e6f5c8e287539ced4dba01c7d662f8b32138a"
+  "checksum": "sha256:387705d6b815dad0159542849ddae93d0a72e7e29b8a090465ec21613a7a6ea9"
 }

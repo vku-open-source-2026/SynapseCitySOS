@@ -1,0 +1,186 @@
+{
+  "name": "sos-dispatch-progress",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'dispatch') throw new Error('unsupported_resource');\nconst recordId = text(fields.order_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst action = text(fields.action);\nif (!['start', 'arrive'].includes(action)) throw new Error('invalid_dispatch_action');\nconst allowed = new Set(['order_id', 'action', 'note']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst note = text(fields.note);\nif (note.length > 4000) throw new Error('note_max_4000');\nconst audit = {\n  product, resource, operation: 'dispatch.progress', recordId, action,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { recordId, encodedOrderId: encodeURIComponent(recordId), action, note, audit };\n"
+      }
+    },
+    {
+      "id": "read-order",
+      "name": "Read dispatch order",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records/' + $json.encodedOrderId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check",
+      "name": "Enforce responder progression",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('order_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst order = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(order.status);\n// Responder progression (mirrors dispatch_action at routes:1374-1375): an\n// assigned unit starts en route, then arrives on scene.\nconst progression = {\n  start: { next: 'in_transit', allowedFrom: ['assigned'], timestamp: 'started_at' },\n  arrive: { next: 'on_scene', allowedFrom: ['in_transit'], timestamp: 'arrived_at' },\n};\nconst rule = progression[state.action];\nif (!rule) throw new Error('invalid_dispatch_action');\nif (status === rule.next) return { idempotent: true, order_id: order.id, status, action: state.action, operation: state.operation };\nif (['completed', 'canceled', 'rejected'].includes(status)) throw new Error('order_terminal');\nif (!rule.allowedFrom.includes(status)) throw new Error('invalid_dispatch_transition');\nconst history = Array.isArray(order.status_history) ? [...order.status_history] : [];\nhistory.push({ from: status, to: rule.next, action: state.action, at: $now, by: state.audit.submittedBy, note: state.note || null });\nconst next = { ...order, status: rule.next, status_history: history, updated_at: $now };\nnext[rule.timestamp] = $now;\nreturn { body: { data: next, ifVersion: current.version }, encodedId: state.encodedOrderId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "if-idempotent",
+      "name": "Already in target state?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.idempotent === true }}"
+      }
+    },
+    {
+      "id": "return-idem",
+      "name": "Return idempotent progression",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        180
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.idempotent !== true) throw new Error('unexpected_progression_mode');\nreturn { idempotent: true, operation: 'dispatch.progress', order_id: state.order_id, status: state.status, action: state.action };\n"
+      }
+    },
+    {
+      "id": "patch",
+      "name": "Patch progressed order",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        420
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read dispatch order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read dispatch order": {
+      "main": [
+        [
+          {
+            "node": "Enforce responder progression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce responder progression": {
+      "main": [
+        [
+          {
+            "node": "Already in target state?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already in target state?": {
+      "main": [
+        [
+          {
+            "node": "Return idempotent progression",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Patch progressed order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

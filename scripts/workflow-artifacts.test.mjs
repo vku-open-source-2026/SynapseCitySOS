@@ -50,7 +50,9 @@ test('manifest is SOS-owned, source-ready and inactive', () => {
         'emergency.events.create',
     ]);
     assert.deepEqual(manifest.workflows.filter((entry) => entry.method === 'PATCH').map((entry) => entry.operation).sort(), [
+        'dispatch.assign',
         'dispatch.complete',
+        'dispatch.progress',
         'dispatch.reject',
         'emergency.close',
         'eop.approve',
@@ -362,6 +364,65 @@ test('sitrep publication and delta workflows mirror the reviewed route guards', 
     for (const counter of ['casualties', 'deaths', 'injuries', 'missing', 'affected_people', 'evacuated_people', 'damaged_structures', 'destroyed_structures', 'rescued_people', 'resources_deployed']) {
         assert.ok(deltaNodes.get('Validate DX envelope and action fields').parameters.code.includes(`'${counter}'`), `the ${counter} count field must be accepted`);
     }
+});
+
+test('dispatch assignment and progression mirror the fixed route semantics', () => {
+    const assign = readWorkflow(entryFor('dispatch.assign').file);
+    const byName = new Map(assign.nodes.map((node) => [node.name, node]));
+    const fourEyes = byName.get('Enforce four-eyes approval readiness').parameters.code;
+    assert.match(fourEyes, /dispatch\.assign/);
+    assert.match(fourEyes, /self_approval_forbidden/);
+    assert.equal(byName.get('Read approval').parameters.url, "={{ 'https://synapsedx.sbs/v1/capabilities/approvals/' + $json.encodedApprovalId }}");
+    const decide = byName.get('Decide assignment mode').parameters.code;
+    assert.match(decide, /order_terminal/);
+    assert.match(decide, /order_already_assigned/);
+    assert.match(decide, /invalid_dispatch_status/);
+    assert.match(decide, /resource_unit_unavailable/);
+    assert.match(decide, /'pending', 'approved'/);
+    const release = byName.get('Prepare reservation release').parameters.code;
+    assert.match(release, /status: 'available'/);
+    assert.match(release, /assigned_dispatch_order_id: null/);
+    assert.match(release, /released_at/);
+    assert.match(byName.get('Refuse terminal order').parameters.code, /order_terminal/);
+    const prepare = byName.get('Prepare order assignment').parameters.code;
+    assert.match(prepare, /approval_id: state\.approval\.id/);
+    assert.match(prepare, /approval_roles: state\.approval\.approverRoles/);
+    assert.match(prepare, /assigned_resource_unit_id/);
+    assert.match(prepare, /assigned_user_id/);
+    assert.match(prepare, /dispatch_order_id/);
+    assert.match(prepare, /ifVersion: state\.version/);
+    assert.equal(byName.get('Reserve resource unit').parameters.method, 'PATCH');
+    assert.ok(byName.get('Reserve resource unit').parameters.url.includes('/sos-resource-units/'));
+    assert.deepEqual(assign.connections['Stranded reservation?'].main.map((branch) => branch[0].node),
+        ['Prepare reservation release', 'Idempotent assignment?']);
+    assert.deepEqual(assign.connections['Reservation needed?'].main.map((branch) => branch[0].node),
+        ['Prepare unit reservation', 'Pass reserved unit state']);
+    assert.deepEqual(assign.connections['Collect reservation'].main[0][0].node, 'Prepare order assignment');
+    assert.deepEqual(assign.connections['Pass reserved unit state'].main[0][0].node, 'Prepare order assignment');
+    const reserve = byName.get('Prepare unit reservation').parameters.code;
+    assert.match(reserve, /status: 'assigned'/);
+    assert.match(reserve, /assigned_dispatch_order_id: String\(state\.order\.id\)/);
+
+    const progress = readWorkflow(entryFor('dispatch.progress').file);
+    const progressNodes = new Map(progress.nodes.map((node) => [node.name, node]));
+    const rule = progressNodes.get('Enforce responder progression').parameters.code;
+    // The exact fixed transition table (routes:1374-1375): start only from
+    // assigned, arrive only from in_transit.
+    assert.match(rule, /start: \{ next: 'in_transit', allowedFrom: \['assigned'\], timestamp: 'started_at' \}/);
+    assert.match(rule, /arrive: \{ next: 'on_scene', allowedFrom: \['in_transit'\], timestamp: 'arrived_at' \}/);
+    assert.match(rule, /order_terminal/);
+    assert.match(rule, /invalid_dispatch_transition/);
+    assert.match(rule, /status_history/);
+    assert.match(rule, /idempotent/);
+    assert.ok(!rule.includes("'on_scene', allowedFrom: ['assigned'"), 'arrive must never accept an assigned order');
+    assert.deepEqual(progress.connections['Already in target state?'].main.map((branch) => branch[0].node),
+        ['Return idempotent progression', 'Patch progressed order']);
+
+    // The regenerated generic dispatcher must agree with the fixed table.
+    const workspace = readWorkflow('plugins/workflows/sos-workspace-actions.workflow.json');
+    const merge = new Map(workspace.nodes.map((node) => [node.name, node])).get('Merge and enforce invariants').parameters.code;
+    assert.ok(merge.includes('"on_scene":["in_transit"]'), 'the generic dispatcher must only allow arrive from in_transit');
+    assert.ok(!merge.includes('"on_scene":["assigned","in_transit"]'), 'the stale permissive table is still present');
 });
 
 test('workspace lifecycle guards reject invalid transitions and non-draft deletes', () => {

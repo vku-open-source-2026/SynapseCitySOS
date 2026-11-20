@@ -190,7 +190,7 @@ const wfRecords: Record<string, () => Row> = {
         id: 'dispatch-1',
         data: {
             type: 'DispatchOrder', emergency_event_id: 'event-1', task_title: 'Existing task',
-            status: terminal ? 'completed' : 'assigned', priority: 'high',
+            status: terminal ? 'completed' : mode === 'bad-transition' ? 'on_scene' : 'assigned', priority: 'high',
             assigned_resource_unit_id: 'resource-1', status_history: [],
         },
         version: 4,
