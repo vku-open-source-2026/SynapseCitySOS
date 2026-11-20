@@ -356,6 +356,17 @@ globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => 
         return Response.json({ items, total: items.length, limit: 50, offset: 0 });
     }
 
+    if (url.includes('/records/bulk')) {
+        // Tier-2 bulk create: one call, per-entry outcomes. The fake mirrors
+        // the real route's {created, errors, total} response shape.
+        const parsed = body ? JSON.parse(body) : {};
+        const entries = Array.isArray(parsed.records) ? parsed.records : [];
+        return Response.json({
+            created: entries.map((entry: any) => ({ id: String(entry.id || ''), data: entry.data, version: 1 })),
+            errors: [],
+            total: entries.length,
+        }, { status: 200 });
+    }
     if (method === 'GET') {
         if (pathDataset === 'sos-resource-units' && pathDataset !== primaryDataset[subject]) {
             return Response.json(unit);

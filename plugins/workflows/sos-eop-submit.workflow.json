@@ -1,8 +1,12 @@
 {
   "name": "sos-eop-submit",
+  "settings": {
+    "access": {
+      "mode": "owner-only"
+    }
+  },
   "nodes": [
     {
-      "id": "dx-manual-trigger",
       "name": "DX manual execution",
       "type": "manualTrigger",
       "typeVersion": 1,
@@ -13,25 +17,23 @@
       "parameters": {}
     },
     {
-      "id": "validate-envelope",
       "name": "Validate DX envelope and action fields",
       "type": "code",
       "typeVersion": 2,
       "position": [
-        420,
-        300
+        0,
+        0
       ],
       "parameters": {
         "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'eop') throw new Error('unsupported_resource');\nconst planId = text(fields.plan_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(planId)) throw new Error('record_id_invalid');\nconst approvalId = text(fields.approval_id);\nif (approvalId && !/^[A-Za-z0-9_@.:+-]{1,256}$/.test(approvalId)) throw new Error('approval_id_invalid');\nconst allowed = new Set(['plan_id', 'approval_id']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst audit = {\n  product, resource, operation: 'eop.submit', recordId: planId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { planId, encodedPlanId: encodeURIComponent(planId), approvalId, audit };\n"
       }
     },
     {
-      "id": "read-plan",
       "name": "Read EOP plan",
       "type": "httpRequest",
-      "typeVersion": 1,
+      "typeVersion": 4,
       "position": [
-        640,
+        420,
         300
       ],
       "parameters": {
@@ -48,30 +50,28 @@
             "https://synapsedx.sbs"
           ]
         },
-        "timeoutMs": 15000,
-        "includeInput": true
+        "includeInput": true,
+        "timeoutMs": 15000
       }
     },
     {
-      "id": "check-plan",
       "name": "Check plan and resolve approval",
       "type": "code",
       "typeVersion": 2,
       "position": [
-        860,
-        300
+        0,
+        0
       ],
       "parameters": {
         "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('plan_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst plan = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(plan.status);\nif (status === 'published') throw new Error('eop_already_published');\nif (status !== 'approved') throw new Error('eop_not_approved');\nconst planApprovalId = typeof plan.approval_id === 'string' && plan.approval_id.trim() ? plan.approval_id.trim() : '';\nconst approvalId = state.approvalId || planApprovalId;\nif (!approvalId) throw new Error('approval_required');\nreturn { plan, planId: String(plan.id), version: current.version, approvalId, encodedApprovalId: encodeURIComponent(approvalId), encodedPlanId: state.encodedPlanId, audit: state.audit, operation: state.operation };\n"
       }
     },
     {
-      "id": "read-approval",
       "name": "Read approval",
       "type": "httpRequest",
-      "typeVersion": 1,
+      "typeVersion": 4,
       "position": [
-        1080,
+        640,
         300
       ],
       "parameters": {
@@ -89,43 +89,28 @@
             "https://synapsedx.sbs"
           ]
         },
-        "timeoutMs": 15000,
-        "includeInput": true
+        "includeInput": true,
+        "timeoutMs": 15000
       }
     },
     {
-      "id": "check-approval",
-      "name": "Enforce four-eyes approval readiness",
+      "name": "Enforce four-eyes and admission approval",
       "type": "code",
       "typeVersion": 2,
       "position": [
-        1300,
-        300
+        0,
+        0
       ],
       "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || typeof response.body !== 'object') throw new Error('approval_not_found');\nconst approval = response.body.approval && typeof response.body.approval === 'object' ? response.body.approval : response.body;\nif (String(approval.status) !== 'approved') throw new Error('approval_not_approved');\nif (String(approval.entityId) !== String(state.planId)) throw new Error('approval_entity_mismatch');\nif (String(approval.action) !== 'eop.approve') throw new Error('approval_action_mismatch');\n// Four-eyes (docs/HITL.md, mirroring assert_approval_ready in the Tier-3\n// routes): the operator who requested the approval can never consume it.\nif (String(approval.requester) === String(state.audit.submittedBy)) throw new Error('self_approval_forbidden');\nreturn { ...state, approval: { id: approval.id === undefined ? null : String(approval.id), approverRoles: Array.isArray(approval.approverRoles) ? approval.approverRoles.map(String) : [] } };\n"
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || typeof response.body !== 'object') throw new Error('approval_not_found');\nconst approval = response.body.approval && typeof response.body.approval === 'object' ? response.body.approval : response.body;\nif (String(approval.status) !== 'approved') throw new Error('approval_not_approved');\nif (String(approval.entityId) !== String(state.planId)) throw new Error('approval_entity_mismatch');\nif (String(approval.action) !== 'eop.approve') throw new Error('approval_action_mismatch');\n// Four-eyes (docs/HITL.md, mirroring assert_approval_ready in the Tier-3\n// routes): the operator who requested the approval can never consume it.\nif (String(approval.requester) === String(state.audit.submittedBy)) throw new Error('self_approval_forbidden');\n// The publication approval must be the same approval that admitted the plan\n// (mirroring eop_publish in the Tier-3 routes).\nif (String(state.plan.approval_id) !== String(approval.id)) throw new Error('approval_entity_mismatch');\nreturn { ...state, approval: { id: approval.id === undefined ? null : String(approval.id), approverRoles: Array.isArray(approval.approverRoles) ? approval.approverRoles.map(String) : [] } };\n"
       }
     },
     {
-      "id": "match-approval",
-      "name": "Match the admission approval",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        1520,
-        300
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\n// The publication approval must be the same approval that admitted the plan\n// (mirroring eop_publish in the Tier-3 routes).\nif (String(state.approval.id) !== String(state.plan.approval_id)) throw new Error('approval_entity_mismatch');\nreturn state;\n"
-      }
-    },
-    {
-      "id": "query-orders",
       "name": "Query existing plan orders",
       "type": "httpRequest",
-      "typeVersion": 1,
+      "typeVersion": 4,
       "position": [
-        1740,
+        860,
         300
       ],
       "parameters": {
@@ -142,48 +127,54 @@
             "https://synapsedx.sbs"
           ]
         },
-        "timeoutMs": 15000,
         "body": "={{ { where: { eop_plan_id: $json.plan.id }, limit: 500 } }}",
-        "includeInput": true
+        "includeInput": true,
+        "timeoutMs": 15000
       }
     },
     {
-      "id": "compute-seeds",
       "name": "Compute order seeds and missing creates",
       "type": "code",
       "typeVersion": 2,
       "position": [
-        1960,
-        300
+        0,
+        0
       ],
       "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || !Array.isArray(response.body.items)) throw new Error('query_failed_dispatch');\nconst items = response.body.items;\nconst total = Number(response.body.total);\nif (Number.isFinite(total) && total > items.length) throw new Error('query_truncated_dispatch');\nconst plan = state.plan;\nconst existing = new Set();\nfor (const item of items) {\n  const data = item && typeof item.data === 'object' && item.data ? item.data : {};\n  const id = String(data.id || (item && item.id) || '');\n  if (id) existing.add(id);\n}\nfor (const id of Array.isArray(plan.order_ids) ? plan.order_ids : []) {\n  if (typeof id === 'string' && id) existing.add(String(id));\n}\nconst sanitizeOrderId = (value) => String(value).split('').map((ch) => (/[A-Za-z0-9_.-]/.test(ch) ? ch : '-')).join('').slice(0, 180);\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst numberValue = (value) => {\n  const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() && Number.isFinite(Number(value)) ? Number(value) : null;\n  return num !== null && Number.isFinite(num) ? num : null;\n};\nconst actions = Array.isArray(plan.actions) ? plan.actions.filter((action) => action && typeof action === 'object') : [];\nconst planMetadata = plan.metadata && typeof plan.metadata === 'object' && !Array.isArray(plan.metadata) ? plan.metadata : {};\nconst seeds = [];\nfor (let index = 0; index < actions.length; index += 1) {\n  const action = actions[index];\n  const actionId = text(action.action_id) || text(action.id) || ('action-' + (index + 1));\n  const targetLocation = action.target_location !== undefined && action.target_location !== null ? action.target_location\n    : (planMetadata.target_location !== undefined && planMetadata.target_location !== null ? planMetadata.target_location : null);\n  const estimated = numberValue(action.estimated_minutes);\n  seeds.push({\n    action_id: actionId,\n    task_title: text(action.title) || ('Nhiệm vụ ' + actionId),\n    task_description: text(action.description),\n    priority: text(action.priority) || text(plan.priority) || 'medium',\n    estimated_minutes: estimated !== null && estimated !== 0 ? estimated : 60,\n    required_capability: text(action.required_capability) || 'personnel',\n    phase: text(action.phase) || 'respond',\n    target_location: targetLocation,\n    order_id: sanitizeOrderId(String(plan.id) + '-' + actionId),\n  });\n}\nconst missing = seeds.filter((seed) => !existing.has(seed.order_id));\n// The Tier-1 graph has no loop node: the static fan below creates at most\n// SLOTS missing orders per run and fails closed before any write beyond that.\nif (missing.length > 20) throw new Error('eop_missing_orders_max_20');\nconst planVersion = typeof plan.version === 'number' && Number.isFinite(plan.version) ? plan.version : null;\nconst createBodies = missing.map((seed) => ({\n  id: seed.order_id,\n  publish: false,\n  data: {\n    id: seed.order_id,\n    emergency_event_id: typeof plan.emergency_event_id === 'string' ? plan.emergency_event_id : null,\n    eop_plan_id: String(plan.id),\n    eop_plan_version: planVersion,\n    task_title: seed.task_title,\n    task_description: seed.task_description,\n    priority: seed.priority,\n    status: 'pending',\n    required_capability: seed.required_capability,\n    target_location: seed.target_location,\n    target_district: planMetadata.target_district === undefined ? null : planMetadata.target_district,\n    assignments: [],\n    metadata: {\n      action_id: seed.action_id,\n      phase: seed.phase,\n      estimated_minutes: seed.estimated_minutes,\n      plan_version: planVersion,\n      source: 'eop-submit',\n    },\n    created_by: state.audit.submittedBy,\n  },\n}));\nconst orderIds = [...new Set([\n  ...(Array.isArray(plan.order_ids) ? plan.order_ids.map(String) : []),\n  ...[...existing],\n  ...createBodies.map((body) => body.id),\n])].sort();\nreturn { plan, version: state.version, createBodies, orderIds, encodedPlanId: state.encodedPlanId, audit: state.audit, operation: state.operation, createdIds: [], seedCount: seeds.length };\n"
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || !Array.isArray(response.body.items)) throw new Error('query_failed_dispatch');\nconst items = response.body.items;\nconst total = Number(response.body.total);\nif (Number.isFinite(total) && total > items.length) throw new Error('query_truncated_dispatch');\nconst plan = state.plan;\nconst existing = new Set();\nfor (const item of items) {\n  const data = item && typeof item.data === 'object' && item.data ? item.data : {};\n  const id = String(data.id || (item && item.id) || '');\n  if (id) existing.add(id);\n}\nfor (const id of Array.isArray(plan.order_ids) ? plan.order_ids : []) {\n  if (typeof id === 'string' && id) existing.add(String(id));\n}\nconst sanitizeOrderId = (value) => String(value).split('').map((ch) => (/[A-Za-z0-9_.-]/.test(ch) ? ch : '-')).join('').slice(0, 180);\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst numberValue = (value) => {\n  const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() && Number.isFinite(Number(value)) ? Number(value) : null;\n  return num !== null && Number.isFinite(num) ? num : null;\n};\nconst actions = Array.isArray(plan.actions) ? plan.actions.filter((action) => action && typeof action === 'object') : [];\nconst planMetadata = plan.metadata && typeof plan.metadata === 'object' && !Array.isArray(plan.metadata) ? plan.metadata : {};\nconst seeds = [];\nfor (let index = 0; index < actions.length; index += 1) {\n  const action = actions[index];\n  const actionId = text(action.action_id) || text(action.id) || ('action-' + (index + 1));\n  const targetLocation = action.target_location !== undefined && action.target_location !== null ? action.target_location\n    : (planMetadata.target_location !== undefined && planMetadata.target_location !== null ? planMetadata.target_location : null);\n  const estimated = numberValue(action.estimated_minutes);\n  seeds.push({\n    action_id: actionId,\n    task_title: text(action.title) || ('Nhiệm vụ ' + actionId),\n    task_description: text(action.description),\n    priority: text(action.priority) || text(plan.priority) || 'medium',\n    estimated_minutes: estimated !== null && estimated !== 0 ? estimated : 60,\n    required_capability: text(action.required_capability) || 'personnel',\n    phase: text(action.phase) || 'respond',\n    target_location: targetLocation,\n    order_id: sanitizeOrderId(String(plan.id) + '-' + actionId),\n  });\n}\nconst missing = seeds.filter((seed) => !existing.has(seed.order_id));\n// One bulk create instead of one HTTP node per order: the graph stays under\n// the managed-workflow node budget and fails closed before any write if more\n// than 20 orders are missing (the Tier-2 bulk limit is 100).\nif (missing.length > 20) throw new Error('eop_missing_orders_max_20');\nconst planVersion = typeof plan.version === 'number' && Number.isFinite(plan.version) ? plan.version : null;\nconst createBodies = missing.map((seed) => ({\n  id: seed.order_id,\n  publish: false,\n  data: {\n    id: seed.order_id,\n    emergency_event_id: typeof plan.emergency_event_id === 'string' ? plan.emergency_event_id : null,\n    eop_plan_id: String(plan.id),\n    eop_plan_version: planVersion,\n    task_title: seed.task_title,\n    task_description: seed.task_description,\n    priority: seed.priority,\n    status: 'pending',\n    required_capability: seed.required_capability,\n    target_location: seed.target_location,\n    target_district: planMetadata.target_district === undefined ? null : planMetadata.target_district,\n    assignments: [],\n    metadata: {\n      action_id: seed.action_id,\n      phase: seed.phase,\n      estimated_minutes: seed.estimated_minutes,\n      plan_version: planVersion,\n      source: 'eop-submit',\n    },\n    created_by: state.audit.submittedBy,\n  },\n}));\nconst orderIds = [...new Set([\n  ...(Array.isArray(plan.order_ids) ? plan.order_ids.map(String) : []),\n  ...[...existing],\n  ...createBodies.map((body) => body.id),\n])].sort();\nreturn {\n  plan, version: state.version, createBodies,\n  bulk: { records: createBodies },\n  orderIds, encodedPlanId: state.encodedPlanId, audit: state.audit, operation: state.operation,\n  createdIds: [], seedCount: seeds.length,\n};\n"
       }
     },
     {
-      "id": "need-1",
-      "name": "Create order 1?",
+      "name": "Has missing orders?",
       "type": "if",
       "typeVersion": 1,
       "position": [
-        2180,
+        1080,
         300
       ],
       "parameters": {
-        "condition": "={{ $json.createBodies.length > 0 }}"
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.createBodies.length }}",
+              "rightValue": 0,
+              "operator": "notEquals"
+            }
+          ]
+        }
       }
     },
     {
-      "id": "create-1",
-      "name": "Create dispatch order 1",
+      "name": "Create missing dispatch orders",
       "type": "httpRequest",
-      "typeVersion": 1,
+      "typeVersion": 4,
       "position": [
-        2400,
-        180
+        1300,
+        200
       ],
       "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
+        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records/bulk",
         "method": "POST",
         "headers": {
           "Content-Type": "application/json",
@@ -196,1330 +187,41 @@
             "https://synapsedx.sbs"
           ]
         },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[0] }}",
-        "includeInput": true
+        "body": "={{ $json.bulk }}",
+        "includeInput": true,
+        "timeoutMs": 15000
       }
     },
     {
-      "id": "collect-1",
-      "name": "Collect created order 1",
+      "name": "Collect bulk creation",
       "type": "code",
       "typeVersion": 2,
       "position": [
-        2620,
-        180
+        0,
+        0
       ],
       "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || typeof response.body !== 'object') throw new Error('order_create_failed');\nconst body = response.body;\n// The Tier-2 bulk create reports per-entry outcomes; a partial failure is a\n// failed submission, never a silent partial seed.\nif (Array.isArray(body.errors) && body.errors.length) throw new Error('order_create_failed:' + body.errors.length);\nif (!Array.isArray(body.created) || body.created.length !== state.createBodies.length) throw new Error('order_create_failed');\nconst createdIds = body.created.map((item) => String(item && (item.id || (item.data && item.data.id)) || '')).filter(Boolean);\nreturn { ...state, createdIds };\n"
       }
     },
     {
-      "id": "skip-1",
-      "name": "Skip order 1",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-2",
-      "name": "Create order 2?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 1 }}"
-      }
-    },
-    {
-      "id": "create-2",
-      "name": "Create dispatch order 2",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[1] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-2",
-      "name": "Collect created order 2",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-2",
-      "name": "Skip order 2",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-3",
-      "name": "Create order 3?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 2 }}"
-      }
-    },
-    {
-      "id": "create-3",
-      "name": "Create dispatch order 3",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[2] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-3",
-      "name": "Collect created order 3",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-3",
-      "name": "Skip order 3",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-4",
-      "name": "Create order 4?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 3 }}"
-      }
-    },
-    {
-      "id": "create-4",
-      "name": "Create dispatch order 4",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[3] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-4",
-      "name": "Collect created order 4",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-4",
-      "name": "Skip order 4",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-5",
-      "name": "Create order 5?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 4 }}"
-      }
-    },
-    {
-      "id": "create-5",
-      "name": "Create dispatch order 5",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[4] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-5",
-      "name": "Collect created order 5",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-5",
-      "name": "Skip order 5",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-6",
-      "name": "Create order 6?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 5 }}"
-      }
-    },
-    {
-      "id": "create-6",
-      "name": "Create dispatch order 6",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[5] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-6",
-      "name": "Collect created order 6",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-6",
-      "name": "Skip order 6",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-7",
-      "name": "Create order 7?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 6 }}"
-      }
-    },
-    {
-      "id": "create-7",
-      "name": "Create dispatch order 7",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[6] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-7",
-      "name": "Collect created order 7",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-7",
-      "name": "Skip order 7",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-8",
-      "name": "Create order 8?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 7 }}"
-      }
-    },
-    {
-      "id": "create-8",
-      "name": "Create dispatch order 8",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[7] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-8",
-      "name": "Collect created order 8",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-8",
-      "name": "Skip order 8",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-9",
-      "name": "Create order 9?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 8 }}"
-      }
-    },
-    {
-      "id": "create-9",
-      "name": "Create dispatch order 9",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[8] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-9",
-      "name": "Collect created order 9",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-9",
-      "name": "Skip order 9",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-10",
-      "name": "Create order 10?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 9 }}"
-      }
-    },
-    {
-      "id": "create-10",
-      "name": "Create dispatch order 10",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[9] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-10",
-      "name": "Collect created order 10",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-10",
-      "name": "Skip order 10",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-11",
-      "name": "Create order 11?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 10 }}"
-      }
-    },
-    {
-      "id": "create-11",
-      "name": "Create dispatch order 11",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[10] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-11",
-      "name": "Collect created order 11",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-11",
-      "name": "Skip order 11",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-12",
-      "name": "Create order 12?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 11 }}"
-      }
-    },
-    {
-      "id": "create-12",
-      "name": "Create dispatch order 12",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[11] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-12",
-      "name": "Collect created order 12",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-12",
-      "name": "Skip order 12",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-13",
-      "name": "Create order 13?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 12 }}"
-      }
-    },
-    {
-      "id": "create-13",
-      "name": "Create dispatch order 13",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[12] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-13",
-      "name": "Collect created order 13",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-13",
-      "name": "Skip order 13",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-14",
-      "name": "Create order 14?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 13 }}"
-      }
-    },
-    {
-      "id": "create-14",
-      "name": "Create dispatch order 14",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[13] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-14",
-      "name": "Collect created order 14",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-14",
-      "name": "Skip order 14",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-15",
-      "name": "Create order 15?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 14 }}"
-      }
-    },
-    {
-      "id": "create-15",
-      "name": "Create dispatch order 15",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[14] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-15",
-      "name": "Collect created order 15",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-15",
-      "name": "Skip order 15",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-16",
-      "name": "Create order 16?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 15 }}"
-      }
-    },
-    {
-      "id": "create-16",
-      "name": "Create dispatch order 16",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[15] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-16",
-      "name": "Collect created order 16",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-16",
-      "name": "Skip order 16",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-17",
-      "name": "Create order 17?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 16 }}"
-      }
-    },
-    {
-      "id": "create-17",
-      "name": "Create dispatch order 17",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[16] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-17",
-      "name": "Collect created order 17",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-17",
-      "name": "Skip order 17",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-18",
-      "name": "Create order 18?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 17 }}"
-      }
-    },
-    {
-      "id": "create-18",
-      "name": "Create dispatch order 18",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[17] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-18",
-      "name": "Collect created order 18",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-18",
-      "name": "Skip order 18",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-19",
-      "name": "Create order 19?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 18 }}"
-      }
-    },
-    {
-      "id": "create-19",
-      "name": "Create dispatch order 19",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[18] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-19",
-      "name": "Collect created order 19",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-19",
-      "name": "Skip order 19",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "need-20",
-      "name": "Create order 20?",
-      "type": "if",
-      "typeVersion": 1,
-      "position": [
-        2180,
-        300
-      ],
-      "parameters": {
-        "condition": "={{ $json.createBodies.length > 19 }}"
-      }
-    },
-    {
-      "id": "create-20",
-      "name": "Create dispatch order 20",
-      "type": "httpRequest",
-      "typeVersion": 1,
-      "position": [
-        2400,
-        180
-      ],
-      "parameters": {
-        "url": "https://synapsedx.sbs/v1/capabilities/datasets/sos-dispatch-orders/records",
-        "method": "POST",
-        "headers": {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        "auth": {
-          "credentialRef": "synapsedx-organization",
-          "header": "X-API-Key",
-          "allowedOrigins": [
-            "https://synapsedx.sbs"
-          ]
-        },
-        "timeoutMs": 15000,
-        "body": "={{ $json.createBodies[19] }}",
-        "includeInput": true
-      }
-    },
-    {
-      "id": "collect-20",
-      "name": "Collect created order 20",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        180
-      ],
-      "parameters": {
-        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 201 && response.statusCode !== 200) throw new Error('order_create_failed');\nreturn { ...state, createdIds: [...(state.createdIds || []), String((response.body && response.body.id) || '')] };\n"
-      }
-    },
-    {
-      "id": "skip-20",
-      "name": "Skip order 20",
-      "type": "code",
-      "typeVersion": 2,
-      "position": [
-        2620,
-        420
-      ],
-      "parameters": {
-        "code": "const state = $input || {};\nreturn { ...state, skippedCreates: (state.skippedCreates || 0) + 1 };\n"
-      }
-    },
-    {
-      "id": "prepare-patch",
       "name": "Prepare submitted plan patch",
       "type": "code",
       "typeVersion": 2,
       "position": [
-        2620,
-        300
+        0,
+        0
       ],
       "parameters": {
         "code": "const state = $input || {};\nconst plan = state.plan;\nconst created = (state.createdIds || []).filter(Boolean);\nconst next = {\n  ...plan,\n  status: 'approved',\n  submitted_at: typeof plan.submitted_at === 'string' && plan.submitted_at ? plan.submitted_at : $now,\n  submitted_by: state.audit.submittedBy,\n  order_ids: state.orderIds,\n  updated_at: $now,\n};\nreturn { body: { data: next, ifVersion: state.version }, encodedId: state.encodedPlanId, audit: state.audit, operation: state.operation, created: created.length, existing: state.seedCount - created.length, idempotent: created.length === 0 };\n"
       }
     },
     {
-      "id": "patch-plan",
       "name": "Patch submitted plan",
       "type": "httpRequest",
-      "typeVersion": 1,
+      "typeVersion": 4,
       "position": [
-        2840,
+        1740,
         300
       ],
       "parameters": {
@@ -1536,8 +238,8 @@
             "https://synapsedx.sbs"
           ]
         },
-        "timeoutMs": 15000,
-        "body": "={{ $json.body }}"
+        "body": "={{ $json.body }}",
+        "timeoutMs": 15000
       }
     }
   ],
@@ -1590,25 +292,14 @@
       "main": [
         [
           {
-            "node": "Enforce four-eyes approval readiness",
+            "node": "Enforce four-eyes and admission approval",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enforce four-eyes approval readiness": {
-      "main": [
-        [
-          {
-            "node": "Match the admission approval",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Match the admission approval": {
+    "Enforce four-eyes and admission approval": {
       "main": [
         [
           {
@@ -1630,1031 +321,51 @@
         ]
       ]
     },
-    "Create order 1?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 1",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 1": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 1": {
-      "main": [
-        [
-          {
-            "node": "Create order 2?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 1": {
-      "main": [
-        [
-          {
-            "node": "Create order 2?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 2?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 2",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 2",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 2": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 2",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 2": {
-      "main": [
-        [
-          {
-            "node": "Create order 3?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 2": {
-      "main": [
-        [
-          {
-            "node": "Create order 3?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 3?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 3",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 3",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 3": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 3",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 3": {
-      "main": [
-        [
-          {
-            "node": "Create order 4?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 3": {
-      "main": [
-        [
-          {
-            "node": "Create order 4?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 4?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 4",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 4",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 4": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 4",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 4": {
-      "main": [
-        [
-          {
-            "node": "Create order 5?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 4": {
-      "main": [
-        [
-          {
-            "node": "Create order 5?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 5?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 5",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 5",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 5": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 5",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 5": {
-      "main": [
-        [
-          {
-            "node": "Create order 6?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 5": {
-      "main": [
-        [
-          {
-            "node": "Create order 6?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 6?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 6",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 6",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 6": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 6",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 6": {
-      "main": [
-        [
-          {
-            "node": "Create order 7?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 6": {
-      "main": [
-        [
-          {
-            "node": "Create order 7?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 7?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 7",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 7",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 7": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 7",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 7": {
-      "main": [
-        [
-          {
-            "node": "Create order 8?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 7": {
-      "main": [
-        [
-          {
-            "node": "Create order 8?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 8?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 8",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 8",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 8": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 8",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 8": {
-      "main": [
-        [
-          {
-            "node": "Create order 9?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 8": {
-      "main": [
-        [
-          {
-            "node": "Create order 9?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 9?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 9",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 9",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 9": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 9",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 9": {
-      "main": [
-        [
-          {
-            "node": "Create order 10?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 9": {
-      "main": [
-        [
-          {
-            "node": "Create order 10?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 10?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 10",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 10",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 10": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 10",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 10": {
-      "main": [
-        [
-          {
-            "node": "Create order 11?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 10": {
-      "main": [
-        [
-          {
-            "node": "Create order 11?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 11?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 11",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 11",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 11": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 11",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 11": {
-      "main": [
-        [
-          {
-            "node": "Create order 12?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 11": {
-      "main": [
-        [
-          {
-            "node": "Create order 12?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 12?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 12",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 12",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 12": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 12",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 12": {
-      "main": [
-        [
-          {
-            "node": "Create order 13?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 12": {
-      "main": [
-        [
-          {
-            "node": "Create order 13?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 13?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 13",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 13",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 13": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 13",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 13": {
-      "main": [
-        [
-          {
-            "node": "Create order 14?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 13": {
-      "main": [
-        [
-          {
-            "node": "Create order 14?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 14?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 14",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 14",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 14": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 14",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 14": {
-      "main": [
-        [
-          {
-            "node": "Create order 15?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 14": {
-      "main": [
-        [
-          {
-            "node": "Create order 15?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 15?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 15",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 15",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 15": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 15",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 15": {
-      "main": [
-        [
-          {
-            "node": "Create order 16?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 15": {
-      "main": [
-        [
-          {
-            "node": "Create order 16?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 16?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 16",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 16",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 16": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 16",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 16": {
-      "main": [
-        [
-          {
-            "node": "Create order 17?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 16": {
-      "main": [
-        [
-          {
-            "node": "Create order 17?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 17?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 17",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 17",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 17": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 17",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 17": {
-      "main": [
-        [
-          {
-            "node": "Create order 18?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 17": {
-      "main": [
-        [
-          {
-            "node": "Create order 18?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 18?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 18",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 18",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 18": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 18",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 18": {
-      "main": [
-        [
-          {
-            "node": "Create order 19?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 18": {
-      "main": [
-        [
-          {
-            "node": "Create order 19?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 19?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 19",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 19",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 19": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 19",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 19": {
-      "main": [
-        [
-          {
-            "node": "Create order 20?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 19": {
-      "main": [
-        [
-          {
-            "node": "Create order 20?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create order 20?": {
-      "main": [
-        [
-          {
-            "node": "Create dispatch order 20",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip order 20",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create dispatch order 20": {
-      "main": [
-        [
-          {
-            "node": "Collect created order 20",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Collect created order 20": {
-      "main": [
-        [
-          {
-            "node": "Prepare submitted plan patch",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Skip order 20": {
-      "main": [
-        [
-          {
-            "node": "Prepare submitted plan patch",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Compute order seeds and missing creates": {
       "main": [
         [
           {
-            "node": "Create order 1?",
+            "node": "Has missing orders?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has missing orders?": {
+      "main": [
+        [
+          {
+            "node": "Create missing dispatch orders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare submitted plan patch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create missing dispatch orders": {
+      "main": [
+        [
+          {
+            "node": "Collect bulk creation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect bulk creation": {
+      "main": [
+        [
+          {
+            "node": "Prepare submitted plan patch",
             "type": "main",
             "index": 0
           }
@@ -2671,11 +382,11 @@
           }
         ]
       ]
-    }
-  },
-  "settings": {
-    "access": {
-      "mode": "owner-only"
+    },
+    "Patch submitted plan": {
+      "main": [
+        []
+      ]
     }
   }
 }

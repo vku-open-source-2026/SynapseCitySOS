@@ -274,7 +274,8 @@ test('eop lifecycle workflows enforce four-eyes approvals and the route guards',
         const entry = entryFor(operation);
         const workflow = readWorkflow(entry.file);
         const byName = new Map(workflow.nodes.map((node) => [node.name, node]));
-        const fourEyes = byName.get('Enforce four-eyes approval readiness').parameters.code;
+        const fourEyesNode = byName.get('Enforce four-eyes approval readiness') || byName.get('Enforce four-eyes and admission approval');
+        const fourEyes = fourEyesNode.parameters.code;
         assert.match(fourEyes, /approval_not_approved/);
         assert.match(fourEyes, /approval_entity_mismatch/);
         assert.match(fourEyes, /approval_action_mismatch/);
@@ -315,16 +316,27 @@ test('eop lifecycle workflows enforce four-eyes approvals and the route guards',
     assert.match(byName.get('Compute order seeds and missing creates').parameters.code, /query_truncated_dispatch/);
     assert.match(byName.get('Compute order seeds and missing creates').parameters.code, /source: 'eop-submit'/);
     assert.match(byName.get('Prepare submitted plan patch').parameters.code, /submitted_by/);
-    const createSlots = submit.nodes.filter((node) => node.type === 'httpRequest' && node.parameters.method === 'POST' && node.parameters.url.endsWith('/sos-dispatch-orders/records'));
-    assert.equal(createSlots.length, 20, 'the static fan must create at most 20 orders per run');
-    for (let index = 0; index < createSlots.length; index += 1) {
-        assert.equal(createSlots[index].parameters.body, `={{ $json.createBodies[${index}] }}`);
-    }
+    assert.match(
+        byName.get('Enforce four-eyes and admission approval').parameters.code,
+        /approval_entity_mismatch/,
+        'submit must also match the admission approval like eop_publish',
+    );
+    // One bulk create instead of a 20-slot HTTP fan: the managed-workflow node
+    // budget stays small and the Tier-2 bulk route reports per-entry outcomes.
+    const bulkCreate = submit.nodes.filter((node) => node.type === 'httpRequest' && node.parameters.method === 'POST' && node.parameters.url.endsWith('/sos-dispatch-orders/records/bulk'));
+    assert.equal(bulkCreate.length, 1, 'exactly one bulk create node');
+    assert.equal(bulkCreate[0].parameters.body, '={{ $json.bulk }}');
+    assert.equal(bulkCreate[0].parameters.includeInput, true);
+    assert.equal(
+        submit.nodes.filter((node) => node.type === 'httpRequest' && node.parameters.method === 'POST' && node.parameters.url.endsWith('/sos-dispatch-orders/records')).length,
+        0,
+        'no per-order HTTP fan may remain',
+    );
+    assert.ok(submit.nodes.length <= 50, `the graph must stay importable (${submit.nodes.length} nodes)`);
     assert.equal(byName.get('Query existing plan orders').parameters.url, `${API}/sos-dispatch-orders/records/query`);
-    assert.deepEqual(submit.connections['Create order 20?'].main.map((branch) => branch[0].node),
-        ['Create dispatch order 20', 'Skip order 20']);
-    assert.deepEqual(submit.connections['Collect created order 20'].main[0][0].node, 'Prepare submitted plan patch');
-    assert.deepEqual(submit.connections['Skip order 20'].main[0][0].node, 'Prepare submitted plan patch');
+    assert.deepEqual(submit.connections['Has missing orders?'].main.map((branch) => branch[0].node),
+        ['Create missing dispatch orders', 'Prepare submitted plan patch']);
+    assert.deepEqual(submit.connections['Collect bulk creation'].main[0][0].node, 'Prepare submitted plan patch');
 });
 
 test('sitrep publication and delta workflows mirror the reviewed route guards', () => {

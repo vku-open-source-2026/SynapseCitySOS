@@ -303,10 +303,15 @@ test('eop submit seeds deterministic dispatch orders and never demotes a publish
     const entry = entryFor('eop.submit');
     const result = runHarness(entry.file, entry.dataset);
     assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
-    const creates = result.calls.filter((call) => call.method === 'POST' && !call.url.endsWith('/records/query'));
-    assert.equal(creates.length, 2, 'the two plan actions must each seed one order');
-    const first = JSON.parse(creates[0].body);
-    const second = JSON.parse(creates[1].body);
+    // The missing orders seed through ONE bulk create (the Tier-2 bulk route
+    // takes 1..100 records), so the graph stays under the managed-workflow
+    // node budget instead of unrolling one HTTP node per order.
+    const bulk = result.calls.find((call) => call.method === 'POST' && call.url.endsWith('/records/bulk'));
+    assert.ok(bulk, 'the missing orders must seed through one bulk create');
+    const payload = JSON.parse(bulk.body);
+    assert.equal(payload.records.length, 2, 'the two plan actions must each seed one order');
+    const first = payload.records[0];
+    const second = payload.records[1];
     assert.equal(first.id, 'eop-1-activate-command');
     assert.equal(second.id, 'eop-1-evacuate-ward-7', 'order ids must sanitize like the domain order_id_for');
     assert.equal(first.data.status, 'pending');
@@ -319,6 +324,11 @@ test('eop submit seeds deterministic dispatch orders and never demotes a publish
     assert.equal(second.data.metadata.estimated_minutes, 60, 'a missing estimate falls back to 60 minutes');
     assert.equal(second.data.priority, 'medium');
     assert.equal(second.data.task_title, 'Evacuate ward 7');
+    assert.equal(
+        result.calls.filter((call) => call.method === 'POST' && !call.url.endsWith('/records/query') && !call.url.endsWith('/records/bulk')).length,
+        0,
+        'no per-order HTTP fan may remain',
+    );
 
     const patchCall = result.calls.at(-1);
     assert.equal(patchCall.method, 'PATCH');

@@ -316,7 +316,7 @@
         "resource": "eop",
         "workflowRef": {
           "name": "sos-eop-submit",
-          "checksum": "68bf2dc673b104efe970cdf9cd13d1e18bfb971305ca23c37332af26c58cdc78"
+          "checksum": "718d970ab1e91df665904f7b02ad309eb6c74461da31eae9f7accfb99d52f79e"
         },
         "onSubmit": "act-eop-submit-submit"
       },
@@ -808,5 +808,5 @@
     "path": "plugins/sos-eop-console.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:5ae656a7179a346276031a8ebc569d395db46bb32b97e7cbd887d31b4b166c32"
+  "checksum": "sha256:e6c0ed9040bc52cde39d3f78143d431b5e8cd052f63d3bcd078014880d0d4351"
 }
