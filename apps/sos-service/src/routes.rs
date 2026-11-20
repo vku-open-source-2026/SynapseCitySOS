@@ -2057,14 +2057,90 @@ async fn resource_create(ctx: Ctx<'_>) -> ApiResult<Response> {
     Ok(web::created(Value::Object(row)))
 }
 
+/// Resource-unit lifecycle vocabulary, mirroring the DX workspace binding
+/// (`plugins/workflows/sos-workspace-actions.workflow.json`): the dispatch
+/// pool moves between available, assigned, deployed, unavailable and
+/// maintenance, and `retired` is terminal.
+const RESOURCE_STATUSES: &[&str] = &[
+    "available",
+    "assigned",
+    "deployed",
+    "unavailable",
+    "maintenance",
+    "retired",
+];
+
+/// Statuses an operator may move **from** for a given target status. The
+/// dispatch reservation/release paths are internal business flows; this table
+/// governs the explicit status endpoint.
+fn resource_transition_allowed_from(status: &str) -> Option<&'static [&'static str]> {
+    Some(match status {
+        "available" => &["unavailable", "maintenance"][..],
+        "assigned" => &["available"][..],
+        "deployed" => &["available", "assigned"][..],
+        "unavailable" => &["available"][..],
+        "maintenance" => &["available"][..],
+        "retired" => &["available", "unavailable", "maintenance"][..],
+        _ => return None,
+    })
+}
+
 async fn resource_status(ctx: Ctx<'_>, id: &str) -> ApiResult<Response> {
-    let status = web::string_value(ctx.body.get("status"))
+    let requested = web::string_value(ctx.body.get("status"))
         .ok_or_else(|| ApiError::bad_request("status_required", "status is required"))?;
-    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
-    let mut patch = Map::new();
-    patch.insert("status".into(), json!(status));
-    patch.insert("status_changed_at".into(), json!(crate::now_iso()));
+    let allowed_from = resource_transition_allowed_from(&requested).ok_or_else(|| {
+        ApiError::bad_request(
+            "invalid_resource_status",
+            format!("unknown resource status {requested}"),
+        )
+        .with_details(json!({ "allowed": RESOURCE_STATUSES }))
+    })?;
     let opts = ctx.opts();
+    let current = tier2::get(ctx.client(), &opts, tier2::RESOURCES, id).await?;
+    let current_status = current
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("available")
+        .to_string();
+    if current_status == requested {
+        let mut response = current;
+        response.insert("idempotent".into(), json!(true));
+        return Ok(web::json_response(Value::Object(response)));
+    }
+    if current_status == "retired" {
+        return Err(ApiError::conflict(
+            "record_immutable",
+            format!("resource unit {id} is retired and is immutable"),
+        ));
+    }
+    if !allowed_from.contains(&current_status.as_str()) {
+        return Err(ApiError::conflict(
+            "invalid_resource_transition",
+            format!("cannot move resource unit {id} from {current_status} to {requested}"),
+        )
+        .with_details(json!({ "allowedFrom": allowed_from, "current": current_status })));
+    }
+    let now = crate::now_iso();
+    let mut history = current
+        .get("status_history")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    history.push(json!({
+        "from": current_status,
+        "to": requested,
+        "at": now,
+        "by": ctx.actor().unwrap_or_else(|| "sos-operator".into()),
+        "note": ctx.body.get("note").cloned().unwrap_or(Value::Null),
+    }));
+    let mut patch = Map::new();
+    patch.insert("status".into(), json!(requested));
+    patch.insert("status_changed_at".into(), json!(now));
+    patch.insert("status_history".into(), Value::Array(history));
+    if requested == "retired" {
+        patch.insert("retired_at".into(), json!(crate::now_iso()));
+    }
+    let version = tier2::requested_version(ctx.headers, Some(ctx.body))?;
     let row = tier2::update(ctx.client(), &opts, tier2::RESOURCES, id, patch, version).await?;
     Ok(web::json_response(Value::Object(row)))
 }
@@ -6725,6 +6801,201 @@ mod route_tests {
         .await;
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(body["error"], "invalid_dispatch_transition");
+    }
+
+    async fn mount_resource_unit(server: &MockServer, status: &str, version: i64) {
+        mount_dataset(
+            server,
+            "sos-resource-units",
+            "SynapseCitySOS resource units",
+            "ResourceUnit",
+            "Emergency response resources",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": version,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "id": "u1", "name": "Team", "resource_type": "personnel",
+                    "status": status, "status_history": []
+                }
+            })))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn resource_status_enforces_the_lifecycle_vocabulary() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        // Unknown strings are rejected before Tier-2 is touched.
+        let unconfigured = app(AppState::new(
+            config.clone(),
+            Client::new("http://127.0.0.1:1", Credentials::none()).unwrap(),
+        ));
+        let (status, _, body) = call(
+            unconfigured,
+            Method::POST,
+            "/v1/emergency/resources/u1/status",
+            Some(&token),
+            Some(json!({ "status": "banana" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "invalid_resource_status");
+        assert_eq!(body["details"]["allowed"][0], "available");
+
+        // A valid transition writes the status, the changed-at stamp and an
+        // audit history entry.
+        let server = MockServer::start().await;
+        mount_resource_unit(&server, "available", 1).await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .and(body_partial_json(json!({
+                "data": {
+                    "status": "maintenance",
+                    "status_history": [
+                        { "from": "available", "to": "maintenance", "by": "qa" }
+                    ]
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": { "id": "u1", "name": "Team", "status": "maintenance" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/resources/u1/status",
+            Some(&token),
+            Some(json!({ "status": "maintenance" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "maintenance");
+    }
+
+    #[tokio::test]
+    async fn retiring_a_resource_unit_is_a_one_way_transition() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        // available -> retired is a valid final step.
+        let server = MockServer::start().await;
+        mount_resource_unit(&server, "available", 1).await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .and(body_partial_json(json!({
+                "data": {
+                    "status": "retired",
+                    "status_history": [
+                        { "from": "available", "to": "retired", "by": "qa" }
+                    ]
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "u1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": { "id": "u1", "name": "Team", "status": "retired" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config.clone(),
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/resources/u1/status",
+            Some(&token),
+            Some(json!({ "status": "retired" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "retired");
+
+        // A retired unit is immutable: no status change can revive it.
+        let server = MockServer::start().await;
+        mount_resource_unit(&server, "retired", 2).await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/resources/u1/status",
+            Some(&token),
+            Some(json!({ "status": "available" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "record_immutable");
+    }
+
+    #[tokio::test]
+    async fn resource_status_rejects_transition_table_violations() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        // deployed -> available skips the declared table (only unavailable
+        // and maintenance may return to available).
+        let server = MockServer::start().await;
+        mount_resource_unit(&server, "deployed", 3).await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/resources/u1/status",
+            Some(&token),
+            Some(json!({ "status": "available" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "invalid_resource_transition");
+        assert_eq!(body["details"]["current"], "deployed");
     }
 
     async fn mount_optimize_fixtures(server: &MockServer) {
