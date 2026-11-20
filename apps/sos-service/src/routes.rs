@@ -1686,6 +1686,11 @@ async fn dispatch_action(ctx: Ctx<'_>, id: &str, action: &str) -> ApiResult<Resp
         .filter(|value| !value.is_empty())
         .map(str::to_string);
     let (next, allowed_from, terminal_at) = match action {
+        // Responder progression (plugins/workflows contract): an assigned unit
+        // starts en route, then arrives on scene. `complete` stays valid from
+        // all three active states.
+        "start" => ("in_transit", &["assigned"][..], "started_at"),
+        "arrive" => ("on_scene", &["in_transit"][..], "arrived_at"),
         "complete" => (
             "completed",
             &["assigned", "in_transit", "on_scene"][..],
@@ -1756,34 +1761,39 @@ async fn dispatch_action(ctx: Ctx<'_>, id: &str, action: &str) -> ApiResult<Resp
     let version = tier2::requested_version(ctx.headers, Some(ctx.body))?
         .or_else(|| current.get("record_version").and_then(Value::as_i64));
     let row = tier2::update(ctx.client(), &opts, tier2::DISPATCH, id, patch, version).await?;
-    if let Some(resource_id) = assignment {
-        if let Ok(resource) = tier2::get(ctx.client(), &opts, tier2::RESOURCES, &resource_id).await
-        {
-            let reserved_for = resource
-                .get("assigned_dispatch_order_id")
-                .and_then(Value::as_str);
-            if reserved_for == Some(id) {
-                let mut release = Map::new();
-                release.insert("status".into(), json!("available"));
-                release.insert("assigned_dispatch_order_id".into(), Value::Null);
-                release.insert("released_at".into(), json!(crate::now_iso()));
-                let resource_version = resource.get("record_version").and_then(Value::as_i64);
-                if let Err(error) = tier2::update(
-                    ctx.client(),
-                    &opts,
-                    tier2::RESOURCES,
-                    &resource_id,
-                    release,
-                    resource_version,
-                )
-                .await
-                {
-                    tracing::warn!(
-                        resource_unit = %resource_id,
-                        dispatch_order = %id,
-                        error = %error.message,
-                        "dispatch order became terminal but the resource unit could not be released"
-                    );
+    // Only a terminal order releases its unit. `start`/`arrive` move the same
+    // unit along the responder progression, so the reservation must survive.
+    if matches!(next, "completed" | "canceled" | "rejected") {
+        if let Some(resource_id) = assignment {
+            if let Ok(resource) =
+                tier2::get(ctx.client(), &opts, tier2::RESOURCES, &resource_id).await
+            {
+                let reserved_for = resource
+                    .get("assigned_dispatch_order_id")
+                    .and_then(Value::as_str);
+                if reserved_for == Some(id) {
+                    let mut release = Map::new();
+                    release.insert("status".into(), json!("available"));
+                    release.insert("assigned_dispatch_order_id".into(), Value::Null);
+                    release.insert("released_at".into(), json!(crate::now_iso()));
+                    let resource_version = resource.get("record_version").and_then(Value::as_i64);
+                    if let Err(error) = tier2::update(
+                        ctx.client(),
+                        &opts,
+                        tier2::RESOURCES,
+                        &resource_id,
+                        release,
+                        resource_version,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            resource_unit = %resource_id,
+                            dispatch_order = %id,
+                            error = %error.message,
+                            "dispatch order became terminal but the resource unit could not be released"
+                        );
+                    }
                 }
             }
         }
@@ -6452,6 +6462,269 @@ mod route_tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["idempotent"], true);
         assert_eq!(body["status"], "assigned");
+    }
+
+    #[tokio::test]
+    async fn dispatch_start_moves_an_assigned_order_to_in_transit() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "status": "assigned",
+                    "task_title": "Rescue",
+                    "assigned_resource_unit_id": "u1",
+                    "status_history": []
+                }
+            })))
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .and(body_partial_json(json!({
+                "data": {
+                    "status": "in_transit",
+                    "status_history": [
+                        { "from": "assigned", "to": "in_transit", "action": "start", "by": "qa" }
+                    ]
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 3,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": {
+                    "status": "in_transit",
+                    "task_title": "Rescue",
+                    "assigned_resource_unit_id": "u1",
+                    "started_at": "2026-11-20T00:00:00.000Z"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // `start` is a progression step, not a terminal one: the assigned unit
+        // must stay reserved for the order.
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-resource-units/records/u1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/start",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "in_transit");
+    }
+
+    #[tokio::test]
+    async fn dispatch_arrive_moves_an_in_transit_order_to_on_scene() {
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 3,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": {
+                    "status": "in_transit",
+                    "task_title": "Rescue",
+                    "assigned_resource_unit_id": "u1",
+                    "status_history": []
+                }
+            })))
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .and(body_partial_json(json!({
+                "data": {
+                    "status": "on_scene",
+                    "status_history": [
+                        { "from": "in_transit", "to": "on_scene", "action": "arrive", "by": "qa" }
+                    ]
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 4,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:01.000Z",
+                "data": {
+                    "status": "on_scene",
+                    "task_title": "Rescue",
+                    "assigned_resource_unit_id": "u1",
+                    "arrived_at": "2026-11-20T00:00:00.000Z"
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/arrive",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "on_scene");
+    }
+
+    #[tokio::test]
+    async fn invalid_dispatch_progression_is_rejected() {
+        // arrive from "assigned" skips the required in_transit step.
+        let config = Config::for_test("http://127.0.0.1:1");
+        let token = admin_token(&config);
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 2,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "assigned", "task_title": "Rescue" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config.clone(),
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/arrive",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "invalid_dispatch_transition");
+
+        // start from "on_scene" would move backwards.
+        let server = MockServer::start().await;
+        mount_dataset(
+            &server,
+            "sos-dispatch-orders",
+            "SynapseCitySOS dispatch orders",
+            "DispatchOrder",
+            "Emergency dispatch orders",
+            false,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "d1",
+                "version": 4,
+                "createdAt": "2026-11-01T00:00:00.000Z",
+                "updatedAt": "2026-11-01T00:00:00.000Z",
+                "data": { "status": "on_scene", "task_title": "Rescue" }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/v1/capabilities/datasets/sos-dispatch-orders/records/d1",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+            .expect(0)
+            .mount(&server)
+            .await;
+        let state = AppState::new(
+            config,
+            Client::new(&server.uri(), Credentials::none()).unwrap(),
+        );
+        let (status, _, body) = call(
+            app(state),
+            Method::POST,
+            "/v1/emergency/dispatch/d1/start",
+            Some(&token),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error"], "invalid_dispatch_transition");
     }
 
     async fn mount_optimize_fixtures(server: &MockServer) {
