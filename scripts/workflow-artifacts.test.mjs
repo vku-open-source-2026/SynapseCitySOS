@@ -53,6 +53,9 @@ test('manifest is SOS-owned, source-ready and inactive', () => {
         'dispatch.complete',
         'dispatch.reject',
         'emergency.close',
+        'eop.approve',
+        'eop.publish',
+        'eop.submit',
     ]);
     for (const entry of manifest.workflows) {
         assert.equal(entry.status, 'source_ready_pending_credential_binding');
@@ -254,6 +257,64 @@ test('transition action design is implemented and keeps invariants', () => {
             assert.match(action.createBefore.invariant, /AAR first/);
         }
     }
+});
+
+test('eop lifecycle workflows enforce four-eyes approvals and the route guards', () => {
+    for (const operation of ['eop.approve', 'eop.publish', 'eop.submit']) {
+        const entry = entryFor(operation);
+        const workflow = readWorkflow(entry.file);
+        const byName = new Map(workflow.nodes.map((node) => [node.name, node]));
+        const fourEyes = byName.get('Enforce four-eyes approval readiness').parameters.code;
+        assert.match(fourEyes, /approval_not_approved/);
+        assert.match(fourEyes, /approval_entity_mismatch/);
+        assert.match(fourEyes, /approval_action_mismatch/);
+        assert.match(fourEyes, /self_approval_forbidden/, `${operation} must mirror the four-eyes rule`);
+        const readApproval = byName.get('Read approval');
+        assert.equal(readApproval.parameters.method, 'GET');
+        assert.equal(readApproval.parameters.url, "={{ 'https://synapsedx.sbs/v1/capabilities/approvals/' + $json.encodedApprovalId }}");
+        assert.equal(readApproval.parameters.auth.credentialRef, 'synapsedx-organization');
+        assert.deepEqual(readApproval.parameters.auth.allowedOrigins, ['https://synapsedx.sbs']);
+        assert.equal(readApproval.parameters.includeInput, true);
+        assert.ok(byName.get('Read EOP plan').parameters.url.includes('/sos-eop-plans/'));
+        const patch = workflow.nodes.filter((node) => node.type === 'httpRequest' && node.parameters.method === 'PATCH');
+        assert.equal(patch.length, 1);
+        assert.ok(patch[0].parameters.url.includes('/sos-eop-plans/'));
+        assert.equal(patch[0].parameters.body, '={{ $json.body }}');
+    }
+
+    const approve = readWorkflow(entryFor('eop.approve').file);
+    const approveCheck = new Map(approve.nodes.map((node) => [node.name, node])).get('Check plan and prepare approval patch').parameters.code;
+    assert.match(approveCheck, /invalid_eop_status/);
+    assert.match(approveCheck, /'approved'/);
+    assert.match(approveCheck, /approved_role/);
+    assert.match(approveCheck, /ifVersion: current\.version/);
+    assert.deepEqual(approve.connections['Already approved?'].main.map((branch) => branch[0].node),
+        ['Return idempotent approval', 'Patch approved plan']);
+
+    const publish = readWorkflow(entryFor('eop.publish').file);
+    const publishCheck = new Map(publish.nodes.map((node) => [node.name, node])).get('Check plan status and resolve approval').parameters.code;
+    assert.match(publishCheck, /eop_not_approved/);
+    assert.match(publishCheck, /approval_required/);
+    assert.match(new Map(publish.nodes.map((node) => [node.name, node])).get('Match the admission approval').parameters.code, /approval_entity_mismatch/);
+    assert.match(new Map(publish.nodes.map((node) => [node.name, node])).get('Prepare publication patch').parameters.code, /published_at/);
+
+    const submit = readWorkflow(entryFor('eop.submit').file);
+    const byName = new Map(submit.nodes.map((node) => [node.name, node]));
+    assert.match(byName.get('Check plan and resolve approval').parameters.code, /eop_already_published/);
+    assert.match(byName.get('Compute order seeds and missing creates').parameters.code, /eop_missing_orders_max_20/);
+    assert.match(byName.get('Compute order seeds and missing creates').parameters.code, /query_truncated_dispatch/);
+    assert.match(byName.get('Compute order seeds and missing creates').parameters.code, /source: 'eop-submit'/);
+    assert.match(byName.get('Prepare submitted plan patch').parameters.code, /submitted_by/);
+    const createSlots = submit.nodes.filter((node) => node.type === 'httpRequest' && node.parameters.method === 'POST' && node.parameters.url.endsWith('/sos-dispatch-orders/records'));
+    assert.equal(createSlots.length, 20, 'the static fan must create at most 20 orders per run');
+    for (let index = 0; index < createSlots.length; index += 1) {
+        assert.equal(createSlots[index].parameters.body, `={{ $json.createBodies[${index}] }}`);
+    }
+    assert.equal(byName.get('Query existing plan orders').parameters.url, `${API}/sos-dispatch-orders/records/query`);
+    assert.deepEqual(submit.connections['Create order 20?'].main.map((branch) => branch[0].node),
+        ['Create dispatch order 20', 'Skip order 20']);
+    assert.deepEqual(submit.connections['Collect created order 20'].main[0][0].node, 'Prepare submitted plan patch');
+    assert.deepEqual(submit.connections['Skip order 20'].main[0][0].node, 'Prepare submitted plan patch');
 });
 
 test('workspace lifecycle guards reject invalid transitions and non-draft deletes', () => {

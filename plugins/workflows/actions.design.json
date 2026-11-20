@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "product": "sos",
   "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
-  "revision": "2026-11-14.2",
+  "revision": "2026-11-20.1",
   "status": "implemented_source_ready",
   "blocker": "Resolved by the Tier-1 httpRequest includeInput option. Residual: Tier-2 PATCH conditional support is ifVersion/If-Match (optimistic CAS); concurrent conflicts return 409 and must surface to the user.",
   "requiredEnabler": "Engine prior-node context (e.g. $node[\"Validate\"]) or a Tier-2 conditional/merge update contract with tenant/product authz and audit.",
@@ -126,9 +126,135 @@
         "canceled",
         "archived"
       ]
+    },
+    {
+      "operation": "eop.approve",
+      "method": "PATCH",
+      "dataset": "sos-eop-plans",
+      "recordIdField": "plan_id",
+      "fields": [
+        {
+          "name": "plan_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "approval_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "review_notes",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "draft",
+        "review_pending"
+      ],
+      "idempotentWhen": {
+        "status": "approved",
+        "behaviour": "return the approved plan without any write"
+      },
+      "patch": {
+        "status": "approved",
+        "review_notes": "{review_notes or existing}",
+        "approved_by": "{submittedBy}",
+        "approved_at": "{now}",
+        "approval_id": "{approval.id}",
+        "approved_role": "{first approverRole}",
+        "approval_roles": "{approval.approverRoles}"
+      },
+      "invariants": [
+        "the workflow reads the Tier-2 approvals record and requires status=approved, entityId=plan and action=eop.approve",
+        "four-eyes: the approval requester can never be the executing operator",
+        "a plan outside draft/review_pending is refused with invalid_eop_status"
+      ]
+    },
+    {
+      "operation": "eop.publish",
+      "method": "PATCH",
+      "dataset": "sos-eop-plans",
+      "recordIdField": "plan_id",
+      "fields": [
+        {
+          "name": "plan_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "approval_id",
+          "type": "text"
+        }
+      ],
+      "allowedFrom": [
+        "approved"
+      ],
+      "idempotentWhen": {
+        "status": "published",
+        "behaviour": "return the published plan without any write"
+      },
+      "patch": {
+        "status": "published",
+        "published_at": "{existing or now}",
+        "published_by": "{submittedBy or existing}"
+      },
+      "invariants": [
+        "only an approved plan may be published (eop_not_approved)",
+        "the publication approval must match the approval that admitted the plan (approval_entity_mismatch)",
+        "the approval is consumed under the same four-eyes rule as eop.approve"
+      ]
+    },
+    {
+      "operation": "eop.submit",
+      "method": "PATCH",
+      "dataset": "sos-eop-plans",
+      "recordIdField": "plan_id",
+      "fields": [
+        {
+          "name": "plan_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "approval_id",
+          "type": "text"
+        }
+      ],
+      "allowedFrom": [
+        "approved"
+      ],
+      "refusedFrom": [
+        "published"
+      ],
+      "createBefore": {
+        "dataset": "sos-dispatch-orders",
+        "method": "POST",
+        "requiredFields": [
+          "id",
+          "emergency_event_id",
+          "eop_plan_id",
+          "task_title",
+          "status",
+          "metadata"
+        ],
+        "invariant": "orders are seeded from the plan actions with deterministic ids (order-<plan>-<action> sanitized) so a repeated submit never duplicates them; existing orders are skipped",
+        "bounds": "the static Tier-1 graph creates at most 20 missing orders per run and fails closed with eop_missing_orders_max_20 before any write"
+      },
+      "patch": {
+        "status": "approved",
+        "submitted_at": "{existing or now}",
+        "submitted_by": "{submittedBy}",
+        "order_ids": "{sorted union of existing and created order ids}"
+      },
+      "invariants": [
+        "submit refuses a published plan with eop_already_published",
+        "submit requires an approved plan and the admission approval under four-eyes",
+        "the plan stays approved; submit records submitted_at/submitted_by and the order ids"
+      ]
     }
   ],
-  "implementation": "Implemented with the Tier-1 httpRequest includeInput:true option: GET -> code invariants/merge -> PATCH full data with ifVersion optimistic CAS. Event close additionally queries dispatch/SITREP/resource/AAR records, reuses the versioned AAR, then resolves the event. Source-ready, inactive until DX binds credentialRef and pins artifacts.",
+  "implementation": "Implemented with the Tier-1 httpRequest includeInput:true option: GET -> code invariants/merge -> PATCH full data with ifVersion optimistic CAS. Event close additionally queries dispatch/SITREP/resource/AAR records, reuses the versioned AAR, then resolves the event. EOP approve/publish/submit read the Tier-2 approvals record (status/entityId/action + four-eyes requester check) before any write. Source-ready, inactive until DX binds credentialRef and pins artifacts.",
   "engineAuth": {
     "credentialRef": "synapsedx-organization",
     "header": "X-API-Key",

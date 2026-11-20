@@ -170,36 +170,36 @@
         "width": "full"
       },
       {
-        "id": "eop-decision",
+        "id": "eop-approve",
         "type": "form",
-        "title": "Decide an EOP plan",
+        "title": "Approve an EOP plan (four-eyes)",
         "width": "half",
-        "action": "execute",
+        "action": "update",
         "fields": [
           {
-            "name": "record_id",
+            "name": "plan_id",
             "type": "text",
-            "label": "EOP id",
+            "label": "EOP plan id",
             "required": true
           },
           {
-            "name": "decision",
+            "name": "approval_id",
             "type": "text",
-            "label": "Decision: submit, reject or archive (approve/publish via SOS HITL)",
+            "label": "Tier-2 approval id created by another operator",
             "required": true
           },
           {
-            "name": "notes",
+            "name": "review_notes",
             "type": "textarea",
-            "label": "Note"
+            "label": "Review notes"
           }
         ],
         "resource": "eop",
         "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "name": "sos-eop-approve",
+          "checksum": "393685bd78f918ad8022576cf409094f9d8d93c53f3c59f084b106b24d0261e9"
         },
-        "onSubmit": "act-eop-decision-submit"
+        "onSubmit": "act-eop-approve-submit"
       },
       {
         "id": "sitrep-decision",
@@ -705,29 +705,29 @@
         }
       },
       {
-        "id": "act-eop-decision-submit",
+        "id": "act-eop-approve-submit",
         "type": "action",
-        "title": "Submit Decide an EOP plan",
+        "title": "Submit Approve an EOP plan (four-eyes)",
         "operation": {
-          "kind": "execute",
-          "target": "eop-decision",
+          "kind": "update",
+          "target": "eop-approve",
           "mappings": [
             {
-              "field": "record_id",
+              "field": "plan_id",
               "source": "event",
-              "value": "values.record_id",
+              "value": "values.plan_id",
               "required": true
             },
             {
-              "field": "decision",
+              "field": "approval_id",
               "source": "event",
-              "value": "values.decision",
+              "value": "values.approval_id",
               "required": true
             },
             {
-              "field": "notes",
+              "field": "review_notes",
               "source": "event",
-              "value": "values.notes",
+              "value": "values.review_notes",
               "required": false
             }
           ],
@@ -737,12 +737,12 @@
         }
       },
       {
-        "id": "act-eop-decision-open",
+        "id": "act-eop-approve-open",
         "type": "action",
-        "title": "Open Decide an EOP plan",
+        "title": "Open Approve an EOP plan (four-eyes)",
         "operation": {
           "kind": "openForm",
-          "target": "eop-decision",
+          "target": "eop-approve",
           "mappings": [],
           "javascript": "",
           "inputs": [],
@@ -891,5 +891,5 @@
     "path": "plugins/sos-operator-review.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:2c4e9073885851732dc7c5f711a8c6ada07bfcaadb52e0cc6af5d050b2bf451d"
+  "checksum": "sha256:a4958f846c87d728fac3c55e664e046ca8e5ab2d57ac2ab1443d576439bdeab1"
 }

@@ -1,0 +1,296 @@
+{
+  "name": "sos-eop-publish",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'eop') throw new Error('unsupported_resource');\nconst planId = text(fields.plan_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(planId)) throw new Error('record_id_invalid');\nconst approvalId = text(fields.approval_id);\nif (approvalId && !/^[A-Za-z0-9_@.:+-]{1,256}$/.test(approvalId)) throw new Error('approval_id_invalid');\nconst allowed = new Set(['plan_id', 'approval_id']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst audit = {\n  product, resource, operation: 'eop.publish', recordId: planId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { planId, encodedPlanId: encodeURIComponent(planId), approvalId, audit };\n"
+      }
+    },
+    {
+      "id": "read-plan",
+      "name": "Read EOP plan",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-eop-plans/records/' + $json.encodedPlanId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-plan",
+      "name": "Check plan status and resolve approval",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('plan_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst plan = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(plan.status);\nif (status === 'published') {\n  return { idempotent: true, planId: plan.id, status, published_at: plan.published_at === undefined ? null : plan.published_at, published_by: plan.published_by === undefined ? null : plan.published_by };\n}\nif (status !== 'approved') throw new Error('eop_not_approved');\nconst planApprovalId = typeof plan.approval_id === 'string' && plan.approval_id.trim() ? plan.approval_id.trim() : '';\nconst approvalId = state.approvalId || planApprovalId;\nif (!approvalId) throw new Error('approval_required');\nreturn { plan, planId: String(plan.id), version: current.version, approvalId, encodedApprovalId: encodeURIComponent(approvalId), encodedPlanId: state.encodedPlanId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "if-idempotent",
+      "name": "Already published?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.idempotent === true }}"
+      }
+    },
+    {
+      "id": "ret-idem",
+      "name": "Return idempotent publication",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        180
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.idempotent !== true) throw new Error('unexpected_publish_mode');\nreturn {\n  idempotent: true, operation: 'eop.publish', plan_id: state.planId, status: 'published',\n  published_at: state.published_at, published_by: state.published_by,\n};\n"
+      }
+    },
+    {
+      "id": "read-approval",
+      "name": "Read approval",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        420
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/approvals/' + $json.encodedApprovalId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-approval",
+      "name": "Enforce four-eyes approval readiness",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        420
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 || !response.body || typeof response.body !== 'object') throw new Error('approval_not_found');\nconst approval = response.body.approval && typeof response.body.approval === 'object' ? response.body.approval : response.body;\nif (String(approval.status) !== 'approved') throw new Error('approval_not_approved');\nif (String(approval.entityId) !== String(state.planId)) throw new Error('approval_entity_mismatch');\nif (String(approval.action) !== 'eop.approve') throw new Error('approval_action_mismatch');\n// Four-eyes (docs/HITL.md, mirroring assert_approval_ready in the Tier-3\n// routes): the operator who requested the approval can never consume it.\nif (String(approval.requester) === String(state.audit.submittedBy)) throw new Error('self_approval_forbidden');\nreturn { ...state, approval: { id: approval.id === undefined ? null : String(approval.id), approverRoles: Array.isArray(approval.approverRoles) ? approval.approverRoles.map(String) : [] } };\n"
+      }
+    },
+    {
+      "id": "match-approval",
+      "name": "Match the admission approval",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        420
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\n// The publication approval must be the same approval that admitted the plan\n// (mirroring eop_publish in the Tier-3 routes).\nif (String(state.approval.id) !== String(state.plan.approval_id)) throw new Error('approval_entity_mismatch');\nreturn state;\n"
+      }
+    },
+    {
+      "id": "prepare",
+      "name": "Prepare publication patch",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        420
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nconst plan = state.plan;\nconst next = {\n  ...plan,\n  status: 'published',\n  published_at: typeof plan.published_at === 'string' && plan.published_at ? plan.published_at : $now,\n  published_by: state.audit.submittedBy || (typeof plan.published_by === 'string' ? plan.published_by : null),\n  updated_at: $now,\n};\nreturn { body: { data: next, ifVersion: state.version }, encodedId: state.encodedPlanId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "patch-plan",
+      "name": "Patch published plan",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2180,
+        420
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-eop-plans/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read EOP plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read EOP plan": {
+      "main": [
+        [
+          {
+            "node": "Check plan status and resolve approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check plan status and resolve approval": {
+      "main": [
+        [
+          {
+            "node": "Already published?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already published?": {
+      "main": [
+        [
+          {
+            "node": "Return idempotent publication",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read approval": {
+      "main": [
+        [
+          {
+            "node": "Enforce four-eyes approval readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce four-eyes approval readiness": {
+      "main": [
+        [
+          {
+            "node": "Match the admission approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match the admission approval": {
+      "main": [
+        [
+          {
+            "node": "Prepare publication patch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare publication patch": {
+      "main": [
+        [
+          {
+            "node": "Patch published plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

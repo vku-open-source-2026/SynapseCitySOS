@@ -222,31 +222,26 @@
       {
         "id": "eop-publish",
         "type": "form",
-        "title": "Archive an EOP plan",
+        "title": "Publish an EOP plan",
         "width": "half",
-        "action": "execute",
+        "action": "update",
         "fields": [
           {
-            "name": "record_id",
+            "name": "plan_id",
             "type": "text",
-            "label": "EOP id",
+            "label": "EOP plan id",
             "required": true
           },
           {
-            "name": "decision",
+            "name": "approval_id",
             "type": "text",
-            "label": "Decision: archive (publish via SOS API)"
-          },
-          {
-            "name": "notes",
-            "type": "textarea",
-            "label": "Note"
+            "label": "Approval id (defaults to the approval that admitted the plan)"
           }
         ],
         "resource": "eop",
         "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "a70d370aa5ce3051466c84b94f6ade67cb5f281d214ab9ebba3884a55bf6d8cb"
+          "name": "sos-eop-publish",
+          "checksum": "9b3975e4d9a6f3aa3338f057e17f7ef4c64ce2d710ce83f3a77dd1f891dbdc46"
         },
         "onSubmit": "act-eop-publish-submit"
       },
@@ -832,25 +827,19 @@
         "type": "action",
         "title": "Submit Publish an EOP plan",
         "operation": {
-          "kind": "execute",
+          "kind": "update",
           "target": "eop-publish",
           "mappings": [
             {
-              "field": "record_id",
+              "field": "plan_id",
               "source": "event",
-              "value": "values.record_id",
+              "value": "values.plan_id",
               "required": true
             },
             {
-              "field": "decision",
+              "field": "approval_id",
               "source": "event",
-              "value": "values.decision",
-              "required": false
-            },
-            {
-              "field": "notes",
-              "source": "event",
-              "value": "values.notes",
+              "value": "values.approval_id",
               "required": false
             }
           ],
@@ -957,5 +946,5 @@
     "path": "plugins/sos-phase-boards.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:591eaac6e50a787241604c5dd134e5371f7948b9e9f8523c2b05f1979cc1ef17"
+  "checksum": "sha256:da357e02bbaa2f012a7b6d838833239911a280f0c50509bfa69c9a0f40bed262"
 }

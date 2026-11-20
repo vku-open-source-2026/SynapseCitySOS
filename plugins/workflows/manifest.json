@@ -31,7 +31,8 @@
     "note": "The portable source stores a credentialRef, never a deployment-local credential id or secret. DX/workflow worker must resolve it to a same-org Tier-2 API-key credential before execution.",
     "datasetByResource": {
       "events": "sos-emergency-events",
-      "dispatch": "sos-dispatch-orders"
+      "dispatch": "sos-dispatch-orders",
+      "eop": "sos-eop-plans"
     },
     "credentialBinding": {
       "owner": "DX workflow management (workflow worker)",
@@ -119,6 +120,76 @@
       "createsBefore": {
         "dataset": "sos-after-action-reports"
       }
+    },
+    {
+      "operation": "eop.approve",
+      "workflow": "sos-eop-approve",
+      "file": "plugins/workflows/sos-eop-approve.workflow.json",
+      "dataset": "sos-eop-plans",
+      "method": "PATCH",
+      "resource": "eop",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "draft",
+        "review_pending"
+      ],
+      "idempotentWhen": {
+        "status": "approved"
+      },
+      "requiresApproval": {
+        "action": "eop.approve",
+        "fourEyes": true,
+        "source": "https://synapsedx.sbs/v1/capabilities/approvals"
+      }
+    },
+    {
+      "operation": "eop.publish",
+      "workflow": "sos-eop-publish",
+      "file": "plugins/workflows/sos-eop-publish.workflow.json",
+      "dataset": "sos-eop-plans",
+      "method": "PATCH",
+      "resource": "eop",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "approved"
+      ],
+      "idempotentWhen": {
+        "status": "published"
+      },
+      "requiresApproval": {
+        "action": "eop.approve",
+        "fourEyes": true,
+        "mustMatchPlanApproval": true,
+        "source": "https://synapsedx.sbs/v1/capabilities/approvals"
+      }
+    },
+    {
+      "operation": "eop.submit",
+      "workflow": "sos-eop-submit",
+      "file": "plugins/workflows/sos-eop-submit.workflow.json",
+      "dataset": "sos-eop-plans",
+      "method": "PATCH",
+      "resource": "eop",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "approved"
+      ],
+      "refusedStatuses": [
+        "published"
+      ],
+      "requiresApproval": {
+        "action": "eop.approve",
+        "fourEyes": true,
+        "mustMatchPlanApproval": true,
+        "source": "https://synapsedx.sbs/v1/capabilities/approvals"
+      },
+      "createsBefore": {
+        "dataset": "sos-dispatch-orders",
+        "idPattern": "order id = sanitize(plan_id + '-' + action_id, [A-Za-z0-9_.-], max 180)",
+        "idempotent": "existing orders (by deterministic id or plan.order_ids) are skipped",
+        "maxCreatesPerRun": 20,
+        "failClosed": "eop_missing_orders_max_20 before any write"
+      }
     }
   ],
   "engineContract": {
@@ -205,6 +276,33 @@
         "an existing AAR for the event is reused instead of duplicated",
         "the AAR event_end and the event ended_at are the same close timestamp",
         "a stale ifVersion returns 409 version_conflict and fails the run"
+      ]
+    },
+    "eop": {
+      "operation": "eop.approve",
+      "dataset": "sos-eop-plans",
+      "allowedFrom": [
+        "draft",
+        "review_pending"
+      ],
+      "idempotentStatuses": [
+        "approved"
+      ],
+      "patch": {
+        "status": "approved",
+        "approved_by": "{submittedBy}",
+        "approved_at": "{now}",
+        "approval_id": "{approval.id}",
+        "approved_role": "{first approverRole}",
+        "approval_roles": "{approval.approverRoles}"
+      },
+      "invariants": [
+        "approve/publish/submit read the Tier-2 approvals record and require status=approved, matching entityId and action=eop.approve",
+        "four-eyes: the operator who requested the approval can never consume it (self_approval_forbidden)",
+        "publish requires the same approval that admitted the plan (plan.approval_id) and only an approved plan",
+        "submit refuses a published plan (publication is a terminal lifecycle step) and only submits an approved one",
+        "submit seeds deterministic dispatch orders from the plan actions and skips existing ones",
+        "the static Tier-1 graph creates at most 20 missing orders per run and fails closed before any write beyond that"
       ]
     }
   },

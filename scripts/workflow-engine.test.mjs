@@ -232,3 +232,105 @@ test('real engine rejects malformed actions before any HTTP call', { skip: avail
         assert.deepEqual(result.credentialResolutions, []);
     }
 });
+
+test('eop approve consumes a four-eyes approval and records it on the plan', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('eop.approve');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/approvals/approval-1',
+        'GET /v1/capabilities/datasets/sos-eop-plans/records/eop-1',
+        'PATCH /v1/capabilities/datasets/sos-eop-plans/records/eop-1',
+    ]);
+    assert.equal(result.calls[0].headers['x-api-key'], 'test-api-key-secret');
+    const body = JSON.parse(result.calls[2].body);
+    assert.equal(body.ifVersion, 3);
+    assert.equal(body.data.status, 'approved');
+    assert.equal(body.data.approval_id, 'approval-1');
+    assert.equal(body.data.approved_by, 'member-test');
+    assert.equal(typeof body.data.approved_at, 'string');
+    assert.equal(body.data.approved_role, 'manager');
+    assert.deepEqual(body.data.approval_roles, ['manager']);
+    assert.equal(body.data.review_notes, 'Reviewed by the duty officer');
+    assert.equal(result.validationOutput.audit.operation, 'eop.approve');
+});
+
+test('eop approve refuses self-approvals, pending approvals and foreign entities', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('eop.approve');
+    const cases = [
+        ['self-approval', /self_approval_forbidden/],
+        ['unapproved', /approval_not_approved/],
+        ['wrong-entity', /approval_entity_mismatch/],
+    ];
+    for (const [mode, code] of cases) {
+        const result = runHarness(entry.file, entry.dataset, mode);
+        assert.equal(result.status, 'error', `${mode} was accepted`);
+        assert.match(String(result.error || ''), code);
+        assert.equal(result.calls.length, 1, `${mode} must stop after the approval read`);
+        assert.ok(result.calls[0].url.includes('/v1/capabilities/approvals/'), 'the refusal must happen at the approval read');
+        assert.equal(result.calls.filter((call) => call.method === 'PATCH').length, 0, 'a refused approval must never write');
+    }
+});
+
+test('eop publish refuses an unapproved plan and publishes an approved one', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('eop.publish');
+    const refused = runHarness(entry.file, entry.dataset, 'terminal');
+    assert.equal(refused.status, 'error');
+    assert.match(String(refused.error || ''), /eop_not_approved/);
+    assert.equal(refused.calls.length, 1, 'the guard must fire at the plan read');
+    assert.ok(refused.calls[0].url.includes('/sos-eop-plans/'));
+
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-eop-plans/records/eop-1',
+        'GET /v1/capabilities/approvals/approval-1',
+        'PATCH /v1/capabilities/datasets/sos-eop-plans/records/eop-1',
+    ]);
+    const body = JSON.parse(result.calls[2].body);
+    assert.equal(body.ifVersion, 3);
+    assert.equal(body.data.status, 'published');
+    assert.equal(body.data.published_by, 'member-test');
+    assert.equal(typeof body.data.published_at, 'string');
+
+    const idempotent = runHarness(entry.file, entry.dataset, 'published');
+    assert.equal(idempotent.status, 'success', idempotent.error);
+    assert.equal(idempotent.calls.length, 1, 'an already published plan must not be written again');
+    assert.equal(idempotent.output.idempotent, true);
+});
+
+test('eop submit seeds deterministic dispatch orders and never demotes a published plan', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('eop.submit');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    const creates = result.calls.filter((call) => call.method === 'POST' && !call.url.endsWith('/records/query'));
+    assert.equal(creates.length, 2, 'the two plan actions must each seed one order');
+    const first = JSON.parse(creates[0].body);
+    const second = JSON.parse(creates[1].body);
+    assert.equal(first.id, 'eop-1-activate-command');
+    assert.equal(second.id, 'eop-1-evacuate-ward-7', 'order ids must sanitize like the domain order_id_for');
+    assert.equal(first.data.status, 'pending');
+    assert.equal(first.data.eop_plan_id, 'eop-1');
+    assert.equal(first.data.eop_plan_version, 2);
+    assert.equal(first.data.metadata.source, 'eop-submit');
+    assert.equal(first.data.metadata.action_id, 'activate-command');
+    assert.equal(first.data.target_district, 'District 7');
+    assert.equal(first.publish, false);
+    assert.equal(second.data.metadata.estimated_minutes, 60, 'a missing estimate falls back to 60 minutes');
+    assert.equal(second.data.priority, 'medium');
+    assert.equal(second.data.task_title, 'Evacuate ward 7');
+
+    const patchCall = result.calls.at(-1);
+    assert.equal(patchCall.method, 'PATCH');
+    const patch = JSON.parse(patchCall.body);
+    assert.equal(patch.ifVersion, 3);
+    assert.equal(patch.data.status, 'approved', 'submit must not change the plan status');
+    assert.equal(patch.data.submitted_by, 'member-test');
+    assert.equal(typeof patch.data.submitted_at, 'string');
+    assert.deepEqual(patch.data.order_ids, ['eop-1-activate-command', 'eop-1-evacuate-ward-7']);
+
+    const published = runHarness(entry.file, entry.dataset, 'terminal');
+    assert.equal(published.status, 'error');
+    assert.match(String(published.error || ''), /eop_already_published/);
+    assert.equal(published.calls.length, 1);
+});

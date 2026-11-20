@@ -263,6 +263,64 @@
         "onSubmit": "act-eop-delete-submit"
       },
       {
+        "id": "eop-approve",
+        "type": "form",
+        "title": "Approve an EOP plan (four-eyes)",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "plan_id",
+            "type": "text",
+            "label": "EOP plan id",
+            "required": true
+          },
+          {
+            "name": "approval_id",
+            "type": "text",
+            "label": "Tier-2 approval id created by another operator",
+            "required": true
+          },
+          {
+            "name": "review_notes",
+            "type": "textarea",
+            "label": "Review notes"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-eop-approve",
+          "checksum": "393685bd78f918ad8022576cf409094f9d8d93c53f3c59f084b106b24d0261e9"
+        },
+        "onSubmit": "act-eop-approve-submit"
+      },
+      {
+        "id": "eop-submit",
+        "type": "form",
+        "title": "Submit an approved plan to dispatch",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "plan_id",
+            "type": "text",
+            "label": "EOP plan id",
+            "required": true
+          },
+          {
+            "name": "approval_id",
+            "type": "text",
+            "label": "Approval id (defaults to the approval that admitted the plan)"
+          }
+        ],
+        "resource": "eop",
+        "workflowRef": {
+          "name": "sos-eop-submit",
+          "checksum": "8b9f1f93bde9de47c09538748b16c45cf731f4ae328abc4c9f6d796816fe3841"
+        },
+        "onSubmit": "act-eop-submit-submit"
+      },
+      {
         "id": "act-workspace-navigation-link1",
         "type": "action",
         "title": "Navigate Overview",
@@ -658,6 +716,90 @@
           "inputs": [],
           "actions": []
         }
+      },
+      {
+        "id": "act-eop-approve-submit",
+        "type": "action",
+        "title": "Submit Approve an EOP plan (four-eyes)",
+        "operation": {
+          "kind": "update",
+          "target": "eop-approve",
+          "mappings": [
+            {
+              "field": "plan_id",
+              "source": "event",
+              "value": "values.plan_id",
+              "required": true
+            },
+            {
+              "field": "approval_id",
+              "source": "event",
+              "value": "values.approval_id",
+              "required": true
+            },
+            {
+              "field": "review_notes",
+              "source": "event",
+              "value": "values.review_notes",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-eop-approve-open",
+        "type": "action",
+        "title": "Open Approve an EOP plan (four-eyes)",
+        "operation": {
+          "kind": "openForm",
+          "target": "eop-approve",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-eop-submit-submit",
+        "type": "action",
+        "title": "Submit Submit an approved plan to dispatch",
+        "operation": {
+          "kind": "update",
+          "target": "eop-submit",
+          "mappings": [
+            {
+              "field": "plan_id",
+              "source": "event",
+              "value": "values.plan_id",
+              "required": true
+            },
+            {
+              "field": "approval_id",
+              "source": "event",
+              "value": "values.approval_id",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-eop-submit-open",
+        "type": "action",
+        "title": "Open Submit an approved plan to dispatch",
+        "operation": {
+          "kind": "openForm",
+          "target": "eop-submit",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
       }
     ]
   },
@@ -666,5 +808,5 @@
     "path": "plugins/sos-eop-console.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:7faebc68b1fc1256e94729e1fc94e11c7f22b5fa53f2fa1b8206b3a8d0e9eab4"
+  "checksum": "sha256:d1b01e3d11b34e1613ef7ca197015621f643bf74f5c431b7759a805bb83cc97d"
 }

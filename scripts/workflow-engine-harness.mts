@@ -5,24 +5,32 @@
  * Tier-1 SynapseFlow engine with a fake HTTP transport.
  *
  * Modes: good | malformed | terminal | conflict | existing-aar | resolved |
- * unassigned. It simulates DX server-side credentialRef binding in memory only
- * and never uses a real credential, network, deployment or Docker.
+ * unassigned | truncated | self-approval | unapproved | wrong-entity |
+ * published | unreviewed | no-content | closed-request | no-kpi |
+ * no-capacity | over-quantity | retired | bad-transition. It simulates DX
+ * server-side credentialRef binding in memory only and never uses a real
+ * credential, network, deployment or Docker.
  *
  * The fake records use the real Tier-2 record envelope
  * `{ id, data, version }` so the AAR chain is validated against the product
- * contract rather than a flattened shortcut.
+ * contract rather than a flattened shortcut. Operator workflows additionally
+ * read the Tier-2 approvals API (`{ approval }`) and resource units the same
+ * way the reviewed Tier-3 routes do.
  */
 import fs from 'node:fs';
+import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+type Row = { id: string; data: Record<string, unknown>; version: number };
 type Call = { url: string; method: string; headers: Record<string, string>; body: string | null };
 
-const MODES = ['good', 'malformed', 'terminal', 'conflict', 'existing-aar', 'resolved', 'unassigned', 'truncated'];
+const MODES = ['good', 'malformed', 'terminal', 'conflict', 'existing-aar', 'resolved', 'unassigned', 'truncated', 'self-approval', 'unapproved', 'wrong-entity', 'published', 'unreviewed', 'no-content', 'closed-request', 'no-kpi', 'no-capacity', 'over-quantity', 'retired', 'bad-transition'];
 const [workflowPath, dataset, credentialRef, mode] = process.argv.slice(2);
 if (!workflowPath || !dataset || !credentialRef || !MODES.includes(mode || '')) {
     console.log(JSON.stringify({ ok: false, error: `usage: <workflow.json> <dataset> <credentialRef> <${MODES.join('|')}>` }));
     process.exit(2);
 }
+const wf = basename(workflowPath).replace(/\.workflow\.json$/, '');
 
 const enginePath = process.env.SYNAPSEONE_ENGINE
     || new URL('../../../SynapseOne/apps/workflow-service/src/engine.ts', import.meta.url).pathname;
@@ -52,17 +60,30 @@ const ids: Record<string, string> = {
     maintenance: 'wo-1',
     dispatch: 'dispatch-1',
     event: 'event-1',
+    eop: 'eop-1',
+    sitrep: 'sitrep-1',
+    afterAction: 'aar-1',
+    mutualAid: 'ma-1',
+    resource: 'resource-1',
 };
 const subject = workflowPath.includes('maintenance') ? 'maintenance'
     : workflowPath.includes('incident') ? 'incident'
-        : workflowPath.includes('dispatch') ? 'dispatch' : 'event';
+        : workflowPath.includes('dispatch') ? 'dispatch'
+            : workflowPath.includes('eop') ? 'eop'
+                : workflowPath.includes('sitrep') ? 'sitrep'
+                    : workflowPath.includes('aar') || workflowPath.includes('after-action') ? 'afterAction'
+                        : workflowPath.includes('mutual-aid') ? 'mutualAid'
+                            : workflowPath.includes('resource') ? 'resource'
+                                : 'event';
 const recordId = ids[subject];
 const terminal = mode === 'terminal';
 const nowMs = Date.now();
 const startMs = nowMs - 2 * 3600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
-const record = (() => {
+// Legacy fixtures for the migrated create/transition workflows. The Wave-1
+// operator workflows below override these per workflow file.
+const legacyRecord = (() => {
     if (subject === 'incident') {
         return {
             id: recordId,
@@ -100,6 +121,140 @@ const record = (() => {
             created_at: iso(startMs), started_at: iso(startMs), metadata: { keep: true },
         },
         version: 5,
+    };
+})();
+
+const eopActions = [
+    { action_id: 'activate-command', title: 'Activate command', description: 'Stand up the EOC', priority: 'high', phase: 'prepare', estimated_minutes: 30, required_capability: 'personnel' },
+    { action_id: 'evacuate ward 7', title: 'Evacuate ward 7', description: 'Move residents to the shelter', phase: 'respond' },
+];
+
+const wfRecords: Record<string, () => Row> = {
+    'sos-eop-approve': () => ({
+        id: 'eop-1',
+        data: {
+            type: 'EmergencyOperationsPlan', title: 'Flood response plan', status: terminal ? 'published' : 'review_pending',
+            version: 2, review_notes: 'Draft ready', emergency_event_id: 'event-1', actions: eopActions,
+        },
+        version: 3,
+    }),
+    'sos-eop-publish': () => ({
+        id: 'eop-1',
+        data: {
+            type: 'EmergencyOperationsPlan', title: 'Flood response plan',
+            status: mode === 'published' ? 'published' : terminal ? 'draft' : 'approved',
+            version: 2, approval_id: 'approval-1', emergency_event_id: 'event-1',
+        },
+        version: 3,
+    }),
+    'sos-eop-submit': () => ({
+        id: 'eop-1',
+        data: {
+            type: 'EmergencyOperationsPlan', title: 'Flood response plan',
+            status: terminal ? 'published' : 'approved', version: 2, approval_id: 'approval-1',
+            emergency_event_id: 'event-1', actions: eopActions, order_ids: [],
+            metadata: { target_district: 'District 7', target_location: { lat: 21.02, lng: 105.83 } },
+        },
+        version: 3,
+    }),
+    'sos-sitrep-publish': () => ({
+        id: 'sitrep-1',
+        data: {
+            type: 'Sitrep', title: 'Morning SITREP', emergency_event_id: 'event-1',
+            status: terminal || mode === 'published' ? 'published' : mode === 'unreviewed' ? 'draft' : 'review_pending',
+            ...(mode === 'no-content' ? {} : { snapshot: { summary: 'Waters receding' } }),
+            reporting_period_start: iso(startMs), reporting_period_end: iso(startMs + 3600_000),
+        },
+        version: 3,
+    }),
+    'sos-sitrep-delta': () => ({
+        id: 'sitrep-1',
+        data: {
+            type: 'Sitrep', title: 'Morning SITREP', emergency_event_id: 'event-1', version: 1,
+            status: mode === 'published' ? 'published' : 'draft',
+            casualties: 2, summary: 'First sweep complete', deltas: [],
+        },
+        version: 2,
+    }),
+    'sos-dispatch-assign': () => ({
+        id: 'dispatch-1',
+        data: {
+            type: 'DispatchOrder', emergency_event_id: 'event-1', task_title: 'Existing task',
+            status: terminal ? 'completed' : 'pending', priority: 'high', assignments: [],
+        },
+        version: 4,
+    }),
+    'sos-dispatch-progress': () => ({
+        id: 'dispatch-1',
+        data: {
+            type: 'DispatchOrder', emergency_event_id: 'event-1', task_title: 'Existing task',
+            status: terminal ? 'completed' : 'assigned', priority: 'high',
+            assigned_resource_unit_id: 'resource-1', status_history: [],
+        },
+        version: 4,
+    }),
+    'sos-mutual-aid-handoff': () => mutualAidRequest(mode === 'closed-request' ? 'handed_off' : 'open'),
+    'sos-mutual-aid-decline': () => mutualAidRequest(mode === 'closed-request' ? 'declined' : 'open'),
+    'sos-mutual-aid-accept': () => mutualAidRequest(
+        mode === 'closed-request' ? 'filled' : 'open',
+        mode === 'over-quantity' ? 4 : 10,
+    ),
+    'sos-resource-lifecycle': () => ({
+        id: 'resource-1',
+        data: {
+            type: 'ResourceUnit', name: 'Rescue boat 1', resource_type: 'vehicle',
+            status: mode === 'retired' ? 'retired' : mode === 'bad-transition' ? 'deployed' : 'unavailable',
+            status_history: [],
+        },
+        version: 2,
+    }),
+    'sos-aar-publish': () => ({
+        id: 'aar-1',
+        data: {
+            type: 'AfterActionReport', title: 'After-action report — Flood AAR', emergency_event_id: 'event-1',
+            report_code: 'AAR-EV-AAR-v1', status: terminal || mode === 'published' ? 'published' : 'draft',
+            ...(mode === 'no-kpi' ? {} : { kpi: { overall_score: 90 } }),
+        },
+        version: 2,
+    }),
+};
+
+function mutualAidRequest(status: string, quantity = 10): Row {
+    return {
+        id: 'ma-1',
+        data: {
+            type: 'MutualAidRequest', request_number: 'MA-1', resource_type: 'ambulance',
+            quantity, filled_quantity: 2, status, urgency: 'high',
+            requesting_agency: 'Partner EMS', history: [{ action: 'created', at: iso(startMs), by: 'member-test' }],
+        },
+        version: 3,
+    };
+}
+
+const record: Row = wfRecords[wf] ? wfRecords[wf]() : legacyRecord;
+
+// Lending/reserved resource unit for dispatch assignment and mutual-aid fill.
+const unit: Row = (() => {
+    if (wf === 'sos-dispatch-assign' && terminal) {
+        return { id: 'resource-1', data: { type: 'ResourceUnit', name: 'Rescue boat 1', status: 'assigned', assigned_dispatch_order_id: 'dispatch-1' }, version: 1 };
+    }
+    if (wf === 'sos-mutual-aid-accept' && mode === 'no-capacity') {
+        return { id: 'resource-1', data: { type: 'ResourceUnit', name: 'Rescue boat 1', status: 'available', available_quantity: 1 }, version: 1 };
+    }
+    return { id: 'resource-1', data: { type: 'ResourceUnit', name: 'Rescue boat 1', status: 'available', available_quantity: 5 }, version: 1 };
+})();
+
+// Tier-2 approvals record (GET /v1/capabilities/approvals/:id -> {approval}).
+const approval = (() => {
+    const action = wf.includes('dispatch') ? 'dispatch.assign' : 'eop.approve';
+    return {
+        id: 'approval-1',
+        status: mode === 'unapproved' ? 'pending' : 'approved',
+        action,
+        entityId: mode === 'wrong-entity' ? 'other-record' : recordId,
+        requester: mode === 'self-approval' ? 'member-test' : 'officer-2',
+        approverRoles: ['manager'],
+        decisions: [],
     };
 })();
 
@@ -152,6 +307,18 @@ const resourceRows = [
     { id: 'resource-2', data: { id: 'resource-2', status: 'available' }, version: 1 },
 ];
 
+const primaryDataset: Record<string, string> = {
+    maintenance: 'city-maintenance',
+    incident: 'city-incidents',
+    dispatch: 'sos-dispatch-orders',
+    event: 'sos-emergency-events',
+    eop: 'sos-eop-plans',
+    sitrep: 'sos-sitreps',
+    afterAction: 'sos-after-action-reports',
+    mutualAid: 'sos-mutual-aid-requests',
+    resource: 'sos-resource-units',
+};
+
 globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : String(input);
     const headers: Record<string, string> = {};
@@ -163,9 +330,16 @@ globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => 
     const body = init.body ? String(init.body) : null;
     calls.push({ url, method, headers, body });
 
+    if (url.includes('/v1/capabilities/approvals/')) {
+        return Response.json({ approval });
+    }
     const pathDataset = url.includes('/datasets/') ? url.split('/datasets/')[1].split('/')[0] : dataset;
     if (url.includes('/records/query')) {
         if (pathDataset === 'sos-dispatch-orders') {
+            const where = body ? (JSON.parse(body).where || {}) : {};
+            if (where.eop_plan_id) {
+                return Response.json({ items: [], total: 0, limit: 500, offset: 0 });
+            }
             const total = mode === 'truncated' ? 999 : dispatchRows.length;
             return Response.json({ items: dispatchRows, total, limit: 500, offset: 0 });
         }
@@ -181,6 +355,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => 
     }
 
     if (method === 'GET') {
+        if (pathDataset === 'sos-resource-units' && pathDataset !== primaryDataset[subject]) {
+            return Response.json(unit);
+        }
         return Response.json(record);
     }
     if (method === 'PATCH') {
@@ -188,12 +365,13 @@ globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => 
             return Response.json({ error: 'version_conflict', message: 'record was modified' }, { status: 409 });
         }
         const parsed = body ? JSON.parse(body) : {};
-        return Response.json({ id: recordId, data: parsed.data, version: record.version + 1 });
+        const lastSegment = url.split('/').pop() || recordId;
+        return Response.json({ id: lastSegment, data: parsed.data, version: record.version + 1 });
     }
     if (method === 'POST') {
         const parsed = body ? JSON.parse(body) : {};
         const created = {
-            id: pathDataset === 'sos-after-action-reports' ? parsed.id : 'record-test-1',
+            id: typeof parsed.id === 'string' && parsed.id ? parsed.id : (pathDataset === 'sos-after-action-reports' ? parsed.id : 'record-test-1'),
             data: parsed.data,
             version: 1,
         };
@@ -220,7 +398,13 @@ const baseEnvelope = {
     product: workflowPath.includes('SynapseCitySOS') ? 'sos' : 'city',
     resource: subject === 'incident' ? 'incidents'
         : subject === 'maintenance' ? 'maintenance'
-            : subject === 'dispatch' ? 'dispatch' : 'events',
+            : subject === 'dispatch' ? 'dispatch'
+                : subject === 'eop' ? 'eop'
+                    : subject === 'sitrep' ? 'sitrep'
+                        : subject === 'afterAction' ? 'afterAction'
+                            : subject === 'mutualAid' ? 'mutualAid'
+                                : subject === 'resource' ? 'resources'
+                                    : 'events',
     submittedBy: 'member-test',
     submittedAt: '2026-11-14T00:00:00.000Z',
     fields: {},
@@ -238,17 +422,34 @@ const createFields: Record<string, string> = {
     task_title: 'Deploy rescue boat',
     task_description: 'Check the low-lying ward',
 };
-const transitionFields: Record<string, string> = subject === 'incident'
-    ? (workflowPath.includes('resolve')
-        ? { incident_id: recordId, resolution_notes: 'Fixed the span', resolution_type: 'fixed' }
-        : { incident_id: recordId, assigned_to: 'operator-2' })
+const waveFields: Record<string, Record<string, string | number>> = {
+    'sos-eop-approve': { plan_id: 'eop-1', approval_id: 'approval-1', review_notes: 'Reviewed by the duty officer' },
+    'sos-eop-publish': { plan_id: 'eop-1', approval_id: 'approval-1' },
+    'sos-eop-submit': { plan_id: 'eop-1' },
+    'sos-sitrep-publish': { sitrep_id: 'sitrep-1' },
+    'sos-sitrep-delta': { sitrep_id: 'sitrep-1', casualties: 5, summary: 'Second sweep complete' },
+    'sos-dispatch-assign': { order_id: 'dispatch-1', approval_id: 'approval-1', assigned_resource_unit_id: 'resource-1' },
+    'sos-dispatch-progress': { order_id: 'dispatch-1', action: 'start' },
+    'sos-mutual-aid-handoff': { request_id: 'ma-1', to_agency: 'Partner EMS', notes: 'Partner takes over the ward' },
+    'sos-mutual-aid-decline': { request_id: 'ma-1', reason: 'No spare capacity tonight' },
+    'sos-mutual-aid-accept': { request_id: 'ma-1', unit_id: 'resource-1', accepted_quantity: 3, eta_minutes: 20 },
+    'sos-resource-lifecycle': { resource_id: 'resource-1', status: 'available', note: 'Back from maintenance' },
+    'sos-aar-publish': { report_id: 'aar-1' },
+};
+const incidentFields: Record<string, string | number> = workflowPath.includes('resolve')
+    ? { incident_id: recordId, resolution_notes: 'Fixed the span', resolution_type: 'fixed' }
+    : { incident_id: recordId, assigned_to: 'operator-2' };
+const maintenanceFields: Record<string, string | number> = workflowPath.includes('assign')
+    ? { work_order_id: recordId, assigned_to: 'tech-2' }
+    : { work_order_id: recordId };
+const legacyTransitionFields: Record<string, string | number> = subject === 'incident'
+    ? incidentFields
     : subject === 'maintenance'
-        ? (workflowPath.includes('assign')
-            ? { work_order_id: recordId, assigned_to: 'tech-2' }
-            : { work_order_id: recordId })
+        ? maintenanceFields
         : subject === 'dispatch'
             ? { order_id: recordId }
             : { event_id: recordId, resolution_note: 'Event closed after final sweep' };
+const transitionFields: Record<string, string | number> = waveFields[wf] || legacyTransitionFields;
 if (mode === 'malformed') {
     baseEnvelope.fields = { description: 'malformed submission' };
 } else if (kind === 'create') {
@@ -259,7 +460,7 @@ if (mode === 'malformed') {
         return ['emergency_event_id', 'task_title', 'task_description', 'priority'].includes(key);
     }));
 } else {
-    baseEnvelope.fields = transitionFields;
+    baseEnvelope.fields = waveFields[wf] || transitionFields;
 }
 
 let result;
