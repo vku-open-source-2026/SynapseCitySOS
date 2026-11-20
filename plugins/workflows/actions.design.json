@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "product": "sos",
   "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
-  "revision": "2026-11-20.3",
+  "revision": "2026-11-20.4",
   "status": "implemented_source_ready",
   "blocker": "Resolved by the Tier-1 httpRequest includeInput option. Residual: Tier-2 PATCH conditional support is ifVersion/If-Match (optimistic CAS); concurrent conflicts return 409 and must surface to the user.",
   "requiredEnabler": "Engine prior-node context (e.g. $node[\"Validate\"]) or a Tier-2 conditional/merge update contract with tenant/product authz and audit.",
@@ -474,6 +474,184 @@
         "start only from assigned; arrive only from in_transit",
         "a terminal order is refused with order_terminal and an invalid step with invalid_dispatch_transition",
         "the unit reservation survives the progression"
+      ]
+    },
+    {
+      "operation": "afterAction.publish",
+      "method": "PATCH",
+      "dataset": "sos-after-action-reports",
+      "recordIdField": "report_id",
+      "fields": [
+        {
+          "name": "report_id",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "allowedFrom": [
+        "draft",
+        "submitted",
+        "reviewed"
+      ],
+      "patch": {
+        "status": "published",
+        "published_at": "{now}",
+        "published_by": "{submittedBy}",
+        "updated_at": "{now}"
+      },
+      "invariants": [
+        "the AAR must exist and carry a kpi object",
+        "an already published AAR is refused with aar_already_published",
+        "the PATCH is a full-record merge with ifVersion CAS"
+      ]
+    },
+    {
+      "operation": "mutualAid.accept",
+      "method": "PATCH",
+      "dataset": "sos-mutual-aid-requests",
+      "recordIdField": "request_id",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "unit_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "accepted_quantity",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "eta_minutes",
+          "type": "number"
+        }
+      ],
+      "allowedFrom": [
+        "open",
+        "partially_filled"
+      ],
+      "patch": {
+        "filled_quantity": "{filled + accepted}",
+        "status": "{filled_quantity >= quantity ? 'filled' : 'partially_filled'}",
+        "history": "appended {action:'accept',unit_id,accepted_quantity,eta_minutes,at,by}"
+      },
+      "invariants": [
+        "the request must be open or partially filled",
+        "the accepted quantity may not exceed the remaining request quantity",
+        "the lending unit must exist, not be offline/maintenance, and carry capacity metadata",
+        "a unit capacity shortfall is refused with insufficient_capacity before any write"
+      ]
+    },
+    {
+      "operation": "mutualAid.decline",
+      "method": "PATCH",
+      "dataset": "sos-mutual-aid-requests",
+      "recordIdField": "request_id",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "open",
+        "partially_filled"
+      ],
+      "patch": {
+        "status": "declined",
+        "decline_reason": "{reason or null}",
+        "history": "appended {action:'decline',reason,at,by}"
+      },
+      "invariants": [
+        "only an open or partially filled request can be declined",
+        "the decline reason is optional and capped at 2000 characters"
+      ]
+    },
+    {
+      "operation": "mutualAid.handoff",
+      "method": "PATCH",
+      "dataset": "sos-mutual-aid-requests",
+      "recordIdField": "request_id",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "to_agency",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "notes",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "open",
+        "partially_filled"
+      ],
+      "patch": {
+        "status": "handed_off",
+        "handed_off_to": "{to_agency}",
+        "handoff_notes": "{notes or null}",
+        "history": "appended {action:'handoff',to_agency,at,by}"
+      },
+      "invariants": [
+        "a declined, filled or already handed-off request is immutable for handoff (request_not_open)",
+        "the receiving agency is required and capped at 200 characters"
+      ]
+    },
+    {
+      "operation": "resource.status",
+      "method": "PATCH",
+      "dataset": "sos-resource-units",
+      "recordIdField": "resource_id",
+      "fields": [
+        {
+          "name": "resource_id",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true
+        },
+        {
+          "name": "note",
+          "type": "textarea"
+        }
+      ],
+      "allowedFrom": [
+        "available",
+        "assigned",
+        "deployed",
+        "unavailable",
+        "maintenance"
+      ],
+      "patch": {
+        "status": "{requested}",
+        "status_changed_at": "{now}",
+        "status_history": "appended {from,to,at,by,note}",
+        "retired_at": "{now when requested=retired}"
+      },
+      "invariants": [
+        "the status vocabulary is available|assigned|deployed|unavailable|maintenance|retired",
+        "retired is terminal (record_immutable)",
+        "an unknown status is refused with invalid_resource_status",
+        "a same-status request is idempotent and performs no write"
       ]
     }
   ],

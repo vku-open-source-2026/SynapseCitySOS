@@ -1,0 +1,186 @@
+{
+  "name": "sos-resource-lifecycle",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'resources') throw new Error('unsupported_resource');\nconst recordId = text(fields.resource_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst requested = text(fields.status);\nconst RESOURCE_STATUSES = ['available', 'assigned', 'deployed', 'unavailable', 'maintenance', 'retired'];\nif (!RESOURCE_STATUSES.includes(requested)) throw new Error('invalid_resource_status');\nconst note = text(fields.note);\nif (note.length > 4000) throw new Error('note_max_4000');\nconst allowed = new Set(['resource_id', 'status', 'note']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst audit = {\n  product, resource, operation: 'resource.status', recordId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { recordId, encodedId: encodeURIComponent(recordId), requested, note, audit };\n"
+      }
+    },
+    {
+      "id": "read-unit",
+      "name": "Read resource unit",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check",
+      "name": "Enforce resource lifecycle transition",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('resource_unit_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst unit = { ...current.data, id: String(current.data.id || current.id) };\nconst requested = String(state.requested);\nconst currentStatus = typeof unit.status === 'string' && unit.status ? String(unit.status) : 'available';\nif (currentStatus === requested) {\n  return { idempotent: true, resource_id: unit.id, status: currentStatus };\n}\n// retired is terminal (commit 2a79cc1): a retired unit is immutable.\nif (currentStatus === 'retired') throw new Error('record_immutable');\nconst ALLOWED_FROM = {\n  available: ['unavailable', 'maintenance'],\n  assigned: ['available'],\n  deployed: ['available', 'assigned'],\n  unavailable: ['available'],\n  maintenance: ['available'],\n  retired: ['available', 'unavailable', 'maintenance'],\n};\nconst allowedFrom = ALLOWED_FROM[requested] || [];\nif (!allowedFrom.includes(currentStatus)) throw new Error('invalid_resource_transition');\nconst history = Array.isArray(unit.status_history) ? [...unit.status_history] : [];\nhistory.push({ from: currentStatus, to: requested, at: $now, by: state.audit.submittedBy, note: state.note || null });\nconst next = { ...unit, status: requested, status_changed_at: $now, status_history: history, updated_at: $now };\nif (requested === 'retired') next.retired_at = $now;\nreturn { body: { data: next, ifVersion: current.version }, encodedId: state.encodedId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "if-idempotent",
+      "name": "Already in target status?",
+      "type": "if",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "condition": "={{ $json.idempotent === true }}"
+      }
+    },
+    {
+      "id": "return-idem",
+      "name": "Return idempotent status",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        180
+      ],
+      "parameters": {
+        "code": "const state = $input || {};\nif (state.idempotent !== true) throw new Error('unexpected_lifecycle_mode');\nreturn { idempotent: true, operation: 'resource.status', resource_id: state.resource_id, status: state.status };\n"
+      }
+    },
+    {
+      "id": "patch",
+      "name": "Patch resource unit status",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        420
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read resource unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read resource unit": {
+      "main": [
+        [
+          {
+            "node": "Enforce resource lifecycle transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce resource lifecycle transition": {
+      "main": [
+        [
+          {
+            "node": "Already in target status?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already in target status?": {
+      "main": [
+        [
+          {
+            "node": "Return idempotent status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Patch resource unit status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

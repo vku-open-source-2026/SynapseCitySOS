@@ -105,7 +105,8 @@
         "method": "GET",
         "headers": {
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Accept": "application/json",
+          "X-Workspace-App": "sos"
         },
         "auth": {
           "credentialRef": "synapsedx-organization",

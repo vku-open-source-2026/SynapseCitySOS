@@ -1,0 +1,267 @@
+{
+  "name": "sos-mutual-aid-accept",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'mutualAid') throw new Error('unsupported_resource');\nconst recordId = text(fields.request_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst unitId = text(fields.unit_id);\nif (!unitId) throw new Error('unit_id_required');\nconst acceptedRaw = fields.accepted_quantity;\nconst accepted = typeof acceptedRaw === 'number' ? acceptedRaw : typeof acceptedRaw === 'string' && acceptedRaw.trim() ? Number(acceptedRaw) : null;\nif (accepted === null || !Number.isFinite(accepted) || accepted <= 0) throw new Error('invalid_accepted_quantity');\nlet etaMinutes = null;\nif (fields.eta_minutes !== undefined && fields.eta_minutes !== null && String(fields.eta_minutes).trim() !== '') {\n  const num = Number(fields.eta_minutes);\n  if (!Number.isFinite(num) || num < 0) throw new Error('eta_minutes_invalid');\n  etaMinutes = num;\n}\nconst allowed = new Set(['request_id', 'unit_id', 'accepted_quantity', 'eta_minutes']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst audit = {\n  product, resource, operation: 'mutualAid.accept', recordId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { recordId, encodedId: encodeURIComponent(recordId), unitId, encodedUnitId: encodeURIComponent(unitId), accepted, etaMinutes, audit };\n"
+      }
+    },
+    {
+      "id": "read-request",
+      "name": "Read mutual-aid request",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-mutual-aid-requests/records/' + $json.encodedId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-request",
+      "name": "Check request and prepare unit read",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('mutual_aid_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst request = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(request.status);\nif (!['open', 'partially_filled'].includes(status)) throw new Error('request_not_open');\nconst quantity = typeof request.quantity === 'number' && Number.isFinite(request.quantity) ? request.quantity : Number(request.quantity) || 0;\nconst filled = typeof request.filled_quantity === 'number' && Number.isFinite(request.filled_quantity) ? request.filled_quantity : Number(request.filled_quantity) || 0;\nconst remaining = Math.max(quantity - filled, 0);\nif (state.accepted > remaining) throw new Error('quantity_exceeds_request');\nreturn { ...state, request, version: current.version, quantity, filled, remaining };\n"
+      }
+    },
+    {
+      "id": "read-unit",
+      "name": "Read lending unit",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedUnitId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check-unit",
+      "name": "Validate lending unit and prepare patches",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('resource_unit_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst unit = { ...current.data, id: String(current.data.id || current.id) };\nconst unitStatus = String(unit.status || '');\nif (['offline', 'maintenance'].includes(unitStatus)) throw new Error('resource_unit_unavailable');\nconst rawAvailable = unit.available_quantity !== undefined && unit.available_quantity !== null ? unit.available_quantity\n  : unit.capacity !== undefined && unit.capacity !== null ? unit.capacity\n  : unit.quantity !== undefined && unit.quantity !== null ? unit.quantity : null;\nconst available = typeof rawAvailable === 'number' && Number.isFinite(rawAvailable) ? rawAvailable\n  : typeof rawAvailable === 'string' && rawAvailable.trim() && Number.isFinite(Number(rawAvailable)) ? Number(rawAvailable) : null;\nif (available === null) throw new Error('capacity_metadata_required');\nif (state.accepted > available) throw new Error('insufficient_capacity');\nconst nextFilled = state.filled + state.accepted;\nconst nextStatus = nextFilled >= state.quantity ? 'filled' : 'partially_filled';\nconst history = Array.isArray(state.request.history) ? [...state.request.history] : [];\nhistory.push({ action: 'accept', unit_id: state.unitId, accepted_quantity: state.accepted, eta_minutes: state.etaMinutes, at: $now, by: state.audit.submittedBy });\nconst unitNext = { ...unit, available_quantity: Math.max(available - state.accepted, 0), updated_at: $now };\nconst requestNext = { ...state.request, filled_quantity: nextFilled, status: nextStatus, updated_at: $now, history };\nreturn { ...state, unit, unitVersion: current.version, unitBody: { data: unitNext, ifVersion: current.version }, requestBody: { data: requestNext, ifVersion: state.version } };\n"
+      }
+    },
+    {
+      "id": "patch-unit",
+      "name": "Patch lending unit capacity",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-resource-units/records/' + $json.encodedUnitId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.unitBody }}",
+        "includeInput": true
+      }
+    },
+    {
+      "id": "collect",
+      "name": "Collect capacity reservation",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nif (response.statusCode !== 200 && response.statusCode !== 201) throw new Error('resource_unit_conflict');\nreturn state;\n"
+      }
+    },
+    {
+      "id": "patch-request",
+      "name": "Patch mutual-aid request",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1960,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-mutual-aid-requests/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.requestBody }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read mutual-aid request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read mutual-aid request": {
+      "main": [
+        [
+          {
+            "node": "Check request and prepare unit read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check request and prepare unit read": {
+      "main": [
+        [
+          {
+            "node": "Read lending unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read lending unit": {
+      "main": [
+        [
+          {
+            "node": "Validate lending unit and prepare patches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate lending unit and prepare patches": {
+      "main": [
+        [
+          {
+            "node": "Patch lending unit capacity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patch lending unit capacity": {
+      "main": [
+        [
+          {
+            "node": "Collect capacity reservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect capacity reservation": {
+      "main": [
+        [
+          {
+            "node": "Patch mutual-aid request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

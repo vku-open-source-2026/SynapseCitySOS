@@ -3,7 +3,7 @@
   "formatVersion": 3,
   "product": "sos",
   "repository": "https://github.com/vku-open-source-2026/SynapseCitySOS",
-  "revision": "2026-11-14.2",
+  "revision": "2026-11-20.4",
   "status": "source_ready_pending_credential_binding",
   "active": false,
   "trigger": "manualTrigger",
@@ -33,7 +33,10 @@
       "events": "sos-emergency-events",
       "dispatch": "sos-dispatch-orders",
       "eop": "sos-eop-plans",
-      "sitrep": "sos-sitreps"
+      "sitrep": "sos-sitreps",
+      "afterAction": "sos-after-action-reports",
+      "mutualAid": "sos-mutual-aid-requests",
+      "resources": "sos-resource-units"
     },
     "credentialBinding": {
       "owner": "DX workflow management (workflow worker)",
@@ -315,6 +318,159 @@
         "note": "{note or null}"
       },
       "keepsReservation": true
+    },
+    {
+      "operation": "afterAction.publish",
+      "workflow": "sos-aar-publish",
+      "file": "plugins/workflows/sos-aar-publish.workflow.json",
+      "dataset": "sos-after-action-reports",
+      "method": "PATCH",
+      "resource": "afterAction",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "draft",
+        "submitted",
+        "reviewed"
+      ],
+      "patch": {
+        "status": "published",
+        "published_at": "{now}",
+        "published_by": "{submittedBy}",
+        "updated_at": "{now}"
+      },
+      "invariants": [
+        "the AAR must exist and carry a kpi object",
+        "an already published AAR is refused with aar_already_published",
+        "the PATCH is a full-record merge with ifVersion CAS"
+      ]
+    },
+    {
+      "operation": "mutualAid.accept",
+      "workflow": "sos-mutual-aid-accept",
+      "file": "plugins/workflows/sos-mutual-aid-accept.workflow.json",
+      "dataset": "sos-mutual-aid-requests",
+      "method": "PATCH",
+      "resource": "mutualAid",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "open",
+        "partially_filled"
+      ],
+      "patch": {
+        "filled_quantity": "{filled + accepted}",
+        "status": "{filled_quantity >= quantity ? 'filled' : 'partially_filled'}",
+        "history": "appended {action:'accept',unit_id,accepted_quantity,eta_minutes,at,by}"
+      },
+      "reservesResource": {
+        "dataset": "sos-resource-units",
+        "patch": {
+          "available_quantity": "{available - accepted}",
+          "updated_at": "{now}"
+        }
+      },
+      "invariants": [
+        "the request must be open or partially filled",
+        "the accepted quantity may not exceed the remaining request quantity",
+        "the lending unit must exist, not be offline/maintenance, and carry capacity metadata",
+        "a unit capacity shortfall is refused with insufficient_capacity before any write"
+      ]
+    },
+    {
+      "operation": "mutualAid.decline",
+      "workflow": "sos-mutual-aid-decline",
+      "file": "plugins/workflows/sos-mutual-aid-decline.workflow.json",
+      "dataset": "sos-mutual-aid-requests",
+      "method": "PATCH",
+      "resource": "mutualAid",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "open",
+        "partially_filled"
+      ],
+      "patch": {
+        "status": "declined",
+        "decline_reason": "{reason or null}",
+        "history": "appended {action:'decline',reason,at,by}"
+      },
+      "invariants": [
+        "only an open or partially filled request can be declined",
+        "the decline reason is optional and capped at 2000 characters"
+      ]
+    },
+    {
+      "operation": "mutualAid.handoff",
+      "workflow": "sos-mutual-aid-handoff",
+      "file": "plugins/workflows/sos-mutual-aid-handoff.workflow.json",
+      "dataset": "sos-mutual-aid-requests",
+      "method": "PATCH",
+      "resource": "mutualAid",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "open",
+        "partially_filled"
+      ],
+      "patch": {
+        "status": "handed_off",
+        "handed_off_to": "{to_agency}",
+        "handoff_notes": "{notes or null}",
+        "history": "appended {action:'handoff',to_agency,at,by}"
+      },
+      "invariants": [
+        "a declined, filled or already handed-off request is immutable for handoff (request_not_open)",
+        "the receiving agency is required and capped at 200 characters"
+      ]
+    },
+    {
+      "operation": "resource.status",
+      "workflow": "sos-resource-lifecycle",
+      "file": "plugins/workflows/sos-resource-lifecycle.workflow.json",
+      "dataset": "sos-resource-units",
+      "method": "PATCH",
+      "resource": "resources",
+      "status": "source_ready_pending_credential_binding",
+      "allowedFrom": [
+        "available",
+        "assigned",
+        "deployed",
+        "unavailable",
+        "maintenance"
+      ],
+      "patch": {
+        "status": "{requested}",
+        "status_changed_at": "{now}",
+        "status_history": "appended {from,to,at,by,note}",
+        "retired_at": "{now when requested=retired}"
+      },
+      "transitions": {
+        "available": [
+          "unavailable",
+          "maintenance"
+        ],
+        "assigned": [
+          "available"
+        ],
+        "deployed": [
+          "available",
+          "assigned"
+        ],
+        "unavailable": [
+          "available"
+        ],
+        "maintenance": [
+          "available"
+        ],
+        "retired": [
+          "available",
+          "unavailable",
+          "maintenance"
+        ]
+      },
+      "invariants": [
+        "the status vocabulary is available|assigned|deployed|unavailable|maintenance|retired",
+        "retired is terminal (record_immutable)",
+        "an unknown status is refused with invalid_resource_status",
+        "a same-status request is idempotent and performs no write"
+      ]
     }
   ],
   "engineContract": {

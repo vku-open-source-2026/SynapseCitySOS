@@ -1,11 +1,11 @@
 # SOS workflow artifacts (operation migration source)
 
-Status: **create and status-transition flows (including event close/AAR) are
-source-ready, engine-tested, pinned in production DX and representative
-operations were live-tested on 2026-11-14.** The public-only redirects are
-deployed. Individual form coverage and the remaining action families below are
-still tracked; EOP approval/publication, SITREP deltas and other unmigrated
-operations are not claimed complete.
+Status: **create, dispatch, EOP lifecycle, SITREP publication/delta, mutual-aid
+lifecycle, resource lifecycle and AAR publication flows are source-ready and
+engine-tested** (2026-11-20 parity batch). The 2026-11-14 live run covered the
+create/transition batch; the parity batch still needs the operator import →
+publish → install step in DX before its forms are live. The public-only
+redirects are deployed.
 
 | Operation | Artifact | Tier-2 dataset | Status |
 | --- | --- | --- | --- |
@@ -124,13 +124,52 @@ falls back to the existing event note when the form omits it.
   transaction: AAR-first means a conflict leaves a draft AAR to reconcile,
   never a resolved event without an AAR. A retry reuses that draft.
 
+## Operator parity batch (17 workflows)
+
+The operator operations the Tier-3 routes implement are now workflow sources
+that read and write the same Tier-2 datasets with the same reviewed rules:
+
+| Operation | Artifact | Guards |
+| --- | --- | --- |
+| `eop.approve` | `sos-eop-approve.workflow.json` | four-eyes approval, action/entity match |
+| `eop.publish` | `sos-eop-publish.workflow.json` | approved plan only |
+| `eop.submit` | `sos-eop-submit.workflow.json` | approved plan, deterministic dispatch seeding |
+| `sitrep.publish` | `sos-sitrep-publish.workflow.json` | review-pending + content guard |
+| `sitrep.delta` | `sos-sitrep-delta.workflow.json` | real changed-fields diff, amending revision |
+| `dispatch.assign` | `sos-dispatch-assign.workflow.json` | four-eyes, unit reservation, release compensation |
+| `dispatch.progress` | `sos-dispatch-progress.workflow.json` | start only from `assigned`, arrive only from `in_transit` |
+| `mutualAid.accept` | `sos-mutual-aid-accept.workflow.json` | open request, capacity reservation + shortfall refusal |
+| `mutualAid.decline` | `sos-mutual-aid-decline.workflow.json` | open/partially-filled only |
+| `mutualAid.handoff` | `sos-mutual-aid-handoff.workflow.json` | open/partially-filled only (immutable after) |
+| `resource.status` | `sos-resource-lifecycle.workflow.json` | full status vocabulary, retired terminal, audit history |
+| `afterAction.publish` | `sos-aar-publish.workflow.json` | KPI present, not already published |
+
+Four-eyes workflows read the Tier-2 approvals record and require
+`status=approved`, a matching `entityId`/`action`, and `requester ≠` the
+executing operator — the same rule the Rust route enforces
+(`self_approval_forbidden`). Approval and file nodes send
+`X-Workspace-App: sos`: common capability records live in the app-scoped
+tenant (`<org>:common:sos`), so a workflow without the header reads the org
+tenant and gets `404`.
+
+`plugins/sos-volunteer-desk.plugin.json` has no product write form by design:
+SOS volunteers are read-only on product data and their writes live in the
+Common workspace capability forms (tasks, reports, files, approvals). This is
+a product decision, not a migration gap.
+
 ## Remaining action gap
 
-Migrated: event/dispatch create, dispatch complete/reject, event close. Still
-unmigrated: dispatch assignment/approval, dispatch start/in-transit/on-scene,
-EOP create/approve/publish, SITREP publish/delta, resource updates, mutual aid,
-shelters, hazard ingest, after-action publish. The widget vocabulary declares
-`create`/`update`; other actions need a DX action design.
+Still without a dedicated workflow: shelter management, hazard ingest
+scheduling (owned by the crawler/ingest service, not operators) and the
+reverse-geocode/geospatial helpers. The widget vocabulary declares
+`create|update|delete|execute`; every status transition above is bound with
+`action=update` and a `workflowRef` pin in its plugin bundle.
+
+## Documented non-goals
+
+- **QR/NFC scanning.** Public check-in / asset-tag scanning needs a dedicated
+  widget contract and a native capability; it is not part of this parity wave
+  and no page advertises it.
 
 ## Validation
 

@@ -516,3 +516,126 @@ test('dispatch progression refuses terminal orders and invalid transitions', { s
     assert.equal(invalid.calls.length, 1, 'an invalid step must stop after the read');
     assert.equal(invalid.calls.filter((call) => call.method === 'PATCH').length, 0);
 });
+
+test('AAR publication stamps the report and keeps the KPI payload', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('afterAction.publish');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-after-action-reports/records/aar-1',
+        'PATCH /v1/capabilities/datasets/sos-after-action-reports/records/aar-1',
+    ]);
+    const patch = JSON.parse(result.calls[1].body);
+    assert.equal(patch.ifVersion, 2);
+    assert.equal(patch.data.status, 'published');
+    assert.equal(patch.data.published_by, 'member-test');
+    assert.equal(typeof patch.data.published_at, 'string');
+    assert.deepEqual(patch.data.kpi, { overall_score: 90 });
+    assert.equal(result.validationOutput.audit.operation, 'afterAction.publish');
+});
+
+test('AAR publication refuses a missing KPI and a second publication', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('afterAction.publish');
+    const noKpi = runHarness(entry.file, entry.dataset, 'no-kpi');
+    assert.equal(noKpi.status, 'error');
+    assert.match(String(noKpi.error || ''), /aar_kpi_required/);
+    assert.equal(noKpi.calls.filter((call) => call.method === 'PATCH').length, 0);
+
+    const published = runHarness(entry.file, entry.dataset, 'published');
+    assert.equal(published.status, 'error');
+    assert.match(String(published.error || ''), /aar_already_published/);
+    assert.equal(published.calls.filter((call) => call.method === 'PATCH').length, 0);
+});
+
+test('mutual-aid acceptance reserves lending capacity and fills the request', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('mutualAid.accept');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-mutual-aid-requests/records/ma-1',
+        'GET /v1/capabilities/datasets/sos-resource-units/records/resource-1',
+        'PATCH /v1/capabilities/datasets/sos-resource-units/records/resource-1',
+        'PATCH /v1/capabilities/datasets/sos-mutual-aid-requests/records/ma-1',
+    ]);
+    const unit = JSON.parse(result.calls[2].body);
+    assert.equal(unit.ifVersion, 1);
+    assert.equal(unit.data.available_quantity, 2, 'the accepted quantity must be deducted from the lending unit');
+    const request = JSON.parse(result.calls[3].body);
+    assert.equal(request.ifVersion, 3);
+    assert.equal(request.data.filled_quantity, 5);
+    assert.equal(request.data.status, 'partially_filled');
+    assert.equal(request.data.history.at(-1).action, 'accept');
+    assert.equal(request.data.history.at(-1).accepted_quantity, 3);
+    assert.equal(request.data.history.at(-1).by, 'member-test');
+    assert.equal(result.validationOutput.audit.operation, 'mutualAid.accept');
+});
+
+test('mutual-aid acceptance fails closed on capacity and request guards', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('mutualAid.accept');
+    const noCapacity = runHarness(entry.file, entry.dataset, 'no-capacity');
+    assert.equal(noCapacity.status, 'error');
+    assert.match(String(noCapacity.error || ''), /insufficient_capacity/);
+    assert.equal(noCapacity.calls.filter((call) => call.method === 'PATCH').length, 0, 'a shortfall must not reserve capacity');
+
+    const overQuantity = runHarness(entry.file, entry.dataset, 'over-quantity');
+    assert.equal(overQuantity.status, 'error');
+    assert.match(String(overQuantity.error || ''), /quantity_exceeds_request/);
+    assert.equal(overQuantity.calls.filter((call) => call.method === 'PATCH').length, 0);
+
+    const closed = runHarness(entry.file, entry.dataset, 'closed-request');
+    assert.equal(closed.status, 'error');
+    assert.match(String(closed.error || ''), /request_not_open/);
+    assert.equal(closed.calls.filter((call) => call.method === 'PATCH').length, 0);
+});
+
+test('mutual-aid decline and handoff enforce the open-status guard', { skip: available ? false : skipReason }, () => {
+    const decline = entryFor('mutualAid.decline');
+    const declined = runHarness(decline.file, decline.dataset);
+    assert.equal(declined.status, 'success', `${decline.workflow}: ${declined.error}`);
+    const declinedPatch = JSON.parse(declined.calls.at(-1).body);
+    assert.equal(declinedPatch.data.status, 'declined');
+    assert.equal(declinedPatch.data.decline_reason, 'No spare capacity tonight');
+    assert.equal(declinedPatch.data.history.at(-1).action, 'decline');
+    const closedDecline = runHarness(decline.file, decline.dataset, 'closed-request');
+    assert.equal(closedDecline.status, 'error');
+    assert.match(String(closedDecline.error || ''), /request_not_open/);
+
+    const handoff = entryFor('mutualAid.handoff');
+    const handed = runHarness(handoff.file, handoff.dataset);
+    assert.equal(handed.status, 'success', `${handoff.workflow}: ${handed.error}`);
+    const handedPatch = JSON.parse(handed.calls.at(-1).body);
+    assert.equal(handedPatch.data.status, 'handed_off');
+    assert.equal(handedPatch.data.handed_off_to, 'Partner EMS');
+    assert.equal(handedPatch.data.history.at(-1).action, 'handoff');
+    const closedHandoff = runHarness(handoff.file, handoff.dataset, 'closed-request');
+    assert.equal(closedHandoff.status, 'error');
+    assert.match(String(closedHandoff.error || ''), /request_not_open/);
+    assert.equal(closedHandoff.calls.filter((call) => call.method === 'PATCH').length, 0);
+});
+
+test('resource lifecycle audits a valid transition and makes retired terminal', { skip: available ? false : skipReason }, () => {
+    const entry = entryFor('resource.status');
+    const result = runHarness(entry.file, entry.dataset);
+    assert.equal(result.status, 'success', `${entry.workflow}: ${result.error}`);
+    assert.deepEqual(result.calls.map(callPath), [
+        'GET /v1/capabilities/datasets/sos-resource-units/records/resource-1',
+        'PATCH /v1/capabilities/datasets/sos-resource-units/records/resource-1',
+    ]);
+    const patch = JSON.parse(result.calls[1].body);
+    assert.equal(patch.ifVersion, 2);
+    assert.equal(patch.data.status, 'available');
+    assert.equal(patch.data.status_history.at(-1).from, 'unavailable');
+    assert.equal(patch.data.status_history.at(-1).to, 'available');
+    assert.equal(patch.data.status_history.at(-1).by, 'member-test');
+    assert.equal(result.validationOutput.audit.operation, 'resource.status');
+
+    const retired = runHarness(entry.file, entry.dataset, 'retired');
+    assert.equal(retired.status, 'error');
+    assert.match(String(retired.error || ''), /record_immutable/);
+    assert.equal(retired.calls.filter((call) => call.method === 'PATCH').length, 0, 'retired is terminal');
+
+    const badTransition = runHarness(entry.file, entry.dataset, 'bad-transition');
+    assert.equal(badTransition.status, 'error');
+    assert.match(String(badTransition.error || ''), /invalid_resource_transition/);
+    assert.equal(badTransition.calls.filter((call) => call.method === 'PATCH').length, 0);
+});

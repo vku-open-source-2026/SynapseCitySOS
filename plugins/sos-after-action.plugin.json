@@ -245,6 +245,27 @@
         "onSubmit": "act-aar-delete-submit"
       },
       {
+        "id": "aar-publish",
+        "type": "form",
+        "title": "Publish an AAR",
+        "width": "half",
+        "action": "execute",
+        "fields": [
+          {
+            "name": "report_id",
+            "type": "text",
+            "label": "AAR record id",
+            "required": true
+          }
+        ],
+        "resource": "afterAction",
+        "workflowRef": {
+          "name": "sos-aar-publish",
+          "checksum": "2dbd95dba5944ba94c3d9db2e8a134ecbe56c39b58cee8902f6de2e1ceb37595"
+        },
+        "onSubmit": "act-aar-publish-submit"
+      },
+      {
         "id": "act-workspace-navigation-link1",
         "type": "action",
         "title": "Navigate Overview",
@@ -622,6 +643,39 @@
           "inputs": [],
           "actions": []
         }
+      },
+      {
+        "id": "act-aar-publish-submit",
+        "type": "action",
+        "title": "Submit Publish an AAR",
+        "operation": {
+          "kind": "execute",
+          "target": "aar-publish",
+          "mappings": [
+            {
+              "field": "report_id",
+              "source": "event",
+              "value": "values.report_id",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-aar-publish-open",
+        "type": "action",
+        "title": "Open Publish an AAR",
+        "operation": {
+          "kind": "openForm",
+          "target": "aar-publish",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
       }
     ]
   },
@@ -630,5 +684,5 @@
     "path": "plugins/sos-after-action.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:71dcd805cca17e3353a2fdd15ebecf163f64ae9cbb07d42cb10d605f0a4a93df"
+  "checksum": "sha256:ec1d9816b19483af61d8362d53300efe80cde8e11ddea66b7fbbfe678c87abb6"
 }

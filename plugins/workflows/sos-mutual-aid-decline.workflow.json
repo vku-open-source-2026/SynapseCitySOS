@@ -1,0 +1,142 @@
+{
+  "name": "sos-mutual-aid-decline",
+  "nodes": [
+    {
+      "id": "dx-manual-trigger",
+      "name": "DX manual execution",
+      "type": "manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "validate-envelope",
+      "name": "Validate DX envelope and action fields",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "code": "const envelope = $input || {};\nconst text = (value) => (typeof value === 'string' ? value.trim() : '');\nconst envelopeKeys = new Set(['pluginId', 'widgetId', 'product', 'resource', 'submittedBy', 'submittedAt', 'action', 'fields']);\nconst unknownEnvelope = Object.keys(envelope).filter((key) => !envelopeKeys.has(key));\nif (unknownEnvelope.length) throw new Error('unknown_envelope_fields:' + unknownEnvelope.join(','));\nconst product = text(envelope.product);\nconst resource = text(envelope.resource);\nconst submittedBy = text(envelope.submittedBy);\nif (!submittedBy) throw new Error('submitted_by_required');\nconst fields = envelope.fields && typeof envelope.fields === 'object' && !Array.isArray(envelope.fields) ? envelope.fields : null;\nif (!fields) throw new Error('fields_required');\n\nif (product !== 'sos') throw new Error('unsupported_product');\nif (resource !== 'mutualAid') throw new Error('unsupported_resource');\nconst recordId = text(fields.request_id);\nif (!/^[A-Za-z0-9_@.:+-]{1,256}$/.test(recordId)) throw new Error('record_id_invalid');\nconst reason = text(fields.reason);\nif (reason.length > 2000) throw new Error('reason_max_2000');\nconst allowed = new Set(['request_id', 'reason']);\nconst unknown = Object.keys(fields).filter((key) => !allowed.has(key));\nif (unknown.length) throw new Error('unknown_fields:' + unknown.join(','));\nconst audit = {\n  product, resource, operation: 'mutualAid.decline', recordId,\n  pluginId: text(envelope.pluginId), widgetId: text(envelope.widgetId),\n  submittedBy, submittedAt: text(envelope.submittedAt) || $now,\n};\nreturn { recordId, encodedId: encodeURIComponent(recordId), reason, audit };\n"
+      }
+    },
+    {
+      "id": "read-request",
+      "name": "Read mutual-aid request",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-mutual-aid-requests/records/' + $json.encodedId }}",
+        "method": "GET",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "includeInput": true
+      }
+    },
+    {
+      "id": "check",
+      "name": "Enforce open-status decline guard",
+      "type": "code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "code": "const response = $input || {};\nconst state = response.input;\nconst current = response.body;\nif (response.statusCode !== 200 || !current || typeof current.data !== 'object' || !current.data) throw new Error('mutual_aid_not_found');\nif (!Number.isInteger(current.version)) throw new Error('record_version_unavailable');\nconst request = { ...current.data, id: String(current.data.id || current.id) };\nconst status = String(request.status);\nif (!['open', 'partially_filled'].includes(status)) throw new Error('request_not_open');\nconst history = Array.isArray(request.history) ? [...request.history] : [];\nhistory.push({ action: 'decline', reason: state.reason || null, at: $now, by: state.audit.submittedBy });\nconst next = {\n  ...request,\n  status: 'declined',\n  decline_reason: state.reason || null,\n  updated_at: $now,\n  history,\n};\nreturn { body: { data: next, ifVersion: current.version }, encodedId: state.encodedId, audit: state.audit, operation: state.operation };\n"
+      }
+    },
+    {
+      "id": "patch",
+      "name": "Patch declined request",
+      "type": "httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "url": "={{ 'https://synapsedx.sbs/v1/capabilities/datasets/sos-mutual-aid-requests/records/' + $json.encodedId }}",
+        "method": "PATCH",
+        "headers": {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        "auth": {
+          "credentialRef": "synapsedx-organization",
+          "header": "X-API-Key",
+          "allowedOrigins": [
+            "https://synapsedx.sbs"
+          ]
+        },
+        "timeoutMs": 15000,
+        "body": "={{ $json.body }}"
+      }
+    }
+  ],
+  "connections": {
+    "DX manual execution": {
+      "main": [
+        [
+          {
+            "node": "Validate DX envelope and action fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DX envelope and action fields": {
+      "main": [
+        [
+          {
+            "node": "Read mutual-aid request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read mutual-aid request": {
+      "main": [
+        [
+          {
+            "node": "Enforce open-status decline guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce open-status decline guard": {
+      "main": [
+        [
+          {
+            "node": "Patch declined request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

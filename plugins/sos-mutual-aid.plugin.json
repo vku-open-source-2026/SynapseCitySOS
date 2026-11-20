@@ -182,38 +182,6 @@
         "onSubmit": "act-mutual-aid-update-submit"
       },
       {
-        "id": "mutual-aid-decision",
-        "type": "form",
-        "title": "Decline or hand off a request",
-        "width": "half",
-        "action": "execute",
-        "fields": [
-          {
-            "name": "record_id",
-            "type": "text",
-            "label": "Request id",
-            "required": true
-          },
-          {
-            "name": "decision",
-            "type": "text",
-            "label": "Decision: decline or handoff",
-            "required": true
-          },
-          {
-            "name": "notes",
-            "type": "textarea",
-            "label": "Note"
-          }
-        ],
-        "resource": "mutualAid",
-        "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
-        },
-        "onSubmit": "act-mutual-aid-decision-submit"
-      },
-      {
         "id": "mutual-aid-delete",
         "type": "form",
         "title": "Delete a request",
@@ -233,6 +201,102 @@
           "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
         },
         "onSubmit": "act-mutual-aid-delete-submit"
+      },
+      {
+        "id": "mutual-aid-accept",
+        "type": "form",
+        "title": "Accept a mutual-aid request",
+        "width": "full",
+        "action": "update",
+        "fields": [
+          {
+            "name": "request_id",
+            "type": "text",
+            "label": "Mutual-aid request id",
+            "required": true
+          },
+          {
+            "name": "unit_id",
+            "type": "text",
+            "label": "Lending SOS resource unit id",
+            "required": true
+          },
+          {
+            "name": "accepted_quantity",
+            "type": "number",
+            "label": "Accepted quantity",
+            "required": true
+          },
+          {
+            "name": "eta_minutes",
+            "type": "number",
+            "label": "ETA minutes"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-mutual-aid-accept",
+          "checksum": "968a35bf8fad47205c953463618e7ce064429e00c4d971c65baf735f3aa8edb8"
+        },
+        "onSubmit": "act-mutual-aid-accept-submit"
+      },
+      {
+        "id": "mutual-aid-decline",
+        "type": "form",
+        "title": "Decline a mutual-aid request",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "request_id",
+            "type": "text",
+            "label": "Mutual-aid request id",
+            "required": true
+          },
+          {
+            "name": "reason",
+            "type": "textarea",
+            "label": "Decline reason"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-mutual-aid-decline",
+          "checksum": "6362e7da8771b3b520e42c004f8f544c9093e46bf66ae914f6d7a0e8848ef4e6"
+        },
+        "onSubmit": "act-mutual-aid-decline-submit"
+      },
+      {
+        "id": "mutual-aid-handoff",
+        "type": "form",
+        "title": "Hand off a mutual-aid request",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "request_id",
+            "type": "text",
+            "label": "Mutual-aid request id",
+            "required": true
+          },
+          {
+            "name": "to_agency",
+            "type": "text",
+            "label": "Receiving agency",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "type": "textarea",
+            "label": "Handoff notes"
+          }
+        ],
+        "resource": "mutualAid",
+        "workflowRef": {
+          "name": "sos-mutual-aid-handoff",
+          "checksum": "16f7872efb8f69a2d749adb4449f06d3d0f27c3d50e1e34913f6c8730abde00a"
+        },
+        "onSubmit": "act-mutual-aid-handoff-submit"
       },
       {
         "id": "act-workspace-navigation-link1",
@@ -506,51 +570,6 @@
         }
       },
       {
-        "id": "act-mutual-aid-decision-submit",
-        "type": "action",
-        "title": "Submit Approve or progress a request",
-        "operation": {
-          "kind": "execute",
-          "target": "mutual-aid-decision",
-          "mappings": [
-            {
-              "field": "record_id",
-              "source": "event",
-              "value": "values.record_id",
-              "required": true
-            },
-            {
-              "field": "decision",
-              "source": "event",
-              "value": "values.decision",
-              "required": true
-            },
-            {
-              "field": "notes",
-              "source": "event",
-              "value": "values.notes",
-              "required": false
-            }
-          ],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
-        "id": "act-mutual-aid-decision-open",
-        "type": "action",
-        "title": "Open Approve or progress a request",
-        "operation": {
-          "kind": "openForm",
-          "target": "mutual-aid-decision",
-          "mappings": [],
-          "javascript": "",
-          "inputs": [],
-          "actions": []
-        }
-      },
-      {
         "id": "act-mutual-aid-delete-submit",
         "type": "action",
         "title": "Submit Delete a request",
@@ -582,6 +601,141 @@
           "inputs": [],
           "actions": []
         }
+      },
+      {
+        "id": "act-mutual-aid-accept-submit",
+        "type": "action",
+        "title": "Submit Accept a mutual-aid request",
+        "operation": {
+          "kind": "update",
+          "target": "mutual-aid-accept",
+          "mappings": [
+            {
+              "field": "request_id",
+              "source": "event",
+              "value": "values.request_id",
+              "required": true
+            },
+            {
+              "field": "unit_id",
+              "source": "event",
+              "value": "values.unit_id",
+              "required": true
+            },
+            {
+              "field": "accepted_quantity",
+              "source": "event",
+              "value": "values.accepted_quantity",
+              "required": true
+            },
+            {
+              "field": "eta_minutes",
+              "source": "event",
+              "value": "values.eta_minutes",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-mutual-aid-accept-open",
+        "type": "action",
+        "title": "Open Accept a mutual-aid request",
+        "operation": {
+          "kind": "openForm",
+          "target": "mutual-aid-accept",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-mutual-aid-decline-submit",
+        "type": "action",
+        "title": "Submit Decline a mutual-aid request",
+        "operation": {
+          "kind": "update",
+          "target": "mutual-aid-decline",
+          "mappings": [
+            {
+              "field": "request_id",
+              "source": "event",
+              "value": "values.request_id",
+              "required": true
+            },
+            {
+              "field": "reason",
+              "source": "event",
+              "value": "values.reason",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-mutual-aid-decline-open",
+        "type": "action",
+        "title": "Open Decline a mutual-aid request",
+        "operation": {
+          "kind": "openForm",
+          "target": "mutual-aid-decline",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-mutual-aid-handoff-submit",
+        "type": "action",
+        "title": "Submit Hand off a mutual-aid request",
+        "operation": {
+          "kind": "update",
+          "target": "mutual-aid-handoff",
+          "mappings": [
+            {
+              "field": "request_id",
+              "source": "event",
+              "value": "values.request_id",
+              "required": true
+            },
+            {
+              "field": "to_agency",
+              "source": "event",
+              "value": "values.to_agency",
+              "required": true
+            },
+            {
+              "field": "notes",
+              "source": "event",
+              "value": "values.notes",
+              "required": false
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-mutual-aid-handoff-open",
+        "type": "action",
+        "title": "Open Hand off a mutual-aid request",
+        "operation": {
+          "kind": "openForm",
+          "target": "mutual-aid-handoff",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
       }
     ]
   },
@@ -590,5 +744,5 @@
     "path": "plugins/sos-mutual-aid.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:3ba48dd4f13bf1265e12cf3b28b45823a9aefc61e05c0afe3beedff81bfc033d"
+  "checksum": "sha256:c2c29249de8fb9856267a0f73423ee3254367d4b0999c032261e30d8f2878abd"
 }

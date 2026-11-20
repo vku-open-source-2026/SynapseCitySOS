@@ -266,32 +266,40 @@
       {
         "id": "resource-status",
         "type": "form",
-        "title": "Set resource availability",
-        "width": "half",
-        "action": "execute",
+        "title": "Change resource lifecycle status",
+        "width": "full",
+        "action": "update",
         "fields": [
           {
-            "name": "record_id",
+            "name": "resource_id",
             "type": "text",
-            "label": "Resource id",
+            "label": "SOS resource unit id",
             "required": true
           },
           {
-            "name": "decision",
-            "type": "text",
-            "label": "Decision: available, unavailable or maintain",
+            "name": "status",
+            "type": "select",
+            "label": "Next status",
+            "options": [
+              "available",
+              "assigned",
+              "deployed",
+              "unavailable",
+              "maintenance",
+              "retired"
+            ],
             "required": true
           },
           {
-            "name": "notes",
+            "name": "note",
             "type": "textarea",
             "label": "Note"
           }
         ],
         "resource": "resources",
         "workflowRef": {
-          "name": "sos-workspace-actions",
-          "checksum": "aa4c1fef6a5caf8a25b135d8946ea0c4210bf8ab8125f1aaea5fba3a435d3d41"
+          "name": "sos-resource-lifecycle",
+          "checksum": "7cb1da2de92386758b7721132d47476a7027f0931117c802711b79d2c84dd0bc"
         },
         "onSubmit": "act-resource-status-submit"
       },
@@ -724,27 +732,27 @@
       {
         "id": "act-resource-status-submit",
         "type": "action",
-        "title": "Submit Set resource availability",
+        "title": "Submit Change resource lifecycle status",
         "operation": {
-          "kind": "execute",
+          "kind": "update",
           "target": "resource-status",
           "mappings": [
             {
-              "field": "record_id",
+              "field": "resource_id",
               "source": "event",
-              "value": "values.record_id",
+              "value": "values.resource_id",
               "required": true
             },
             {
-              "field": "decision",
+              "field": "status",
               "source": "event",
-              "value": "values.decision",
+              "value": "values.status",
               "required": true
             },
             {
-              "field": "notes",
+              "field": "note",
               "source": "event",
-              "value": "values.notes",
+              "value": "values.note",
               "required": false
             }
           ],
@@ -756,7 +764,7 @@
       {
         "id": "act-resource-status-open",
         "type": "action",
-        "title": "Open Set resource availability",
+        "title": "Open Change resource lifecycle status",
         "operation": {
           "kind": "openForm",
           "target": "resource-status",
@@ -806,5 +814,5 @@
     "path": "plugins/sos-resource-registry.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:6dfac389fea39b0f708fe1a69f5adf9173944a87c86fe7bd9187d2a8a00094af"
+  "checksum": "sha256:c55b75688783a9f8779d20c57f09d5c04078feeaf1f66c105e04dc0181b45d37"
 }

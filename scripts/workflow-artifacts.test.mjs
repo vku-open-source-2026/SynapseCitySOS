@@ -50,6 +50,7 @@ test('manifest is SOS-owned, source-ready and inactive', () => {
         'emergency.events.create',
     ]);
     assert.deepEqual(manifest.workflows.filter((entry) => entry.method === 'PATCH').map((entry) => entry.operation).sort(), [
+        'afterAction.publish',
         'dispatch.assign',
         'dispatch.complete',
         'dispatch.progress',
@@ -58,6 +59,10 @@ test('manifest is SOS-owned, source-ready and inactive', () => {
         'eop.approve',
         'eop.publish',
         'eop.submit',
+        'mutualAid.accept',
+        'mutualAid.decline',
+        'mutualAid.handoff',
+        'resource.status',
         'sitrep.delta',
         'sitrep.publish',
     ]);
