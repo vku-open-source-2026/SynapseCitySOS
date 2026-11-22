@@ -283,6 +283,27 @@
         "onSubmit": "act-dispatch-arrive-submit"
       },
       {
+        "id": "dispatch-complete",
+        "type": "form",
+        "title": "Complete a dispatch order",
+        "width": "half",
+        "action": "update",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "text",
+            "label": "Dispatch order id",
+            "required": true
+          }
+        ],
+        "resource": "dispatch",
+        "workflowRef": {
+          "name": "sos-dispatch-complete",
+          "checksum": "69ab3be24afe60e4f4179ce68f89ce13517bb4c1ad31bc2eae406bc122ad294d"
+        },
+        "onSubmit": "act-dispatch-complete-submit"
+      },
+      {
         "id": "dispatch-reject",
         "type": "form",
         "title": "Reject a dispatch order",
@@ -806,6 +827,39 @@
           "inputs": [],
           "actions": []
         }
+      },
+      {
+        "id": "act-dispatch-complete-submit",
+        "type": "action",
+        "title": "Submit Complete a dispatch order",
+        "operation": {
+          "kind": "update",
+          "target": "dispatch-complete",
+          "mappings": [
+            {
+              "field": "order_id",
+              "source": "event",
+              "value": "values.order_id",
+              "required": true
+            }
+          ],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
+      },
+      {
+        "id": "act-dispatch-complete-open",
+        "type": "action",
+        "title": "Open Complete a dispatch order",
+        "operation": {
+          "kind": "openForm",
+          "target": "dispatch-complete",
+          "mappings": [],
+          "javascript": "",
+          "inputs": [],
+          "actions": []
+        }
       }
     ]
   },
@@ -814,5 +868,5 @@
     "path": "plugins/sos-dispatch-board.plugin.json",
     "revision": "2026-11-15.business"
   },
-  "checksum": "sha256:ff791b4bbd95de216bf0c7a1c8bc68c3edd7f692463ca183c91f68540b0c032e"
+  "checksum": "sha256:8d65a6101f2c2d0446335b0da5b06f2ae082e81d2a4af0b50814561e417a142c"
 }

@@ -165,6 +165,15 @@ reverse-geocode/geospatial helpers. The widget vocabulary declares
 `create|update|delete|execute`; every status transition above is bound with
 `action=update` and a `workflowRef` pin in its plugin bundle.
 
+## Acceptance matrix
+
+The per-form acceptance matrix for issue #55 (every archived SOS operation →
+Tier-3 route → workflow source → test evidence → DX form, plus explicit
+non-goals) is `docs/EOC_PARITY_MATRIX.md`. `npm run test:workflow-artifacts`
+enforces that every manifest workflow stays reachable from at least one
+product form, so a tested-but-unreachable operation fails CI instead of
+silently regressing to API-only.
+
 ## Documented non-goals
 
 - **QR/NFC scanning.** Public check-in / asset-tag scanning needs a dedicated

@@ -506,6 +506,28 @@ test('product forms bind executable workflows; Common forms retain app-scoped ca
     assert.ok(forms.some((widget) => widget.action === 'update'));
 });
 
+test('every manifest workflow is reachable from at least one product form', () => {
+    // Issue #55: an engine-tested workflow source with no bound UI form is not
+    // operator-usable (the Tier-3 console is a redirect-only surface, so the DX
+    // workspace form is the only operator path). sos-workspace-actions is the
+    // generic fallback and may legitimately back many forms; every other
+    // manifest workflow must be referenced by at least one non-common form.
+    const generic = manifest.genericActionWorkflow?.workflow;
+    const required = manifest.workflows.map((entry) => entry.workflow);
+    const bound = new Set();
+    for (const name of fs.readdirSync(path.join(ROOT, 'plugins')).filter((file) => file.endsWith('.plugin.json'))) {
+        const bundle = JSON.parse(fs.readFileSync(path.join(ROOT, 'plugins', name), 'utf8'));
+        for (const widget of bundle.plugin.widgets.filter((item) => item.type === 'form')) {
+            if (widget.resource.startsWith('common')) continue;
+            if (widget.workflowRef?.name) bound.add(widget.workflowRef.name);
+        }
+    }
+    for (const workflow of required) {
+        if (workflow === generic) continue;
+        assert.ok(bound.has(workflow), `${workflow} has no bound product form`);
+    }
+});
+
 test('bundle workflow pins equal the DX portable checksum of the committed source', () => {
     // DX injects settings.access.mode=owner-only on every managed import and
     // resolves bundle refs against that portable checksum; a stale pin makes a
