@@ -102,7 +102,12 @@ Internal emergency routes require `Authorization: Bearer <access_token>` and an
 explicit permission: `emergency:read`, `emergency:write`,
 `emergency:dispatch`, or `emergency:eop`. The unauthenticated public surface is
 limited to `/v1/emergency/public`, `/v1/emergency/public/status`,
-`/v1/emergency/stream/hazards`, `/v1/emergency/resources/shelters/near`,
+`/v1/emergency/public/mutual-aid/:id` (public projection only: id,
+request_number, resource_type, quantity, filled/remaining, status, urgency and
+city/area — never contact, agency or precise coordinates),
+`/v1/emergency/stream/hazards`, `/v1/emergency/resources/shelters/near` (each
+shelter carries `availability_warning: true` unless `status` is `available`;
+`retired` units are never listed),
 `/v1/hazards` reads (`/v1/hazards`, `/v1/hazards/recent`,
 `/v1/hazards/vndms-live`, `/v1/hazards/ingest/status`,
 `/v1/hazards/geo/*`), `/v1/map/*`, `/v1/geo/*`, `/v1/ai/*`, `/v1/sos`,

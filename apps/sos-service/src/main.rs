@@ -79,6 +79,9 @@ async fn main() {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    tier2::assert_dataset_prefixes().map_err(|message| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, message)
+    })?;
     let config = Config::from_env()?;
     let client = config.tier2_client()?;
     let state = AppState::new(config.clone(), client);

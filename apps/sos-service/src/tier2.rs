@@ -100,6 +100,22 @@ pub const DATASETS: [DatasetSpec; 9] = [
     MUTUAL_AID,
 ];
 
+/// Product-boundary invariant: SOS may only ever touch `sos-*` datasets. A
+/// `city-*` dataset belongs to the separate SynapseCity product and must never
+/// be read or written from this service. Fail startup on a foreign prefix
+/// instead of running with a misconfigured dataset.
+pub fn assert_dataset_prefixes() -> Result<(), String> {
+    for spec in DATASETS {
+        if !spec.id.starts_with("sos-") {
+            return Err(format!(
+                "SynapseCitySOS dataset must use the sos- prefix: {}",
+                spec.id
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
@@ -666,11 +682,20 @@ pub fn session_of(headers: &HeaderMap, config: &Config) -> Option<Claims> {
 
 #[cfg(test)]
 mod tests {
-    use super::{request_options, request_options_from};
+    use super::{assert_dataset_prefixes, request_options, request_options_from, DATASETS};
     use serde_json::json;
     use synapsedx::{Client, Credentials, RecordListQuery, RequestOptions};
     use wiremock::matchers::{header, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn sos_datasets_use_the_sos_prefix() {
+        assert_dataset_prefixes().expect("SOS datasets must use the sos- prefix");
+        for spec in DATASETS {
+            assert!(spec.id.starts_with("sos-"), "foreign dataset: {}", spec.id);
+            assert!(!spec.id.starts_with("city-"), "city dataset leaked: {}", spec.id);
+        }
+    }
 
     #[test]
     fn credential_precedence_session_then_config_and_header_then_config() {

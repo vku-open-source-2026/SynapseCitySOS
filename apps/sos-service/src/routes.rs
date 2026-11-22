@@ -288,8 +288,6 @@ pub async fn dispatch(State(state): State<AppState>, req: Request) -> ApiResult<
     if path.starts_with("/v1")
         && !path.starts_with("/v1/auth")
         && !is_public(&path)
-        && method != "GET"
-        && method != "HEAD"
     {
         if let Some(claims) = session.as_ref() {
             if let Some(permission) = required_permission(&path, method) {
@@ -486,7 +484,7 @@ fn sos_metadata(ctx: &Ctx<'_>) -> Value {
             "hazards", "mutual aid", "emergency events", "public emergency projection",
             "EOP", "dispatch", "resource units", "SITREP", "AAR", "live hazard stream",
             "command centre", "phase boards", "rescue operations", "public hazard map",
-            "map", "geocoding", "ai", "tier-2-spatial", "workspace-login"
+            "map", "geocoding", "ai", "tier-2-spatial-reads", "workspace-login-retired"
         ],
         "notOwned": [
             "city assets", "city incidents", "city users", "IoT", "maintenance",
@@ -1857,7 +1855,11 @@ async fn shelters_near(ctx: Ctx<'_>) -> ApiResult<Response> {
             continue;
         }
         let status = resource.get("status").and_then(Value::as_str).unwrap_or("");
-        if ["offline", "maintenance"].contains(&status) {
+        // Public honesty: retired units are terminal and never shown; offline
+        // is the legacy alias for unavailable. Assigned/deployed/unavailable
+        // shelters stay visible but carry an availability warning so the
+        // public map never renders a non-available shelter as fully open.
+        if ["offline", "maintenance", "retired"].contains(&status) {
             continue;
         }
         let Some(location) = resource.get("current_location") else {
@@ -1878,6 +1880,7 @@ async fn shelters_near(ctx: Ctx<'_>) -> ApiResult<Response> {
         if distance > near.radius_m {
             continue;
         }
+        let availability_warning = status != "available";
         shelters.push((
             distance,
             json!({
@@ -1889,6 +1892,7 @@ async fn shelters_near(ctx: Ctx<'_>) -> ApiResult<Response> {
                 "capacity": resource.get("capacity"),
                 "capacity_unit": resource.get("capacity_unit"),
                 "status": resource.get("status"),
+                "availability_warning": availability_warning,
                 "contact_phone": resource.get("contact_phone"),
                 "current_location": resource.get("current_location"),
                 "distance_m": distance.round() as i64,

@@ -480,9 +480,11 @@ test('GET /v1/sos advertises emergency-only ownership', async () => {
   const metadata = (await response.json()) as Data;
   assert.equal(metadata.product, 'synapsecity-sos');
   assert.equal(metadata.publicUrl, 'https://sos.synapsecity.sbs');
-  for (const feature of ['hazards', 'emergency events', 'EOP', 'dispatch', 'resource units', 'SITREP', 'AAR', 'live hazard stream', 'public hazard map']) {
+  for (const feature of ['hazards', 'emergency events', 'EOP', 'dispatch', 'resource units', 'SITREP', 'AAR', 'live hazard stream', 'public hazard map', 'tier-2-spatial-reads', 'workspace-login-retired']) {
     assert.ok((metadata.features as string[]).includes(feature), `missing feature: ${feature}`);
   }
+  assert.ok(!(metadata.features as string[]).includes('workspace-login'), 'retired login must not advertise workspace-login');
+  assert.ok(!(metadata.features as string[]).includes('tier-2-spatial'), 'spatial reads must use the tier-2-spatial-reads name');
   for (const dataset of metadata.datasets as string[]) assert.match(dataset, /^sos-/);
 });
 
@@ -1109,11 +1111,27 @@ test('public nearby shelters return distance and limited fields', async () => {
     district: 'Hai Chau', capacity: 200, capacity_unit: 'người',
     current_location: { type: 'Point', coordinates: [104.1, 10.1] },
   });
+  fake.seed('sos-resource-units', 'shelter-assigned', {
+    name: 'Shelter B', resource_code: 'S-B', resource_type: 'shelter', status: 'assigned',
+    district: 'Hai Chau', capacity: 100, capacity_unit: 'người',
+    current_location: { type: 'Point', coordinates: [104.1, 10.1] },
+  });
+  fake.seed('sos-resource-units', 'shelter-retired', {
+    name: 'Shelter Old', resource_code: 'S-OLD', resource_type: 'shelter', status: 'retired',
+    district: 'Hai Chau', capacity: 50, capacity_unit: 'người',
+    current_location: { type: 'Point', coordinates: [104.1, 10.1] },
+  });
   const response = await fetch(`${baseUrl}/v1/emergency/resources/shelters/near?lat=10&lng=104&radius_m=20000`);
   assert.equal(response.status, 200);
   const body = await response.json() as Data;
   const shelters = body.shelters as Data[];
-  assert.ok(shelters.some((shelter) => shelter.id === 'shelter-near' && Number(shelter.distance_m) > 0));
+  const near = shelters.find((shelter) => shelter.id === 'shelter-near');
+  assert.ok(near && Number(near.distance_m) > 0);
+  assert.equal(near.availability_warning, false);
+  const assigned = shelters.find((shelter) => shelter.id === 'shelter-assigned');
+  assert.ok(assigned, 'assigned shelters stay visible with a warning');
+  assert.equal(assigned.availability_warning, true);
+  assert.ok(!shelters.some((shelter) => shelter.id === 'shelter-retired'), 'retired shelters are never shown');
 });
 
 test('AI status and chat use the Tier-2 capability and fail closed with a typed 503', async () => {

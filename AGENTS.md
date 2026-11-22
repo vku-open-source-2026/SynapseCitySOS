@@ -75,7 +75,8 @@ Internal emergency routes require a session **and** a permission:
 `emergency:eop` for EOP approve/publish. Missing or insufficient permission is
 `403` with a stable `error` code. Keep hazard reads and the public projection
 list (`/v1/emergency/public`, `/v1/emergency/public/status`,
-`/v1/emergency/stream/hazards`, `/v1/emergency/resources/shelters/near`,
+`/v1/emergency/public/mutual-aid/:id` (public projection only, no contact/agency/coords),
+`/v1/emergency/stream/hazards`, `/v1/emergency/resources/shelters/near` (with `availability_warning`),
 `/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
 `/v1/hazards/ingest/status`, `/v1/hazards/geo/*`, `/v1/map/*`, `/v1/geo/*`,
 `/v1/ai/*`, `/v1/sos`) unauthenticated. `POST /v1/hazards/ingest` is an
