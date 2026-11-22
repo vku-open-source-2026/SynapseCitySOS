@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 VKU.VIC
+// Legacy TypeScript reference server (tests only). The Rust binary in
+// apps/sos-service is authoritative for production; this file mirrors its
+// boundary (sos-* datasets, public projections, permission names) and must
+// not gain new production behaviour.
 import express, { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { CapabilitiesClient, CapabilitiesError } from '@synapsedx/capabilities';
@@ -138,7 +142,8 @@ const SOS_METADATA = {
     'map',
     'geocoding',
     'ai',
-    'auth-shell',
+    'tier-2-spatial-reads',
+    'workspace-login-retired',
   ],
   notOwned: [
     'city assets',
@@ -1502,11 +1507,15 @@ app.post('/v1/emergency/mutual-aid/requests/:id/handoff', async (req, res, next)
 
 app.get('/v1/emergency/resources/shelters/near', async (req, res, next) => {
   try {
+    // Legacy mirror of the authoritative Rust shelters_near: retired units
+    // are terminal and never shown; assigned/deployed/unavailable shelters
+    // stay visible with an availability warning so the public map never
+    // renders a non-available shelter as fully open.
     const origin = parseNearQuery({ ...req.query, radius_m: req.query.radius_m ?? 20_000 });
     const { items } = await listAllRows(client(req), DATASETS.resources);
     const shelters = items
       .filter((resource) => String(resource.resource_type ?? '') === 'shelter')
-      .filter((resource) => !['offline', 'maintenance'].includes(String(resource.status ?? '')))
+      .filter((resource) => !['offline', 'maintenance', 'retired'].includes(String(resource.status ?? '')))
       .map((resource) => {
         const distance = hazardDistanceMeters({ geometry: resource.current_location }, { lat: origin.lat, lng: origin.lng });
         return { resource, distance };
@@ -1523,6 +1532,7 @@ app.get('/v1/emergency/resources/shelters/near', async (req, res, next) => {
         capacity: entry.resource.capacity ?? null,
         capacity_unit: entry.resource.capacity_unit ?? null,
         status: entry.resource.status ?? null,
+        availability_warning: String(entry.resource.status ?? '') !== 'available',
         contact_phone: entry.resource.contact_phone ?? null,
         current_location: entry.resource.current_location ?? null,
         distance_m: Math.round(entry.distance),

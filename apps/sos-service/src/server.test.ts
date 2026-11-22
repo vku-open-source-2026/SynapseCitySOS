@@ -43,9 +43,11 @@ test('GET /v1/sos advertises emergency-only ownership', async () => {
   assert.equal(metadata.product, 'synapsecity-sos');
   assert.equal(metadata.domain, 'emergency-operations');
   assert.equal(metadata.publicUrl, 'https://sos.synapsecity.sbs');
-  for (const feature of ['hazards', 'emergency events', 'EOP', 'dispatch', 'resource units', 'SITREP', 'AAR', 'live hazard stream', 'command centre', 'public hazard map']) {
+  for (const feature of ['hazards', 'emergency events', 'EOP', 'dispatch', 'resource units', 'SITREP', 'AAR', 'live hazard stream', 'command centre', 'public hazard map', 'tier-2-spatial-reads', 'workspace-login-retired']) {
     assert.ok(metadata.features.includes(feature), `missing feature: ${feature}`);
   }
+  assert.ok(!metadata.features.includes('workspace-login'), 'retired login must not advertise workspace-login');
+  assert.ok(!metadata.features.includes('tier-2-spatial'), 'spatial reads must use the tier-2-spatial-reads name');
   for (const foreign of ['city assets', 'city incidents', 'IoT', 'maintenance', 'infrastructure alerts', 'budgets', 'operational reports', 'geofences', 'ingest', 'technician portal']) {
     assert.ok(metadata.notOwned.includes(foreign), `missing notOwned entry: ${foreign}`);
   }

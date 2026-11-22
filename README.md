@@ -273,8 +273,10 @@ allow-list — never through the login/register payload.
 Hazard reads (`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
 `/v1/hazards/geo/*`, `/v1/hazards/ingest/status`), the public projection
 (`/v1/emergency/public`, `/v1/emergency/public/status`,
+`/v1/emergency/public/mutual-aid/:id` (public projection only),
 `/v1/emergency/stream/hazards`), nearby shelters
-(`/v1/emergency/resources/shelters/near`) and `/v1/map/*`, `/v1/geo/*`,
+(`/v1/emergency/resources/shelters/near`, with `availability_warning` for
+non-`available` shelters) and `/v1/map/*`, `/v1/geo/*`,
 `/v1/ai/*`, `/v1/sos` remain open. Dispatch approval uses
 `assigned_resource_unit_id`, mirrored to the legacy `assigned_user_id` field for
 older clients.
