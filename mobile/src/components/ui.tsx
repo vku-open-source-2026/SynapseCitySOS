@@ -85,7 +85,7 @@ export function SectionHeader({
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionTitleRow}>
-        {icon ? <Ionicons name={icon} size={16} color={colors.cyan} /> : null}
+        {icon ? <Ionicons name={icon} size={16} color={colors.accent} /> : null}
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
       {action ? (
@@ -100,7 +100,7 @@ export function SectionHeader({
 export function Chip({
   label,
   color = colors.textMuted,
-  bg = '#F1F5F9',
+  bg = '#FFFFFF',
   icon,
   onPress,
   active,
@@ -112,18 +112,20 @@ export function Chip({
   onPress?: () => void;
   active?: boolean;
 }) {
-  const effectiveColor = active ? colors.cyan : color;
+  const effectiveColor = active ? '#FFFFFF' : color;
+  const effectiveBg = active ? colors.primary : bg;
+  const effectiveBorder = active ? colors.primary : onPress ? colors.border : 'transparent';
   const content = (
     <>
       {icon ? <Ionicons name={icon} size={12} color={effectiveColor} /> : null}
       <Text style={[styles.chipText, { color: effectiveColor }]}>{label}</Text>
     </>
   );
-  if (!onPress) return <View style={[styles.chip, { backgroundColor: bg }]}>{content}</View>;
+  if (!onPress) return <View style={[styles.chip, { backgroundColor: effectiveBg, borderColor: effectiveBorder }]}>{content}</View>;
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.chip, { backgroundColor: active ? '#FFE4E6' : bg }]}
+      style={[styles.chip, { backgroundColor: effectiveBg, borderColor: effectiveBorder }]}
     >
       {content}
     </Pressable>
@@ -136,28 +138,28 @@ export function PrimaryButton({
   icon,
   loading,
   disabled,
-  tone = 'cyan',
+  tone = 'primary',
 }: {
   label: string;
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   loading?: boolean;
   disabled?: boolean;
-  tone?: 'cyan' | 'danger' | 'ghost';
+  tone?: 'primary' | 'cyan' | 'danger' | 'ghost';
 }) {
   const palette =
     tone === 'danger'
-      ? { bg: colors.red, fg: '#FFFFFF' }
+      ? { bg: colors.danger, fg: '#FFFFFF', border: colors.danger }
       : tone === 'ghost'
-        ? { bg: '#F1F5F9', fg: colors.text }
-        : { bg: colors.cyan, fg: '#FFFFFF' };
+        ? { bg: '#FFFFFF', fg: colors.text, border: colors.border }
+        : { bg: colors.primary, fg: '#FFFFFF', border: colors.primary };
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: palette.bg, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
+        { backgroundColor: palette.bg, borderColor: palette.border, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
       ]}
     >
       {loading ? (
@@ -256,7 +258,7 @@ export function ErrorNotice({
 }) {
   return (
     <View style={styles.errorNotice}>
-      <Ionicons name="alert-circle" size={18} color={colors.red} />
+      <Ionicons name="alert-circle" size={18} color={colors.danger} />
       <Text style={styles.errorText}>{message}</Text>
       {onRetry ? (
         <Pressable onPress={onRetry} hitSlop={8}>
@@ -270,8 +272,8 @@ export function ErrorNotice({
 export function StatusDot({ online, label }: { online: boolean; label: string }) {
   return (
     <View style={styles.statusRow}>
-      <View style={[styles.statusDot, { backgroundColor: online ? colors.green : colors.red }]} />
-      <Text style={[styles.statusText, { color: online ? colors.green : colors.red }]}>{label}</Text>
+      <View style={[styles.statusDot, { backgroundColor: online ? colors.green : colors.danger }]} />
+      <Text style={[styles.statusText, { color: online ? colors.green : colors.danger }]}>{label}</Text>
     </View>
   );
 }
@@ -286,19 +288,19 @@ const styles = StyleSheet.create({
   screenContent: { paddingTop: topInset, paddingHorizontal: 18, gap: 16 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    padding: 14,
     gap: 10,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#4A1720',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   cardCyan: { borderColor: '#F1D9CC', backgroundColor: '#FFF1EA' },
-  cardDanger: { borderColor: '#FECDD3', backgroundColor: '#FFF1F2' },
+  cardDanger: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -307,40 +309,44 @@ const styles = StyleSheet.create({
   },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: { color: colors.text, fontSize: 16, fontWeight: '700', letterSpacing: -0.2 },
-  sectionAction: { color: colors.cyan, fontSize: 12, fontWeight: '700' },
+  sectionAction: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     borderRadius: 999,
+    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 5,
     alignSelf: 'flex-start',
   },
-  chipText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.1 },
+  chipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.1 },
   button: {
     minHeight: 48,
-    borderRadius: 14,
+    borderRadius: 12,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingHorizontal: 18,
   },
-  buttonText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.1 },
+  buttonText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.1 },
   iconButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   field: { gap: 6 },
   fieldLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   input: {
     minHeight: 48,
-    borderRadius: 13,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: '#FFFFFF',
@@ -350,9 +356,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   inputMultiline: { minHeight: 110, textAlignVertical: 'top' },
-  inputError: { borderColor: colors.red },
+  inputError: { borderColor: colors.danger },
   fieldHint: { color: colors.textDim, fontSize: 10 },
-  fieldError: { color: colors.red, fontSize: 10 },
+  fieldError: { color: colors.danger, fontSize: 10 },
   empty: {
     alignItems: 'center',
     paddingVertical: 28,
@@ -363,7 +369,9 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFF1EA',
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
@@ -374,14 +382,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FFF1F2',
-    borderColor: '#FECDD3',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
     borderWidth: 1,
     borderRadius: 12,
     padding: 11,
   },
-  errorText: { color: '#BE123C', fontSize: 11, flex: 1, lineHeight: 16 },
-  retry: { color: colors.cyan, fontSize: 11, fontWeight: '800' },
+  errorText: { color: '#991B1B', fontSize: 11, flex: 1, lineHeight: 16 },
+  retry: { color: colors.accent, fontSize: 11, fontWeight: '800' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },

@@ -70,7 +70,7 @@ export function AccountScreen({
         />
         <Card tone="danger">
           <View style={styles.row}>
-            <Ionicons name="shield-checkmark" size={22} color={colors.red} />
+            <Ionicons name="shield-checkmark" size={22} color={colors.primary} />
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Vai trò</Text>
               <Text style={styles.value}>{user.role}</Text>
@@ -186,7 +186,7 @@ function MenuRow({
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.menu, pressed && { opacity: 0.8 }]}>
       <View style={styles.menuIcon}>
-        <Ionicons name={icon} size={18} color={colors.red} />
+        <Ionicons name={icon} size={18} color={colors.accent} />
       </View>
       <Text style={styles.menuLabel}>{label}</Text>
       <Ionicons name="chevron-forward" size={16} color={colors.textDim} />
@@ -199,13 +199,13 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#FFE4E6',
+    backgroundColor: '#FDECE8',
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#F5C0B1',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.red, fontSize: 20, fontWeight: '800' },
+  avatarText: { color: colors.accent, fontSize: 20, fontWeight: '800' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
   label: { color: colors.textDim, fontSize: 9, fontWeight: '700' },
   value: { color: colors.text, fontSize: 12, marginTop: 2, lineHeight: 17 },
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 12,
@@ -223,13 +223,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: '#FFF1F2',
+    backgroundColor: '#FEF2F2',
     alignItems: 'center',
     justifyContent: 'center',
   },
   menuLabel: { color: colors.text, fontSize: 12, fontWeight: '700', flex: 1 },
   switch: { alignItems: 'center', paddingVertical: 6 },
-  switchText: { color: colors.cyan, fontSize: 11, fontWeight: '700' },
+  switchText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
   note: { color: colors.textDim, fontSize: 9, textAlign: 'center', lineHeight: 14 },
   infoTitle: { color: colors.text, fontSize: 12, fontWeight: '700' },
   infoBody: { color: colors.textMuted, fontSize: 10, lineHeight: 16 },

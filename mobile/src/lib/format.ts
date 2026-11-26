@@ -3,7 +3,7 @@
 import type { Severity } from '../api/types';
 
 export const colors = {
-  bg: '#FFF8F3',
+  bg: '#fff8f3',
   bgElevated: '#FFFFFF',
   card: '#FFFFFF',
   cardAlt: '#FFF1EA',
@@ -11,7 +11,13 @@ export const colors = {
   text: '#3F1D1A',
   textMuted: '#7A5C56',
   textDim: '#A0847D',
-  red: '#C2412D',
+  primary: '#DC5B43',
+  accent: '#B9382B',
+  header: '#4A1720',
+  headerText: '#FFFFFF',
+  headerSub: 'rgba(255,255,255,0.72)',
+  danger: '#DC2626',
+  red: '#DC5B43',
   redDeep: '#B9382B',
   amber: '#D97706',
   orange: '#EA580C',
@@ -21,10 +27,10 @@ export const colors = {
 };
 
 export const severityMeta: Record<Severity, { label: string; color: string; bg: string }> = {
-  low: { label: 'Thấp', color: '#047857', bg: '#ECFDF5' },
-  medium: { label: 'Trung bình', color: '#B45309', bg: '#FFFBEB' },
-  high: { label: 'Cao', color: '#C2410C', bg: '#FFF7ED' },
-  critical: { label: 'Nghiêm trọng', color: '#BE123C', bg: '#FFF1F2' },
+  low: { label: 'Thấp', color: '#166534', bg: '#DCFCE7' },
+  medium: { label: 'Trung bình', color: '#854D0E', bg: '#FEF9C3' },
+  high: { label: 'Cao', color: '#991B1B', bg: '#FEE2E2' },
+  critical: { label: 'Nghiêm trọng', color: '#6B21A8', bg: '#F3E8FF' },
 };
 
 export function normalizeSeverity(value: unknown): Severity {

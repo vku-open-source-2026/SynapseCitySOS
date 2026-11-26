@@ -64,8 +64,8 @@ export function WidgetHelpScreen({
               {nearest && meta ? `${meta.label} · ${formatDistance(nearest.distance)}` : 'Mở app để xem nguồn tin'}
             </Text>
             <View style={styles.actions}>
-              <View style={styles.pill}><Ionicons name="call" size={11} color={colors.red} /><Text style={styles.pillText}>SOS</Text></View>
-              <View style={styles.pill}><Ionicons name="refresh" size={11} color={colors.red} /><Text style={styles.pillText}>Làm mới</Text></View>
+              <View style={styles.pill}><Ionicons name="call" size={11} color={colors.accent} /><Text style={styles.pillText}>SOS</Text></View>
+              <View style={styles.pill}><Ionicons name="refresh" size={11} color={colors.accent} /><Text style={styles.pillText}>Làm mới</Text></View>
             </View>
           </View>
           <HazardRadar location={location} hazards={hazards} events={events} size={104} radiusMeters={100_000} showLabels={false} />
@@ -81,7 +81,7 @@ export function WidgetHelpScreen({
 
       <Card>
         <View style={styles.tipRow}>
-          <Ionicons name="refresh-circle" size={22} color={colors.red} />
+          <Ionicons name="refresh-circle" size={22} color={colors.primary} />
           <View style={{ flex: 1 }}>
             <Text style={styles.tipTitle}>Làm mới widget ngay</Text>
             <Text style={styles.tipBody}>Gọi API production và cập nhật cảnh báo tức thì.</Text>
@@ -125,19 +125,19 @@ const styles = StyleSheet.create({
   preview: { gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  mark: { width: 24, height: 24, borderRadius: 8, backgroundColor: colors.redDeep, alignItems: 'center', justifyContent: 'center' },
+  mark: { width: 24, height: 24, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   brandText: { color: colors.text, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   body: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  kicker: { color: colors.red, fontSize: 8, fontWeight: '800', letterSpacing: 1 },
+  kicker: { color: colors.primary, fontSize: 8, fontWeight: '800', letterSpacing: 1 },
   name: { color: colors.text, fontSize: 16, fontWeight: '800', lineHeight: 20 },
   bodyText: { color: colors.textMuted, fontSize: 10 },
   actions: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFE4E6', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4 },
-  pillText: { color: colors.red, fontSize: 8, fontWeight: '800' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FDECE8', borderWidth: 1, borderColor: '#F5C0B1', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4 },
+  pillText: { color: colors.accent, fontSize: 8, fontWeight: '800' },
   footer: { color: colors.textDim, fontSize: 8 },
   step: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  stepNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFE4E6', alignItems: 'center', justifyContent: 'center' },
-  stepNumberText: { color: colors.red, fontSize: 12, fontWeight: '800' },
+  stepNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#FDECE8', borderWidth: 1, borderColor: '#F5C0B1', alignItems: 'center', justifyContent: 'center' },
+  stepNumberText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   stepTitle: { color: colors.text, fontSize: 12, fontWeight: '700' },
   stepBody: { color: colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 2 },
   tipRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },

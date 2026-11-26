@@ -75,8 +75,8 @@ export function EventDetailScreen({
       <Card>
         <Text style={styles.guidance}>
           Theo dõi hướng dẫn của Ban chỉ huy phòng chống thiên tai và tìm kiếm cứu nạn địa phương.
-          Không tự ý quay lại khu vực nguy hiểm khi chưa được thông báo an toàn. Gọi 112 nếu tính
-          mạng bị đe dọa.
+          Không tự ý quay lại khu vực nguy hiểm khi chưa có thông báo chính thức của cơ quan chức
+          năng. Gọi 112 nếu tính mạng bị đe dọa.
         </Text>
       </Card>
 

@@ -177,7 +177,7 @@ function AppShell() {
   if (authLoading || settingsLoading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color={colors.red} size="large" />
+        <ActivityIndicator color={colors.primary} size="large" />
         <Text style={styles.loadingText}>SynapseSOS</Text>
       </View>
     );
@@ -333,12 +333,12 @@ const styles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 31,
-    backgroundColor: colors.redDeep,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: colors.bg,
-    shadowColor: colors.red,
+    shadowColor: colors.primary,
     shadowOpacity: 0.5,
     shadowRadius: 14,
     elevation: 10,

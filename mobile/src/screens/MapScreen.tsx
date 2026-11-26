@@ -168,7 +168,7 @@ export function MapScreen({
         );
       })}
       {nearby.length === 0 ? (
-        <Card><Text style={styles.empty}>Không có cảnh báo trong 100 km từ dữ liệu công khai.</Text></Card>
+        <Card><Text style={styles.empty}>Không có cảnh báo trong 100 km từ dữ liệu công khai. Không có kết quả không có nghĩa là an toàn.</Text></Card>
       ) : null}
     </Screen>
   );
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 11,

@@ -99,7 +99,7 @@ function ShelterCard({ shelter }: { shelter: NearbyShelter }) {
       <View style={styles.actions}>
         {shelter.contact_phone ? (
           <Pressable onPress={() => Linking.openURL(`tel:${shelter.contact_phone}`)} style={styles.action}>
-            <Ionicons name="call" size={15} color={colors.cyan} />
+            <Ionicons name="call" size={15} color={colors.accent} />
             <Text style={styles.actionText}>Gọi</Text>
           </Pressable>
         ) : null}
@@ -112,7 +112,7 @@ function ShelterCard({ shelter }: { shelter: NearbyShelter }) {
             }
             style={styles.action}
           >
-            <Ionicons name="navigate" size={15} color={colors.cyan} />
+            <Ionicons name="navigate" size={15} color={colors.accent} />
             <Text style={styles.actionText}>Chỉ đường</Text>
           </Pressable>
         ) : null}
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   icon: {
     width: 40,
     height: 40,
-    borderRadius: 13,
+    borderRadius: 12,
     backgroundColor: '#ECFDF5',
     alignItems: 'center',
     justifyContent: 'center',
@@ -138,12 +138,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#FFF1F2',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
     borderRadius: 9,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  actionText: { color: colors.cyan, fontSize: 10, fontWeight: '700' },
+  actionText: { color: colors.accent, fontSize: 10, fontWeight: '700' },
   muted: { color: colors.textMuted, fontSize: 11 },
   warnTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
   warnBody: { color: colors.textMuted, fontSize: 10, lineHeight: 16 },

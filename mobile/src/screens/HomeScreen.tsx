@@ -59,9 +59,9 @@ export function HomeScreen({
   const unknown = health.state !== 'ok';
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.red} />}>
+    <Screen refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}>
       <PageHeader
-        eyebrow="SYNAPSE SOS"
+        eyebrow="SYNAPSE SOS · EMERGENCY COMMAND"
         title="Tình hình khẩn cấp"
         subtitle={
           location.isFallback
@@ -205,7 +205,7 @@ export function HomeScreen({
         <Text style={styles.footerText}>SynapseSOS · API production sos.synapsecity.sbs</Text>
         <Pressable onPress={() => Linking.openURL('https://synapsecity.sbs')} style={styles.link}>
           <Text style={styles.linkText}>Mở SynapseCity</Text>
-          <Ionicons name="open-outline" size={12} color={colors.cyan} />
+          <Ionicons name="open-outline" size={12} color={colors.accent} />
         </Pressable>
       </View>
     </Screen>
@@ -229,7 +229,7 @@ function QuickAction({
       style={({ pressed }) => [styles.quick, tone === 'danger' && styles.quickDanger, pressed && { opacity: 0.8 }]}
     >
       <View style={[styles.quickIcon, tone === 'danger' && { backgroundColor: '#FFE4E6' }]}>
-        <Ionicons name={icon} size={20} color={tone === 'danger' ? colors.red : colors.text} />
+        <Ionicons name={icon} size={20} color={tone === 'danger' ? colors.primary : colors.text} />
       </View>
       <Text style={styles.quickLabel} numberOfLines={2}>{label}</Text>
     </Pressable>
@@ -274,21 +274,21 @@ function HazardRow({ hazard, distance, onPress }: { hazard: Hazard; distance: nu
 
 const styles = StyleSheet.create({
   hero: {
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 18,
     flexDirection: 'row',
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(194,65,45,0.18)',
+    borderColor: 'rgba(220,91,67,0.22)',
     overflow: 'hidden',
-    shadowColor: '#3F1D1A',
+    shadowColor: '#4A1720',
     shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 7 },
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
   heroText: { flex: 1, gap: 2 },
-  heroKicker: { color: colors.red, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  heroKicker: { color: colors.primary, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   heroCount: { color: colors.text, fontSize: 46, fontWeight: '800', lineHeight: 52, letterSpacing: -2 },
   heroLabel: { color: colors.textMuted, fontSize: 11, marginBottom: 10 },
   heroEmpty: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 4 },
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   quick: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: 12,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     gap: 7,
     minHeight: 86,
   },
-  quickDanger: { borderColor: '#FECDD3', backgroundColor: '#FFF1F2' },
+  quickDanger: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
   quickIcon: {
     width: 34,
     height: 34,
@@ -346,8 +346,8 @@ const styles = StyleSheet.create({
   sosIcon: {
     width: 42,
     height: 42,
-    borderRadius: 14,
-    backgroundColor: colors.redDeep,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: colors.card,
-    borderRadius: 15,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 11,
@@ -370,6 +370,6 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', gap: 6, paddingVertical: 8 },
   footerText: { color: colors.textDim, fontSize: 9 },
   link: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  linkText: { color: colors.cyan, fontSize: 10, fontWeight: '700' },
+  linkText: { color: colors.accent, fontSize: 10, fontWeight: '700' },
 });
 

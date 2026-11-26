@@ -130,7 +130,7 @@ export function EmergencyScreen({ location, events, nearby, navigate, onBack }: 
       {guidance.map((item) => (
         <Card key={item.title} style={styles.guide}>
           <View style={styles.guideIcon}>
-            <Ionicons name={item.icon} size={20} color={colors.red} />
+            <Ionicons name={item.icon} size={20} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.guideTitle}>{item.title}</Text>
@@ -167,13 +167,13 @@ const styles = StyleSheet.create({
   call: {
     width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 13,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#FECACA',
     padding: 10,
     gap: 1,
   },
-  callNumber: { color: colors.red, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  callNumber: { color: colors.primary, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   callLabel: { color: colors.text, fontSize: 10, fontWeight: '700' },
   callDetail: { color: colors.textDim, fontSize: 8 },
   coords: { color: colors.textDim, fontSize: 8, textAlign: 'center' },
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: colors.card,
-    borderRadius: 15,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 11,
@@ -194,8 +194,8 @@ const styles = StyleSheet.create({
   guideIcon: {
     width: 40,
     height: 40,
-    borderRadius: 13,
-    backgroundColor: '#FFF1F2',
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: colors.card,
-    borderRadius: 13,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 10,

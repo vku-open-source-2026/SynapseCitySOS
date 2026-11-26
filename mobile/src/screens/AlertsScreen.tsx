@@ -97,7 +97,7 @@ export function AlertsScreen({
             </Text>
           </View>
           <Pressable onPress={onRefreshStatus} hitSlop={8}>
-            <Ionicons name="refresh" size={18} color={colors.cyan} />
+            <Ionicons name="refresh" size={18} color={colors.accent} />
           </Pressable>
         </View>
       </Card>
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 13,

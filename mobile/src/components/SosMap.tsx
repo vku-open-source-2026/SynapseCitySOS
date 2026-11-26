@@ -57,7 +57,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
 .leaflet-control-attribution{background:rgba(255,255,255,.88)!important;color:#A0847D!important;font-size:9px!important}
 .leaflet-control-attribution a{color:#B9382B!important}
 .leaflet-control-zoom a{background:#FFFFFF!important;color:#3F1D1A!important;border-color:#F1D9CC!important}
-.user{width:16px;height:16px;border-radius:50%;background:#0E7490;border:3px solid #FFFFFF;box-shadow:0 0 0 8px rgba(14,116,144,.13)}
+.user{width:16px;height:16px;border-radius:50%;background:#2563EB;border:3px solid #FFFFFF;box-shadow:0 0 0 8px rgba(37,99,235,.13)}
 .event{width:18px;height:18px;transform:rotate(45deg);background:#F97316;border:2px solid #FFFFFF;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 7px rgba(63,29,26,.22)}
 .event b{transform:rotate(-45deg);font:800 10px/1 sans-serif;color:#FFFFFF}
 .shelter{width:22px;height:22px;border-radius:6px;background:#059669;border:2px solid #FFFFFF;display:flex;align-items:center;justify-content:center;color:#FFFFFF;font:800 11px/1 sans-serif;box-shadow:0 2px 7px rgba(63,29,26,.2)}
@@ -254,10 +254,10 @@ export function SosMap({
         </View>
       ) : null}
       <TouchableOpacity style={styles.recenter} onPress={recenter} accessibilityLabel="Về vị trí của tôi">
-        <Ionicons name="locate" size={20} color={colors.cyan} />
+        <Ionicons name="locate" size={20} color={colors.accent} />
       </TouchableOpacity>
       <View style={styles.legend}>
-        <Legend color={colors.red} label="Nguy hiểm" />
+        <Legend color={colors.primary} label="Nguy hiểm" />
         <Legend color={colors.orange} label="Sự kiện" />
         <Legend color={colors.green} label="Trú ẩn" />
       </View>
@@ -275,8 +275,8 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { overflow: 'hidden', borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border },
-  web: { flex: 1, backgroundColor: '#FFF8F3' },
+  wrapper: { overflow: 'hidden', borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border },
+  web: { flex: 1, backgroundColor: '#fff8f3' },
   loading: {
     position: 'absolute',
     top: 0,
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { color: colors.textMuted, fontSize: 9, fontWeight: '600' },
   fallback: {
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: colors.bgElevated,
     alignItems: 'center',
     justifyContent: 'center',

@@ -151,7 +151,7 @@ object SosWidgetRenderer {
         canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bg)
         val center = size / 2f
         val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.argb(55, 194, 65, 45)
+            style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.argb(55, 220, 91, 67)
         }
         canvas.drawCircle(center, center, size * 0.46f, ring)
         canvas.drawCircle(center, center, size * 0.30f, ring)
@@ -194,9 +194,9 @@ object SosWidgetRenderer {
             canvas.drawRect(rect, paint)
             canvas.restore()
         }
-        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(45, 14, 116, 144) }
+        val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(45, 37, 99, 235) }
         canvas.drawCircle(center, center, 19f, halo)
-        val user = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0E7490") }
+        val user = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2563EB") }
         canvas.drawCircle(center, center, 10f, user)
         val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#FFFFFF"); style = Paint.Style.STROKE; strokeWidth = 3f
@@ -212,9 +212,9 @@ object SosWidgetRenderer {
     }
 
     private fun severityColor(severity: String): String = when (severity) {
-        "critical" -> "#BE123C"
-        "high" -> "#C2410C"
-        "medium" -> "#B45309"
-        else -> "#047857"
+        "critical" -> "#6B21A8"
+        "high" -> "#991B1B"
+        "medium" -> "#854D0E"
+        else -> "#166534"
     }
 }

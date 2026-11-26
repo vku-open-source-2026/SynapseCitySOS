@@ -143,7 +143,7 @@ export function HazardDetailScreen({ hazard, location, navigate, onBack }: Hazar
         />
       ) : null}
       <Pressable onPress={() => navigate({ name: 'map' })} style={styles.mapLink}>
-        <Ionicons name="map" size={15} color={colors.cyan} />
+        <Ionicons name="map" size={15} color={colors.accent} />
         <Text style={styles.mapLinkText}>Xem trên bản đồ cảnh báo</Text>
       </Pressable>
     </Screen>
@@ -173,5 +173,5 @@ const styles = StyleSheet.create({
   disclaimer: { color: colors.textMuted, fontSize: 9, lineHeight: 14 },
   actions: { flexDirection: 'row', gap: 10 },
   mapLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
-  mapLinkText: { color: colors.cyan, fontSize: 10, fontWeight: '700' },
+  mapLinkText: { color: colors.accent, fontSize: 10, fontWeight: '700' },
 });

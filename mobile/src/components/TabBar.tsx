@@ -41,7 +41,7 @@ export function TabBar({
               <Ionicons
                 name={selected ? tab.activeIcon : tab.icon}
                 size={21}
-                color={selected ? colors.red : colors.textDim}
+                color={selected ? colors.primary : colors.textDim}
               />
               <Text style={[styles.label, selected && styles.labelActive]}>{tab.label}</Text>
               {selected ? <View style={styles.indicator} /> : null}
@@ -57,14 +57,14 @@ const styles = StyleSheet.create({
   wrapper: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 10, paddingBottom: 10 },
   bar: {
     height: 64,
-    borderRadius: 24,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.97)',
     borderWidth: 1,
     borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
-    shadowColor: '#3F1D1A',
+    shadowColor: '#4A1720',
     shadowOpacity: 0.10,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
@@ -72,13 +72,13 @@ const styles = StyleSheet.create({
   },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, height: 56 },
   label: { color: colors.textDim, fontSize: 9, fontWeight: '600' },
-  labelActive: { color: colors.red },
+  labelActive: { color: colors.primary },
   indicator: {
     position: 'absolute',
     bottom: 3,
     width: 12,
     height: 2,
     borderRadius: 1,
-    backgroundColor: colors.red,
+    backgroundColor: colors.primary,
   },
 });

@@ -47,8 +47,8 @@ export function SettingsScreen({
           <Switch
             value={settings.notificationsEnabled}
             onValueChange={(value) => onChange({ ...settings, notificationsEnabled: value })}
-            trackColor={{ false: '#F1D9CC', true: '#FECDD3' }}
-            thumbColor={settings.notificationsEnabled ? colors.red : '#A0847D'}
+            trackColor={{ false: '#F1D9CC', true: '#F0B9AC' }}
+            thumbColor={settings.notificationsEnabled ? colors.primary : '#A0847D'}
           />
         </View>
         <Divider />
@@ -87,7 +87,7 @@ export function SettingsScreen({
 
       <SectionHeader title="Widget" icon="apps" />
       <Pressable onPress={() => navigate({ name: 'widget-help' })} style={styles.menu}>
-        <View style={styles.menuIcon}><Ionicons name="grid" size={18} color={colors.red} /></View>
+        <View style={styles.menuIcon}><Ionicons name="grid" size={18} color={colors.accent} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.menuLabel}>Cách thêm widget SOS</Text>
           <Text style={styles.menuSub}>Cảnh báo mới nhất, sự kiện và bản đồ mini.</Text>
@@ -121,7 +121,7 @@ export function SettingsScreen({
 function LinkRow({ icon, label, url }: { icon: keyof typeof Ionicons.glyphMap; label: string; url: string }) {
   return (
     <Pressable onPress={() => Linking.openURL(url)} style={({ pressed }) => [styles.menu, pressed && { opacity: 0.8 }]}>
-      <View style={styles.menuIcon}><Ionicons name={icon} size={18} color={colors.red} /></View>
+      <View style={styles.menuIcon}><Ionicons name={icon} size={18} color={colors.accent} /></View>
       <Text style={styles.menuLabel}>{label}</Text>
       <Ionicons name="open-outline" size={15} color={colors.textDim} />
     </Pressable>
@@ -139,17 +139,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: colors.card,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     padding: 12,
   },
-  menuIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#FFF1F2', alignItems: 'center', justifyContent: 'center' },
+  menuIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' },
   menuLabel: { color: colors.text, fontSize: 12, fontWeight: '700', flex: 1 },
   menuSub: { color: colors.textMuted, fontSize: 9, marginTop: 2 },
   kv: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 2 },
   k: { color: colors.textDim, fontSize: 10, fontWeight: '700', width: 64 },
-  api: { color: colors.cyan, fontSize: 10, flex: 1, textAlign: 'right' },
+  api: { color: colors.accent, fontSize: 10, flex: 1, textAlign: 'right' },
   small: { color: colors.textDim, fontSize: 9, lineHeight: 14 },
   legal: { color: colors.textDim, fontSize: 9, lineHeight: 14, textAlign: 'center', paddingVertical: 8 },
 });
