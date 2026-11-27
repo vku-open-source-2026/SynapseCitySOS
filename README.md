@@ -1,465 +1,161 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="apps/console/public/brand/logo-lockup-dark.png">
-    <img src="apps/console/public/brand/logo-lockup-light.png" width="420" alt="SynapseCity SOS">
+    <img src="apps/console/public/brand/logo-lockup-light.png" width="380" alt="SynapseCity SOS">
   </picture>
 </p>
 
-# SynapseCitySOS — emergency operations (Tier 3)
+<h3 align="center">Open-source Tier-3 emergency command, live hazard monitoring, and disaster response</h3>
 
-## OLP 2026 demo
+<p align="center">
+  <a href="https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/ci.yml"><img src="https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/release.yml"><img src="https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"></a>
+</p>
 
-A reproducible 15-minute emergency-operations story lives in [`docs/DEMO_PACK.md`](docs/DEMO_PACK.md). Seed/reset with `npm run demo:seed` and `npm run demo:reset` (requires `SOS_DEMO_TOKEN`).
+<p align="center">
+  <a href="https://sos.synapsecity.sbs">Live Portal</a> ·
+  <a href="https://sos.synapsecity.sbs/map">Live Hazard Map</a> ·
+  <a href="https://sos.synapsecity.sbs/docs">API Docs</a> ·
+  <a href="https://synapsedx.sbs/workspace">Command Workspace</a> ·
+  <a href="https://synapsecity.sbs">Sibling App: SynapseCity</a>
+</p>
 
+---
 
-![CI](https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/ci.yml/badge.svg)
-![Release](https://github.com/vku-open-source-2026/SynapseCitySOS/actions/workflows/release.yml/badge.svg)
+**SynapseCitySOS** is the emergency preparedness, response, and recovery product (Tier 3) of the Synapse platform. It unifies multi-source hazard feeds (including VNDMS ingestion), live SSE hazard streaming, AI-assisted Emergency Operations Plans (EOP), responder & shelter dispatch, immutable Situation Reports (SITREPs), and After-Action Reviews (AAR) atop **SynapseDX** (`@synapsedx/capabilities`).
 
-SynapseCitySOS is the emergency operations product of the Synapse platform. It
-owns emergency preparedness, response and recovery: hazard feeds including
-VNDMS ingestion, emergency events, emergency operations plans (EOP), dispatch
-and responder assignment, emergency resource units, SITREP, AAR, the live
-hazard SSE stream, the emergency command centre and the public
-hazard/emergency map.
+## Preview
 
-The public product boundary is `https://sos.synapsecity.sbs`. The API is served
-at `https://sos.synapsecity.sbs/v1`.
+| Emergency Command Portal (`sos.synapsecity.sbs`) | Live Hazard Map & AI Brief (`sos.synapsecity.sbs/map`) |
+| :---: | :---: |
+| ![SynapseCitySOS Landing](docs/screenshots/landing-light.png) | ![SynapseCitySOS Hazard Map](docs/screenshots/hazard-map-light.png) |
 
-SynapseCitySOS is a **sibling** of SynapseCity (`https://synapsecity.sbs`), the
-city infrastructure product. SynapseCitySOS does **not** own city assets, city
-incidents, IoT, maintenance or the technician portal, infrastructure alerts,
-budgets, operational reports, city users, geofences, data ingestion, the public
-asset map or public incident reporting. A link to City is a public HTTPS
-navigation link only; there is no SOS-to-City API call.
+## Key Features
 
-Emergency resource units are rescue logistics (teams, vehicles, medical
-supplies, rescue equipment, shelters), not infrastructure assets. SOS has no
-asset registry, asset lifecycle, GIS asset map, maintenance work order, IoT
-sensor management or infrastructure budget. SOS responders are represented as
-SOS resource units in `sos-resource-units`, never as City user records. This
-repository does not expose `/v1/users` and never reads or writes `city-users`.
-
-The authoritative matrix is the workspace `FEATURE_BOUNDARY.md` at the workspace
-root. The repo-local summary is [`PRODUCT_BOUNDARY.md`](PRODUCT_BOUNDARY.md).
+- **Live Hazard Feeds & Spatial Search** — Flood, storm, landslide, and VNDMS feeds with radius (`near`) and GeoJSON polygon (`within`) queries.
+- **Real-Time SSE Hazard Stream** — Shared Tier-2 event subscription streaming sanitized hazard snapshots and degraded-feed warnings without silent empty states.
+- **AI-Grounded EOP Orchestration** — Versioned Emergency Operations Plan drafts generated via Tier-2 AI (with deterministic doctrine fallback) that compile directly into dispatch orders.
+- **Responder & Shelter Dispatch** — Availability-aware unit optimizer across rescue teams, vehicles, medical supplies, equipment, and public shelters.
+- **Immutable SITREPs & Automated AAR KPIs** — Delta-revisioned situation reports and weighted response/dispatch/SITREP/resource after-action scoring.
+- **Native Android App & 4×3 SOS Widget** — GPS hazard radar, shelter finder, foreground SSE alerts, and home-screen emergency widget (`mobile/`).
 
 ## Architecture
 
 ```text
-apps/gateway        public HTTPS API boundary and console proxy (Rust/Axum, port 8080)
-apps/sos-service    emergency operations domain backend (port 8084)
-apps/console        emergency operations console
-infra/              public-edge snippets and deployment material
+Browser / Android App
+   │
+   ▼
+apps/gateway (:8086 host -> :8080 container, Rust/Axum)
+   ├──► apps/sos-service (:8084, emergency operations backend)
+   └──► apps/console (React public hazard map, safety guidance & API docs)
+   │
+   ▼  HTTPS / SSE (@synapsedx/capabilities)
+SynapseDX (Tier 2) ──► SynapseOne (Tier 1)
 ```
 
-Dependency direction:
+> **Product Boundary:** SynapseCitySOS owns disaster and emergency operations only. Day-to-day municipal assets, IoT sensors, citizen infrastructure reports, and maintenance belong to its sibling product, [SynapseCity](https://github.com/vku-open-source-2026/SynapseCity). See [PRODUCT_BOUNDARY.md](PRODUCT_BOUNDARY.md).
 
-```text
-SynapseCitySOS -> @synapsedx/capabilities -> @synapseone/sdk -> SynapseOne
-```
+## Quickstart
 
-The service is configured with `https://synapsedx.sbs` and calls the Tier-2
-capabilities API. It has no database, queue connection or direct SynapseOne
-client. Domain records are created through the Tier-2 records API; public
-projections are read through Tier-2 SynapseLDS publication. `/v1/geo`,
-`/v1/map` and `/v1/ai` are SOS-owned instances and do not proxy City.
+### 1. Query Live Hazard & Emergency Feeds (Zero Setup)
 
-## Features
-
-- flood, storm, landslide and other hazard feeds, including VNDMS ingestion;
-- emergency events and public emergency projection;
-- emergency operations plans (EOP);
-- dispatch orders and responder assignment;
-- emergency resource units (personnel, vehicles, medical supplies, equipment,
-  shelters);
-- SITREP and deltas;
-- AAR;
-- live hazard SSE stream;
-- emergency command centre, phase boards and rescue operation view;
-- public hazard/emergency map;
-- map tiles, geocoding, reverse geocoding and AI capability instance for SOS.
-
-Not owned by this repository: city assets, city incidents, IoT, maintenance or
-the technician portal, infrastructure alerts, budgets, operational reports,
-city users, geofences, data ingestion, the public asset map and public incident
-reporting. Those are SynapseCity features.
-
-## Android app and home-screen widget
-
-The `mobile/` directory contains the SynapseSOS Android client and a native 4×3
-home-screen widget. It talks directly to `https://sos.synapsecity.sbs/v1`:
-feed-health banner, nearby hazards (GPS), hazard/event/shelter map, public SOS
-guidance, foreground SSE, local alerts, optional responder read-only view, and a
-widget with latest hazard, active events, mini-map, SOS and refresh actions. The
-UI is light-first, using the production SOS web console's cream/red palette. See
-[`mobile/README.md`](mobile/README.md) and
-[`docs/MOBILE_AUDIT.md`](docs/MOBILE_AUDIT.md).
+Public hazard layers, shelter lookups, and live SSE streams require no API key:
 
 ```bash
-cd mobile
-npm ci
-npm run typecheck && npm test
-npm run verify
-npm run build:android
+# Check active emergency operational summary
+curl -s "https://sos.synapsecity.sbs/v1/emergency/public/status"
+
+# Fetch active hazards from the last 24 hours
+curl -s "https://sos.synapsecity.sbs/v1/hazards/recent?hours=24"
+
+# Subscribe to the real-time SSE hazard stream
+curl -N "https://sos.synapsecity.sbs/v1/emergency/stream/hazards"
 ```
 
-Release APK (public, served from Tier-1 SynapseOCS through Tier-2):
-<https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.2-arm64-x86_64/content>
+### 2. Self-Host with Docker Compose (Recommended)
 
-GitHub release: <https://github.com/vku-open-source-2026/SynapseCitySOS/releases/tag/mobile-v0.1.2>
-
-SHA-256: `f8c6621ad94b2edc8ccdac0352d7d592458d4c6aa848722fe4362c76c7bcd584`
-
-CI builds an unsigned APK; the production release job signs it with the
-protected keystore and publishes it through the Tier-2 files capability. See
-[`mobile/RELEASING.md`](mobile/RELEASING.md).
-
-## Run
-
-The Tier-2 client is published on npm as
-`@synapsedx/capabilities@^0.5.1`, so a clean clone builds without a sibling
-SynapseDX checkout:
-
-```bash
-npm ci
-npm run build
-SYNAPSEDX_BASE_URL=https://synapsedx.sbs AUTH_SECRET=<strong-secret> \
-  npm run start --workspace=@synapsecity/sos-service
-```
-
-`AUTH_SECRET` is optional for local development. If it is empty the service
-generates an ephemeral HMAC secret at start-up and logs a warning; set a strong
-value in production so sessions survive a restart.
-
-**Tier-3 password auth is retired (2026-11-14 workspace contract).**
-`/v1/auth/login`, `/register` and `/refresh` return `410` with
-`{ "error": "workspace_moved", "workspace_url": "https://synapsedx.sbs/workspace" }`
-before credential handling. The single supported issuance path is
-`POST /v1/auth/exchange`: send a verified Tier-2 user bearer as
-`Authorization: Bearer <tier2-token>` and receive a short-lived SOS session
-whose role is mapped locally. Login, registration, session management and role
-assignment belong to SynapseDX. The historical `SOS_AUTH_MODE` /
-`SOS_BOOTSTRAP_ADMIN_EMAILS` settings below only apply to that non-production
-legacy/demo code path.
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `SOS_AUTH_MODE` | `tier2` | `tier2` = Tier-2 auth capability; `demo` = development-only shell |
-| `SOS_BOOTSTRAP_ADMIN_EMAILS` | empty | Comma-separated emails that receive `admin` after a verified exchange |
-| `SOS_AUTH_DEFAULT_ROLE` | `responder` | Fallback role; never `admin` |
-| `SOS_INGEST_SERVICE_TOKEN` | empty | Scoped bearer accepted only by `POST /v1/hazards/ingest` |
-| `ALLOW_DEMO_AUTH` | `false` | Enables the demo shell only with `SOS_AUTH_MODE=demo` and `NODE_ENV != production` |
-| `AUTH_SECRET` | empty | HMAC secret for the SOS session; an ephemeral secret is used when empty |
-
-The demo login/register shell is **disabled by default** and needs
-`SOS_AUTH_MODE=demo` **and** `ALLOW_DEMO_AUTH=true` outside production;
-`NODE_ENV=production` refuses to start with either demo switch enabled. Demo
-login is always a `responder` session, registration is read-only (`volunteer`),
-and demo sessions never grant `admin`. In `tier2` mode a login with a
-non-email identifier is rejected with `400 email_required`.
-
-Console development:
-
-```bash
-npm run dev --workspace=@synapsecity/sos-console
-```
-
-The production stack is reproducible with `docker compose up -d --build`. The
-Tier-2 client is installed from the public npm registry as
-`@synapsedx/capabilities@^0.5.1`; no sibling checkout or prebuild is required.
-
-## Self-host
-
-Every release publishes three Apache-2.0 images to the public GitHub Container
-Registry (no registry login required):
-
-- `ghcr.io/vku-open-source-2026/synapsecitysos-sos-service`
-- `ghcr.io/vku-open-source-2026/synapsecitysos-gateway`
-- `ghcr.io/vku-open-source-2026/synapsecitysos-console`
-
-> If `docker pull` returns `unauthorized`, the GHCR packages have not been
-> switched to public yet. An organization admin must add a `GHCR_PAT` secret
-> (package admin) and run the `packages-public` workflow in the SynapseOne
-> repository once.
-
-SOS is Tier 3: point `SYNAPSEDX_BASE_URL` at a Tier-2 SynapseDX deployment and
-set a scoped `SYNAPSEDX_API_KEY` issued for this product account. The default
-`https://synapsedx.sbs` is the public demo.
-
-### 1. Run the published images (recommended)
+Requires **Docker Engine 24+** and **Docker Compose v2.24+**:
 
 ```bash
 git clone https://github.com/vku-open-source-2026/SynapseCitySOS.git
 cd SynapseCitySOS
-cp .env.example .env       # set SYNAPSEDX_BASE_URL / API key and AUTH_SECRET
-export SYNAPSECITYSOS_VERSION=v0.2.2   # or latest
+cp .env.example .env                     # configure SYNAPSEDX_BASE_URL, SYNAPSEDX_API_KEY, AUTH_SECRET
+export SYNAPSECITYSOS_VERSION=v0.2.2     # or latest
 
 docker compose pull
 docker compose up -d --no-build
 curl http://127.0.0.1:8086/health
 ```
 
-The gateway is bound to loopback; terminate TLS at your own edge and proxy
-`/v1` to the gateway (see `infra/nginx/synapsecity-sos.conf`). Keep
-`SOS_AUTH_MODE=tier2` and a strong `AUTH_SECRET` in production.
+### 3. Run Locally from Source
 
-### 2. Build from source
-
-Requirements: Node.js 20+, Rust 1.82+ (only for building the gateway
-locally), Docker Engine 24+ and Compose v2.24+.
+Requires **Node.js 20+**, **Rust 1.82+**, and **Docker Compose v2.24+**:
 
 ```bash
-git clone https://github.com/vku-open-source-2026/SynapseCitySOS.git
-cd SynapseCitySOS
-cp .env.example .env
 npm ci
 npm run build
+
+# Start the SOS backend against the public Tier-2 demo
+SYNAPSEDX_BASE_URL=https://synapsedx.sbs npm run start:service:legacy
+
+# In a second terminal, run the public hazard map console
+npm run dev --workspace=@synapsecity/sos-console
+```
+
+## Usage
+
+### Key API Endpoints
+
+| Method & Path | Auth | Description |
+| :--- | :--- | :--- |
+| `GET /v1/emergency/public/status` | Public | Active emergency events and alert counters. |
+| `GET /v1/hazards/recent?hours=24` | Public | Recent non-expired flood, storm, and landslide observations. |
+| `GET /v1/emergency/resources/shelters/near` | Public | Nearby emergency shelters (`lat`, `lng`, `radius_m`) with capacity status. |
+| `GET /v1/emergency/stream/hazards` | Public | Unbuffered Server-Sent Events stream of active hazard snapshots. |
+| `POST /v1/auth/exchange` | Tier-2 Bearer | Exchange a verified SynapseDX user token for a short-lived SOS session. |
+| `* /v1/emergency/{eop,dispatch,sitrep,after-action}` | SOS Bearer | Command-center workflows operated via the SynapseDX Workspace. |
+
+Find nearby emergency shelters via cURL:
+
+```bash
+curl -s "https://sos.synapsecity.sbs/v1/emergency/resources/shelters/near?lat=16.0544&lng=108.2022&radius_m=10000"
+```
+
+### Demo Seed & Workspace Plugins
+
+Seed or reset the 15-minute emergency response scenario ([docs/DEMO_PACK.md](docs/DEMO_PACK.md)):
+
+```bash
+SOS_DEMO_TOKEN=<token> npm run demo:seed
+SOS_DEMO_TOKEN=<token> npm run demo:reset
+npm run plugins:check   # validate SynapseDX command workspace plugin bundles
+```
+
+### Android Client & Home-Screen Widget
+
+- **Signed APK:** <https://synapsedx.sbs/v1/capabilities/public/files/synapsecity-sos-android-0.1.2-arm64-x86_64/content>
+- **GitHub Release:** [`mobile-v0.1.2`](https://github.com/vku-open-source-2026/SynapseCitySOS/releases/tag/mobile-v0.1.2) (`SHA-256: f8c6621ad94b2edc8ccdac0352d7d592458d4c6aa848722fe4362c76c7bcd584`)
+
+Build and verify from source ([mobile/README.md](mobile/README.md)):
+
+```bash
+cd mobile
+npm ci
+npm run verify
+npm run build:android
+```
+
+## Testing & Contributing
+
+```bash
 npm test
-docker compose build
-docker compose up -d --no-build
+npm run test:public-only
+(cd apps/gateway && cargo test)
 ```
 
-`docker compose up -d --build` combines the last two steps. Local builds use
-the same GHCR image names, so `pull` and `build` are interchangeable.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [PRODUCT_BOUNDARY.md](PRODUCT_BOUNDARY.md), and [CHANGELOG.md](CHANGELOG.md) for contribution guidelines and release history.
 
-## API
+## License
 
-The gateway owns these namespaces:
-
-```text
-GET  /health, /ready
-GET  /v1/sos
-*    /v1/auth
-*    /v1/emergency
-*    /v1/emergency/eop
-*    /v1/emergency/dispatch
-*    /v1/emergency/resources
-*    /v1/emergency/sitrep
-*    /v1/emergency/after-action
-*    /v1/emergency/stream/hazards
-*    /v1/hazards
-*    /v1/geo
-*    /v1/map
-*    /v1/ai
-```
-
-Every `/v1/auth/*` path except `POST /v1/auth/exchange` returns
-`410 workspace_moved`. Exchange verifies a Tier-2 user bearer with the identity
-capability and issues a short-lived SOS session; login, registration, sessions,
-MFA and account lifecycle belong to SynapseDX. SOS stores no password and
-creates no SOS user dataset or City user record. Tokens are accepted only from
-the `Authorization` header, never a query string. Internal emergency routes
-still require a verified principal and the permission matrix below.
-
-Internal emergency routes require `Authorization: Bearer <access_token>` and an
-explicit permission: reads need `emergency:read`, event/SITREP writes need
-`emergency:write`, dispatch/resource/hazard mutations need
-`emergency:dispatch`, and EOP approval/publication needs `emergency:eop`.
-A valid but low-privilege session receives `403` with a stable `error` code.
-The role→permission matrix is:
-
-| Role | Permissions |
-| --- | --- |
-| citizen, volunteer | `emergency:read` |
-| responder | `emergency:read`, `emergency:write` |
-| operator | `emergency:read`, `emergency:write`, `emergency:dispatch` |
-| manager | operator permissions + `emergency:eop` |
-| admin | manager permissions + `emergency:admin` (wildcard) |
-
-In `tier2` mode a normal account is a `responder`; only
-`SOS_BOOTSTRAP_ADMIN_EMAILS` grants `admin`. `manager`/`operator` are reachable
-only through an explicit `SOS_AUTH_DEFAULT_ROLE` configuration or the bootstrap
-allow-list — never through the login/register payload.
-
-Hazard reads (`/v1/hazards`, `/v1/hazards/recent`, `/v1/hazards/vndms-live`,
-`/v1/hazards/geo/*`, `/v1/hazards/ingest/status`), the public projection
-(`/v1/emergency/public`, `/v1/emergency/public/status`,
-`/v1/emergency/public/mutual-aid/:id` (public projection only),
-`/v1/emergency/stream/hazards`), nearby shelters
-(`/v1/emergency/resources/shelters/near`, with `availability_warning` for
-non-`available` shelters) and `/v1/map/*`, `/v1/geo/*`,
-`/v1/ai/*`, `/v1/sos` remain open. Dispatch approval uses
-`assigned_resource_unit_id`, mirrored to the legacy `assigned_user_id` field for
-older clients.
-
-`GET /v1/sos` advertises the owned feature list and the not-owned city feature
-list. Foreign namespaces under `/v1/assets`, `/v1/incidents`, `/v1/maintenance`,
-`/v1/iot`, `/v1/alerts`, `/v1/budgets`, `/v1/reports`, `/v1/geofences`,
-`/v1/ingest`, `/v1/notifications`, `/v1/public/assets` and
-`/v1/public/incidents` return `404` with `{ "error": "not_found" }` before any
-handler or Tier-2 call.
-
-Map tiles, autocomplete, forward geocoding and reverse geocoding are proxied
-through the SOS backend. Set `VIETMAP_API_KEY` and optionally
-`VIETMAP_TILE_STYLE=tm|lm|dm|hm|st` in the server `.env`; the key is never sent
-to the browser.
-
-## Operational logic
-
-- **Hazard filters** interpret `active_only`/`is_active` as booleans against
-  `is_active` (not a generic string match). `hours` on `/v1/hazards/recent`
-  filters by the most recent hazard timestamp and excludes expired records.
-- **Spatial queries** validate `lat`/`lng`/`radius_m` and GeoJSON
-  Polygon/MultiPolygon input, then evaluate haversine distance or
-  point-in-polygon. Invalid geometry is `400`; a far-away origin returns `[]`.
-- **VNDMS** ingestion is push-based: a Tier-2 scheduled connector posts batches
-  to `POST /v1/hazards/ingest`; SOS normalises, validates and upserts by stable
-  `hazard_id`, then records the run in `sos-hazard-ingest-runs`.
-  `GET /v1/hazards/ingest/status` combines that push history with the Tier-2
-  scheduled job (`GET /v1/capabilities/jobs` and
-  `/v1/capabilities/jobs/:id/runs`) and reports
-  `unconfigured | ready | degraded | stale | error` plus a `connector` block
-  (job id, schedule, last run, last success, rejected count). An unavailable
-  jobs API is reported as `connector.available: false` with a precise error,
-  never as `ready`. SOS never runs a local cron/poller.
-- **EOP drafts** are generated by the Tier-2 AI capability
-  (`POST /v1/capabilities/ai/chat`) from the event, its linked hazards, the
-  resource inventory and the operator's additional context. `metadata` records
-  `generated_by: "tier2-ai"`, `model`, `prompt_version`, `usage`, `generated_at`
-  and `source_refs`. If the AI capability is unavailable the endpoint returns a
-  typed `503 ai_capability_unavailable` and persists nothing; passing
-  `{"fallback":"deterministic"}` explicitly opts into the event-specific
-  doctrine draft, labelled `generated_by: "deterministic-fallback"` with the
-  `ai_error`. `force_new_version=false` is idempotent per event; `true`
-  increments the version, and version selection is serialised per event so two
-  concurrent requests can never create two v1 plans. `POST /eop/:id/submit`
-  creates one pending dispatch order per plan action with deterministic ids, so
-  re-submit returns the same orders.
-- **Dispatch optimizer** only auto-assigns `available` units with a compatible
-  `resource_type`, never `offline`/`maintenance`, computes a straight-line ETA,
-  and persists the assignment. Its counts equal the records it changed.
-- **AAR KPI** is computed from event, dispatch, SITREP and resource records:
-  `response_time_minutes` (first assignment − event start), severity SLA band,
-  `dispatch_completion_rate`, `sitrep_coverage_rate` (published / expected
-  6-hour windows), `resource_efficiency_score`, and
-  `overall_score = 0.3·response + 0.3·dispatch + 0.2·sitrep + 0.2·resource`.
-  `POST /v1/emergency/:id/resolve` creates exactly one draft AAR (idempotent).
-- **SITREP** requires a real event, title, reporting period, author/source and
-  non-negative integer counters. Published SITREPs are immutable; a delta
-  creates a new revision with `amends_sitrep_id`.
-- **Concurrency** uses the Tier-2 record version: single-record reads return
-  `ETag: "<version>"` and `x-record-version`, and updates send `If-Match`
-  (body `if_version` is also accepted) so a stale writer receives
-  `409 record_version_conflict` instead of silently losing an update. Deploy,
-  approval and submit are idempotent, and records-create is create-only:
-  POSTing an existing id returns `409 record_exists` instead of overwriting it.
-- **SSE** uses one shared Tier-2 event subscription per process
-  (`GET /v1/capabilities/events/stream`, filtered to `sos-hazard-layers`). A
-  hazard `record.*` event refreshes the authoritative merged snapshot
-  immediately; the only periodic work is a 30-second fallback (configurable by
-  `SOS_STREAM_EVENT_POLL_MS`) and a 15-second heartbeat. Disconnecting clients
-  stop their per-connection stream, and the shared watcher exits shortly after
-  the last subscriber leaves. It never converts a Tier-2 failure into an empty
-  snapshot: it emits a named `error` event with the last good snapshot. The
-  public map shows a degraded banner and never claims an area is safe while
-  data is unavailable.
-- **Health** (`/health`, `/ready`, `/v1/emergency/health`) reports Tier-2
-  reachability and per-dataset state; `/ready` returns `503` when Tier-2 is
-  unreachable or a dataset is missing. `/v1/ai/status` and
-  `/v1/emergency/sosconn/status` report the real Tier-2 AI provider/model
-  readiness.
-- **Metrics** at `/metrics` expose request rate/errors/latency, Tier-2 call
-  results and latency, record-version conflicts, EOP draft source and hazard
-  stream transport; request logs are structured JSON with the correlation id.
-
-## Known lower-tier dependencies
-
-Tier 2 provides the runtime capabilities: AI (`/v1/capabilities/ai/*`), the
-cursor and SSE event feeds (`/v1/capabilities/events[/stream]`), record
-versions with `If-Match`, spatial dataset queries, assignment optimization and
-scheduled jobs with run history. SOS uses the capabilities it has adopted and
-returns explicit degraded/unavailable states when a call fails.
-
-Remaining blockers are adoption/release/operator steps:
-
-1. **Spatial adoption.** Tier 2 has a PostGIS `near`/`bbox`/`within`
-   capability (`dataset.geo`). SOS hazard near/polygon endpoints call it first
-   and fall back to the bounded in-memory scan; `x-sos-scan-truncated` is only
-   returned on the fallback path.
-2. **SSE adoption.** The hazard stream uses one shared Tier-2 SSE subscription
-   per process and re-reads the authoritative merged snapshot on a hazard
-   event; the 30-second interval remains the bounded fallback. The public frame
-   is still a sanitized snapshot, not a raw record payload.
-3. **VNDMS connector provisioning.** The Tier-2 scheduled job that posts to
-   `POST /v1/hazards/ingest` is configured by the operator/Tier-2, and SOS needs
-   a Tier-2 service credential (`SYNAPSEDX_API_KEY`/`SYNAPSEDX_TOKEN`) to read
-   the job/run status and the event feed. Until it exists, ingest status is
-   `unconfigured` (never a fake `ready`).
-
-## Console
-
-The SOS console is **public presentation only** (2026-11-14 workspace
-contract). Login, registration and every emergency operations dashboard moved
-to the Tier-2 SynapseDX workspace at `https://synapsedx.sbs/workspace`. The
-console serves these public routes:
-
-```text
-/                              SOS landing
-/about /docs                   product and API docs
-/map                           public hazard/emergency map
-```
-
-The retired paths `/login`, `/register`, `/admin/**`, `/technician/**` and
-`/workspace/**` return `308` to `https://synapsedx.sbs/workspace` from the
-console nginx and the public edge, and the console root route redirects
-client-side. No local command-centre dashboard can be mounted from a deep link.
-
-**Release gate (closed for representative operations, 2026-11-14):** all 28
-workspace pages across City and SOS loaded in production DX with zero page,
-console or HTTP errors; SOS event, dispatch and generic resource create/update
-executed and the records were removed. Every individual form was not submitted;
-the remaining action gap is tracked in `plugins/workflows/README.md`. EOP
-approval/publication, SITREP deltas and the other unmigrated operation families
-still require their reviewed workflows.
-
-Tier-3 work interfaces are product plugins in DX; their portable source
-artifacts live in `plugins/` and are validated/synced with
-`npm run plugins:check` and `docs/PLUGIN_SYNC.md`. The exact pre-migration route
-source is archived under `plugins/source/` as reference, not built or executed.
-
-`/v1/auth/*` answers `410 workspace_moved` (with `workspace_url`) before any
-credential handling, except `POST /v1/auth/exchange`, which verifies a Tier-2
-bearer and issues the only supported short-lived SOS session.
-
-There is no `/admin/assets`, `/admin/incidents`, `/admin/iot`, `/admin/budgets`,
-`/admin/reports`, `/admin/alerts`, `/admin/ingest`, `/admin/users` or
-`/technician` route. There is no `/asset/$id`, `/public/report` or
-`/public/incidents` route. `/disaster` is removed; the public hazard map is
-`/map`.
-
-## Public edge
-
-The public edge routes `sos.synapsecity.sbs` to the gateway. The gateway proxies
-`/v1` to `sos-service` and serves the console for browser routes. SSE responses
-from `/v1/emergency/stream/hazards` are streamed without buffering. See
-`infra/nginx/`.
-
-## Issue tracker and changes
-
-Use the public GitHub Issues tab for bugs and feature requests. See
-[`CHANGELOG.md`](CHANGELOG.md) for version history. The repository is
-Apache-2.0 licensed.
-
-## DX-OS 2026
-
-SOS is a Tier-3 domain application in the OLP 2026 DX-OS model: it owns
-emergency events, hazards, dispatch, resources, EOP and AAR rules, and consumes
-reusable H-P-D-I capabilities from SynapseDX over the public API. It never
-imports the Tier-1 SDK, calls a Tier-1 service, or calls SynapseCity. The tier
-matrix, HITL contract and OLP evidence checklist are in
-[`SynapseDX/docs/DX_OS_TIER_MODEL_2026-11-04.md`](https://github.com/vku-open-source-2026/SynapseDX/blob/main/docs/DX_OS_TIER_MODEL_2026-11-04.md).
-
-## PoF project checklist
-
-- License: Apache-2.0 (`LICENSE`) with per-source SPDX headers and attribution in `NOTICE`.
-- Build from source: `npm ci && npm run build` using Node.js 20+; the Rust
-  gateway is covered by `(cd apps/gateway && cargo test)`. Docker builds are
-  reproducible with `docker compose build`.
-- Issue tracker: [GitHub Issues](https://github.com/vku-open-source-2026/SynapseCitySOS/issues).
-- Change history: [`CHANGELOG.md`](CHANGELOG.md). Versioned release tags are published on GitHub.
-- Dependency inventory: [`THIRD-PARTY.md`](THIRD-PARTY.md); dependencies are not modified or bundled into the repository.
-
-## Brand
-
-Logo, icon and social-preview assets live in [`apps/console/public/brand`](apps/console/public/brand). The console serves the favicon, web app manifest and icons from `apps/console/public`.
-
-To set the GitHub repository social preview, upload [`apps/console/public/brand/social-preview.png`](apps/console/public/brand/social-preview.png) in **Settings → Social preview**.
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) and [THIRD-PARTY.md](THIRD-PARTY.md) for third-party attributions.
